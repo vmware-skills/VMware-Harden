@@ -1,0 +1,333 @@
+id: eu-nis2-vmware
+name: "EU NIS2 Directive — VMware Infrastructure Subset"
+version: "1.0.0-subset"
+source: "EU NIS2 Directive (2022/2555) — Articles 21, 23, 24 + Annex I/II"
+applies_to:
+  - host
+  - dfw_rule
+
+rules:
+  # ============================================================
+  # Risk management (Article 21) — 3 rules
+  # ============================================================
+  - id: nis2-rm-1
+    title: "ESXi hosts patched within vendor-supported window"
+    severity: high
+    category: risk-management
+    rationale: |
+      NIS2 Directive Article 21(2)(e) — Essential entities must take appropriate
+      and proportionate technical measures including security in network and
+      information systems acquisition, development and maintenance, including
+      vulnerability handling and disclosure. Hosts running build numbers older
+      than the supported window are exposed to known CVEs.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.patch_status') IS NULL
+            OR json_extract_string(attrs, '$.patch_status') != 'current'
+          )
+    remediation:
+      summary: "Apply latest ESXi patches via vCenter Lifecycle Manager"
+      manual_steps: "vCenter → Lifecycle Manager → Image → Remediate cluster"
+      risk: "Maintenance window required; ensure DRS/vMotion to evacuate hosts"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: nis2-rm-2
+    title: "Network segmentation enforced via DFW between trust zones"
+    severity: high
+    category: risk-management
+    rationale: |
+      NIS2 Directive Article 21(2)(d) — Supply chain security and network
+      segmentation are required organisational measures. Annex I requires
+      controls preventing lateral movement between trust boundaries; the
+      east-west DFW must contain at least one rule referencing zone-tagged
+      groups.
+    check:
+      type: query
+      sql: |
+        SELECT 'nis2-zoning-missing' AS id, 'No zone-tagged DFW rules found' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND (json_extract_string(attrs, '$.source') LIKE '%zone%'
+              OR json_extract_string(attrs, '$.destination') LIKE '%zone%')
+        )
+    remediation:
+      summary: "Tag VMs by trust zone and create DFW rules between zone groups"
+      manual_steps: "NSX → Inventory → Tags → assign zone tags; DFW → rules referencing zone-* groups"
+      risk: "Misconfiguration could block legitimate traffic; observe in log mode first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: nis2-rm-3
+    title: "Privileged access uses dedicated administrative accounts"
+    severity: high
+    category: risk-management
+    rationale: |
+      NIS2 Directive Article 21(2)(i) — Human resources security, access control
+      policies and asset management. Privileged access must be assigned to
+      dedicated admin accounts (not shared root) for accountability and review.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.shared_root_in_use') = 'true'
+            OR json_extract_string(attrs, '$.named_admin_accounts') IS NULL
+          )
+    remediation:
+      summary: "Disable shared root login; provision per-admin named accounts"
+      manual_steps: "vCenter → Host → Configure → Authentication → AD users with Admin role"
+      risk: "Lockout if no alternate admin exists; verify before disabling root"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Incident readiness (Article 23) — 3 rules
+  # ============================================================
+  - id: nis2-ir-1
+    title: "Audit log retention >= 365 days"
+    severity: high
+    category: incident-readiness
+    rationale: |
+      NIS2 Directive Article 23 — Significant incident reporting obligations
+      require entities to retain forensic evidence enabling incident analysis
+      within 24h/72h/1-month windows. Annex I logging requirements imply at
+      least 12 months audit retention.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
+            OR CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 365
+          )
+    remediation:
+      summary: "Increase audit log retention to >= 365 days, preferably to remote SIEM"
+      manual_steps: "ESXi → Advanced Settings → Syslog.global.logHost → SIEM with 1y retention policy"
+      risk: "Increased storage cost; verify SIEM ingest licensing"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: nis2-ir-2
+    title: "Backup configuration detected for VMs in protection scope"
+    severity: high
+    category: incident-readiness
+    rationale: |
+      NIS2 Directive Article 21(2)(c) — Business continuity (backup management,
+      disaster recovery, crisis management) is a required measure. Annex I
+      requires backup strategies enabling recovery from significant incidents.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.backup_policy_present') IS NULL
+            OR json_extract_string(attrs, '$.backup_policy_present') != 'true'
+          )
+    remediation:
+      summary: "Attach a Veeam/Avamar/native backup policy to host's protected VMs"
+      manual_steps: "Backup tool → policy → schedule daily incremental + weekly full"
+      risk: "Storage capacity / backup window planning required"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: nis2-ir-3
+    title: "Encryption at rest enabled on host datastores"
+    severity: high
+    category: incident-readiness
+    rationale: |
+      NIS2 Directive Article 21(2)(h) — Policies and procedures regarding the
+      use of cryptography and, where appropriate, encryption. Encryption at
+      rest mitigates data exposure from physical theft and supports breach
+      notification de-escalation under Article 23.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.datastore_encryption') IS NULL
+            OR json_extract_string(attrs, '$.datastore_encryption') != 'enabled'
+          )
+    remediation:
+      summary: "Enable VM Encryption with KMS-backed keys"
+      manual_steps: "vCenter → Configure → Key Providers → add KMS; VM Storage Policy → enable Encryption"
+      risk: "KMS availability becomes critical for VM power-on; configure HA KMS cluster"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Network security (Article 24 / Annex I) — 3 rules
+  # ============================================================
+  - id: nis2-net-1
+    title: "DFW default-deny rule present"
+    severity: critical
+    category: network-security
+    rationale: |
+      NIS2 Directive Annex I — Network security measures require explicit
+      allowlist posture; a terminating default-deny rule guarantees only
+      explicitly permitted traffic flows, mitigating lateral movement during
+      an incident (Article 24 supply chain incident handling).
+    check:
+      type: query
+      sql: |
+        SELECT 'nis2-default-deny-missing' AS id, 'Default-deny missing' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND json_extract_string(attrs, '$.action') IN ('reject', 'drop', 'deny')
+        )
+    remediation:
+      summary: "Append a terminating deny rule at the end of DFW policy"
+      manual_steps: "NSX → DFW → Application → append ANY/ANY/ANY action=reject"
+      risk: "May block undeclared flows; observe log-only mode 1 week first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: nis2-net-2
+    title: "Management plane isolated on dedicated VLAN/segment"
+    severity: high
+    category: network-security
+    rationale: |
+      NIS2 Directive Annex I — Network segmentation must isolate critical
+      management interfaces from production traffic. ESXi vmkernel mgmt
+      interfaces must reside on a dedicated mgmt segment, not the workload
+      segment, per Article 24 secure architecture requirements.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.mgmt_isolated') IS NULL
+            OR json_extract_string(attrs, '$.mgmt_isolated') != 'true'
+          )
+    remediation:
+      summary: "Move ESXi mgmt vmkernel to a dedicated VLAN/segment; restrict via DFW"
+      manual_steps: "vCenter → Host → Networking → vmkernel → migrate to mgmt-vlan portgroup"
+      risk: "Network plumbing change; coordinate with network team to avoid host isolation"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: nis2-net-3
+    title: "vMotion traffic encrypted (encrypted vMotion required)"
+    severity: medium
+    category: network-security
+    rationale: |
+      NIS2 Directive Article 21(2)(h) — Cryptography policies cover data in
+      transit. Live VM memory transferred via vMotion contains secrets
+      (passwords, keys) and must be encrypted on the wire when crossing
+      networks shared with other tenants or workloads.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.vmotion_encryption') IS NULL
+            OR json_extract_string(attrs, '$.vmotion_encryption') = 'disabled'
+          )
+    remediation:
+      summary: "Set VM-level vMotion encryption to 'required' or cluster default"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → vMotion = Required"
+      risk: "Slight CPU overhead; negligible on modern hosts"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # ============================================================
+  # Access control & MFA (Annex I) — 2 rules
+  # ============================================================
+  - id: nis2-ac-1
+    title: "ESXi hosts joined to centralized identity (AD/LDAP)"
+    severity: high
+    category: access-control
+    rationale: |
+      NIS2 Directive Annex I — Identity management and access control require
+      centralized authentication so admin sessions can be revoked promptly
+      across all managed assets (Article 21(2)(i)).
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.ad_joined') IS NULL
+            OR json_extract_string(attrs, '$.ad_joined') != 'true'
+          )
+    remediation:
+      summary: "Join ESXi hosts to AD or configure LDAP/SSO identity source"
+      manual_steps: "vCenter → Host → Configure → Authentication → Join Domain"
+      risk: "Misconfig may break auth; perform during maintenance window"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: nis2-ac-2
+    title: "Direct root SSH disabled (interactive auth required)"
+    severity: high
+    category: access-control
+    rationale: |
+      NIS2 Directive Article 21(2)(j) — Use of multi-factor or continuous
+      authentication where appropriate. Root SSH bypasses individual
+      attribution; restricting access to named admin accounts via vCenter is
+      a prerequisite for adding MFA on top.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.root_ssh_enabled') = 'true'
+    remediation:
+      summary: "Disable root SSH on ESXi; require admin login through vCenter"
+      manual_steps: "ESXi → Manage → Services → SSH → stop; set policy to manual"
+      risk: "Loss of direct shell; ensure DCUI / vCenter still accessible"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Supply chain integrity (Article 21(2)(d)) — 1 rule
+  # ============================================================
+  - id: nis2-sc-1
+    title: "Image profile signature verification enabled (UEFI Secure Boot)"
+    severity: high
+    category: supply-chain
+    rationale: |
+      NIS2 Directive Article 21(2)(d) — Supply chain security including
+      security-related aspects concerning the relationships between each
+      entity and its direct suppliers or service providers. UEFI Secure Boot
+      with VMware-signed image profiles ensures only vendor-attested ESXi
+      binaries can boot, protecting against supply-chain implants.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.secure_boot_enabled') IS NULL
+            OR json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
+          )
+    remediation:
+      summary: "Enable UEFI Secure Boot in BIOS and use signed ESXi image profiles"
+      manual_steps: "Server BIOS → Secure Boot = Enabled; vCenter LCM → Image with VMware-signed profile"
+      risk: "Hardware reboot required; unsigned drivers will fail to load — verify HCL"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
