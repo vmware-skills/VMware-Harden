@@ -1,0 +1,275 @@
+id: pci-dss-4.0-vmware
+name: "PCI-DSS 4.0 — VMware Infrastructure Subset"
+version: "1.0.0-subset"
+source: "PCI-DSS v4.0 (Payment Card Industry Data Security Standard)"
+applies_to:
+  - host
+  - dfw_rule
+
+rules:
+  # ============================================================
+  # Requirement 1 — Install and maintain network security controls
+  # ============================================================
+  - id: pci-r1-1
+    title: "No any-to-any allow rules in DFW"
+    severity: critical
+    category: network-segregation
+    rationale: |
+      PCI-DSS Requirement 1.2.1 — Configuration standards for network security
+      controls (NSCs) must be defined, implemented, and maintained. Any-to-any
+      allow rules contradict the principle of explicit segmentation between
+      cardholder data environments and untrusted networks.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'dfw_rule'
+          AND json_extract_string(attrs, '$.action') = 'allow'
+          AND json_extract_string(attrs, '$.source') LIKE '%ANY%'
+          AND json_extract_string(attrs, '$.destination') LIKE '%ANY%'
+    remediation:
+      summary: "Replace ANY/ANY allow with explicit segments"
+      manual_steps: "NSX → DFW → identify rule, replace with specific source/destination groups"
+      risk: "May break legitimate but undocumented flows; observe in log-only mode 1 week before enforcing"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: pci-r1-2
+    title: "Default-deny rule exists in DFW"
+    severity: critical
+    category: network-segregation
+    rationale: |
+      PCI-DSS Requirement 1.4.1 — NSCs are implemented between trusted and
+      untrusted networks. A terminating default-deny rule ensures all traffic
+      not explicitly permitted is denied, satisfying the implicit-deny posture
+      required by Req 1.
+    check:
+      type: query
+      sql: |
+        SELECT 'pci-default-deny-missing' AS id, 'PCI default-deny missing' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND json_extract_string(attrs, '$.action') IN ('reject', 'drop', 'deny')
+        )
+    remediation:
+      summary: "Append a terminating deny rule at the end of the DFW policy"
+      manual_steps: "NSX → DFW → Application Section → append ANY/ANY/ANY action=reject"
+      risk: "May block legitimate undeclared flows; observe in log-only mode for 1 week first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: pci-r1-3
+    title: "Firewall rules have documented business justification"
+    severity: high
+    category: network-segregation
+    rationale: |
+      PCI-DSS Requirement 1.2.5 — All services, protocols, and ports allowed
+      are identified, approved, and have a defined business need. We proxy
+      this control by requiring rules to have a non-empty, non-default name
+      (i.e. not auto-generated like "rule-N").
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'dfw_rule'
+          AND (
+            name IS NULL
+            OR name = ''
+            OR name LIKE 'rule-%'
+          )
+    remediation:
+      summary: "Rename DFW rules to describe the business purpose"
+      manual_steps: "NSX → DFW → edit rule → set Name to a meaningful description (e.g. 'web-tier-to-app-tier-https')"
+      risk: "Renaming has no traffic impact; safe operation"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Requirement 2 — Apply secure configurations to all system components
+  # ============================================================
+  - id: pci-r2-1
+    title: "Default vendor accounts disabled on ESXi hosts"
+    severity: critical
+    category: secure-configuration
+    rationale: |
+      PCI-DSS Requirement 2.2.2 — Vendor default accounts are managed: removed
+      or disabled if not used; if used, default password is changed and use is
+      restricted. We check that ESXi default admin accounts are disabled.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.default_admin_disabled') IS NULL
+            OR json_extract_string(attrs, '$.default_admin_disabled') != 'true'
+          )
+    remediation:
+      summary: "Disable the built-in default admin account on each ESXi host"
+      manual_steps: "ESXi → Manage → Security → Users → disable or rename default admin account"
+      risk: "Lockout risk if no alternate admin account exists; verify alternate account works first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: pci-r2-2
+    title: "Insecure services (SSH) disabled by default"
+    severity: high
+    category: secure-configuration
+    rationale: |
+      PCI-DSS Requirement 2.2.4 — Only necessary services, protocols, daemons,
+      and functions are enabled. SSH on ESXi must remain off by default and
+      be enabled only when needed for authorized maintenance.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.ssh_enabled') = 'true'
+    remediation:
+      summary: "Disable SSH service on ESXi hosts"
+      manual_steps: "vCenter → Host → Configure → Services → SSH → Stop, set policy to 'Start and stop manually'"
+      risk: "Loss of remote shell access; ensure DCUI / vCenter management still works"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Requirement 7 — Restrict access by business need-to-know
+  # ============================================================
+  - id: pci-r7-1
+    title: "ESXi hosts joined to centralized AD for RBAC"
+    severity: high
+    category: access-control
+    rationale: |
+      PCI-DSS Requirement 7.2.1 — Access control model defines access based on
+      job classification and function. Joining ESXi hosts to Active Directory
+      enables centralized role-based access control rather than local accounts,
+      satisfying the need-to-know principle of Requirement 7.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.ad_joined') IS NULL
+            OR json_extract_string(attrs, '$.ad_joined') != 'true'
+          )
+    remediation:
+      summary: "Join ESXi hosts to Active Directory domain"
+      manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
+      risk: "Misconfiguration may break authentication; perform during maintenance window"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Requirement 8 — Identify users and authenticate access
+  # ============================================================
+  - id: pci-r8-1
+    title: "Root SSH key-only authentication disabled (interactive auth required)"
+    severity: high
+    category: authentication
+    rationale: |
+      PCI-DSS Requirement 8.3.1 — All user access is authenticated using at
+      least one factor. Root SSH key authentication bypasses interactive,
+      attributable authentication; disable in favor of named-user auth so each
+      session can be tied to an identity per Req 8.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.root_ssh_key_auth_enabled') = 'true'
+    remediation:
+      summary: "Disable root SSH public-key auth on ESXi"
+      manual_steps: "ESXi → /etc/ssh/keys-root/authorized_keys → remove keys; ensure named-user accounts exist"
+      risk: "Loss of automated SSH access; migrate automation to named service accounts first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: pci-r8-2
+    title: "ESXi lockdown mode at least 'normal'"
+    severity: high
+    category: authentication
+    rationale: |
+      PCI-DSS Requirement 8.2.1 — All users are assigned a unique ID before
+      access to system components. ESXi lockdown mode forces management
+      through vCenter, where each user has a unique identity, eliminating
+      anonymous direct-host access.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.lockdown_mode') IS NULL
+            OR json_extract_string(attrs, '$.lockdown_mode') = 'disabled'
+          )
+    remediation:
+      summary: "Enable lockdown mode (normal or strict) on each ESXi host"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Edit → Normal"
+      risk: "Direct host management blocked; ensure vCenter access is reliable"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # Requirement 10 — Log and monitor all access
+  # ============================================================
+  - id: pci-r10-1
+    title: "Remote syslog target configured on ESXi hosts"
+    severity: medium
+    category: logging-monitoring
+    rationale: |
+      PCI-DSS Requirement 10.5.1 — Audit logs are protected from destruction
+      and unauthorized modification. Forwarding ESXi logs to a remote syslog
+      server protects them from local tampering and supports the centralized
+      log review required by Req 10.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+            OR json_extract_string(attrs, '$.syslog_remote_host') = ''
+          )
+    remediation:
+      summary: "Configure Syslog.global.logHost on each ESXi host"
+      manual_steps: "vCenter → Host → Configure → System → Advanced System Settings → Syslog.global.logHost = tcp://<syslog>:514"
+      risk: "Read-only configuration; no traffic impact"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: pci-r10-2
+    title: "Audit logs retained at least 90 days online (1 year total)"
+    severity: medium
+    category: logging-monitoring
+    rationale: |
+      PCI-DSS Requirement 10.7 (formerly 10.5.4 / 10.7) — Audit log history is
+      retained for at least 12 months, with at least the most recent 3 months
+      immediately available for analysis. We check ESXi local audit retention
+      meets the 90-day minimum.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
+            OR CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 90
+          )
+    remediation:
+      summary: "Increase audit log retention to >= 90 days"
+      manual_steps: "ESXi → Advanced Settings → Syslog.global.auditRecord.storageCapacity (and/or remote syslog with archival policy)"
+      risk: "Higher disk usage on host log volume; verify storage capacity"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
