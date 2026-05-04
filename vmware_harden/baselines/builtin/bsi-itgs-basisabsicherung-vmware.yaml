@@ -1,0 +1,258 @@
+id: bsi-itgs-basisabsicherung-vmware
+name: "BSI IT-Grundschutz Basis-Absicherung — VMware ESXi Subset"
+version: "1.0.0-subset"
+source: "BSI IT-Grundschutz-Kompendium (modules OPS.1.1.4, SYS.1.1)"
+applies_to:
+  - host
+
+rules:
+  # ============================================================
+  # OPS.1.1.4 — Schutz vor Schadprogrammen (malware protection)
+  # ============================================================
+  - id: bsi-itgs-malware-1
+    title: "Hostprofil signed image enforced (Schadcode-Schutz beim Boot)"
+    severity: high
+    category: malware-protection
+    rationale: |
+      BSI IT-Grundschutz OPS.1.1.4.A1 — Erstellung einer Richtlinie zum Schutz
+      vor Schadprogrammen. Signierte Image-Profile beim Boot stellen sicher,
+      dass nur vom Hersteller attestierter Code lädt — Voraussetzung für jede
+      weitere Schadcode-Erkennung auf Hypervisor-Ebene.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.image_profile_acceptance') IS NULL
+            OR json_extract_string(attrs, '$.image_profile_acceptance') NOT IN ('VMwareCertified', 'VMwareAccepted')
+          )
+    remediation:
+      summary: "Set host image acceptance level to VMwareAccepted or higher"
+      manual_steps: "esxcli software acceptance set --level=VMwareAccepted"
+      risk: "Community-supplied VIBs will be rejected; review installed VIBs first"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-malware-2
+    title: "Execute-Disable / NX bit aktiviert"
+    severity: high
+    category: malware-protection
+    rationale: |
+      BSI IT-Grundschutz OPS.1.1.4.A4 — Auswahl eines Schutzprogramms gegen
+      Schadprogramme für Server-Systeme. Hardware-NX-Bit ist die Basis für
+      DEP/W^X und damit für Exploit-Mitigation auf dem Hypervisor.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.nx_enabled') IS NULL
+            OR json_extract_string(attrs, '$.nx_enabled') != 'true'
+          )
+    remediation:
+      summary: "Enable NX/XD bit in BIOS"
+      manual_steps: "Server BIOS → Processor → Execute Disable Bit = Enabled"
+      risk: "Reboot required; verify HCL compatibility"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-malware-3
+    title: "VIB acceptance level not 'CommunitySupported'"
+    severity: medium
+    category: malware-protection
+    rationale: |
+      BSI IT-Grundschutz OPS.1.1.4.A6 — Regelmäßiges Scannen auf Schadprogramme.
+      'CommunitySupported' VIBs umgehen Hersteller-Signatur-Checks und können
+      Schadcode in den Hypervisor einschleusen.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.image_profile_acceptance') = 'CommunitySupported'
+    remediation:
+      summary: "Replace CommunitySupported VIBs with vendor-signed alternatives"
+      manual_steps: "esxcli software vib list | grep -i community → remove and replace"
+      risk: "Some 3rd-party drivers may have no signed equivalent; document exceptions"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # SYS.1.1 — Allgemeiner Server (general server hardening)
+  # ============================================================
+  - id: bsi-itgs-server-1
+    title: "Lockdown-Modus aktiviert (sichere Administration)"
+    severity: high
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A2 — Sichere Administration für Server. Der
+      ESXi-Lockdown-Modus zwingt Verwaltung über vCenter und schließt direkten,
+      anonymen Host-Zugriff aus.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.lockdown_mode') IS NULL
+            OR json_extract_string(attrs, '$.lockdown_mode') = 'disabled'
+          )
+    remediation:
+      summary: "Lockdown-Modus auf 'normal' oder 'strict' setzen"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Normal"
+      risk: "Direkte Host-Verwaltung blockiert; vCenter-Verfügbarkeit kritisch"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-2
+    title: "SSH standardmäßig deaktiviert"
+    severity: high
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A3 — Restriktive Rechtevergabe und
+      Deaktivierung nicht benötigter Dienste. SSH auf ESXi ist im Normalbetrieb
+      nicht erforderlich und nur bei Bedarf temporär freizuschalten.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.ssh_enabled') = 'true'
+    remediation:
+      summary: "SSH auf ESXi deaktivieren"
+      manual_steps: "vCenter → Host → Configure → Services → SSH → Stop, Policy = manuell"
+      risk: "Verlust Remote-Shell; DCUI / vCenter-Zugang verifizieren"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-3
+    title: "Zentrale Authentifizierung (AD/LDAP) konfiguriert"
+    severity: high
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A4 — Rollenbasiertes Berechtigungskonzept.
+      Lokale ESXi-Konten lassen sich nicht zentral verwalten; AD/LDAP-Anbindung
+      ermöglicht Rollen, Sperren und Auditing über alle Hosts.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.ad_joined') IS NULL
+            OR json_extract_string(attrs, '$.ad_joined') != 'true'
+          )
+    remediation:
+      summary: "ESXi-Hosts an Active Directory binden"
+      manual_steps: "vCenter → Host → Configure → Authentication → Join Domain"
+      risk: "Fehlkonfiguration kann Auth blockieren; im Wartungsfenster ausführen"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-4
+    title: "NTP-Synchronisation konfiguriert"
+    severity: medium
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A5 — Schutz der Administrationsschnittstellen
+      und korrekte Zeitstempel. Verlässliche NTP-Synchronisation ist
+      Voraussetzung für nachvollziehbare Audit-Logs und Kerberos-Auth.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.ntp_servers') IS NULL
+            OR json_extract_string(attrs, '$.ntp_servers') = ''
+          )
+    remediation:
+      summary: "NTP-Server auf ESXi konfigurieren und Dienst dauerhaft starten"
+      manual_steps: "vCenter → Host → Configure → System → Time Configuration → NTP"
+      risk: "Zeitsprünge können Sessions invalidieren; in Wartungsfenster aktivieren"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-5
+    title: "Remote-Syslog auf zentralen Logserver konfiguriert"
+    severity: medium
+    category: logging-monitoring
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A6 — Protokollierung. Lokale ESXi-Logs sind
+      bei Kompromittierung manipulierbar; zentrale Syslog-Weiterleitung
+      schützt vor Log-Tampering.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+            OR json_extract_string(attrs, '$.syslog_remote_host') = ''
+          )
+    remediation:
+      summary: "Syslog.global.logHost auf zentralen Server setzen"
+      manual_steps: "vCenter → Host → Advanced Settings → Syslog.global.logHost = tcp://<server>:514"
+      risk: "Read-only Konfiguration; kein Traffic-Impact"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-6
+    title: "Patchstand aktuell (regelmäßiges Patchmanagement)"
+    severity: high
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A22 — Patchmanagement. ESXi-Hosts müssen
+      innerhalb des Hersteller-Supportfensters laufen; veraltete Builds
+      enthalten dokumentierte Schwachstellen.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.patch_status') IS NULL
+            OR json_extract_string(attrs, '$.patch_status') != 'current'
+          )
+    remediation:
+      summary: "Patches via vCenter Lifecycle Manager einspielen"
+      manual_steps: "vCenter → Lifecycle Manager → Image → Remediate"
+      risk: "Wartungsfenster nötig; DRS/vMotion zur Host-Evakuierung sicherstellen"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: bsi-itgs-server-7
+    title: "UEFI Secure Boot aktiviert"
+    severity: medium
+    category: secure-configuration
+    rationale: |
+      BSI IT-Grundschutz SYS.1.1.A28 — Sichere Grundkonfiguration. UEFI Secure
+      Boot stellt sicher, dass der ESXi-Bootloader und Kernel nur signiert
+      laden und schützt vor Boot-Sektor-Manipulation.
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.secure_boot_enabled') IS NULL
+            OR json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
+          )
+    remediation:
+      summary: "UEFI Secure Boot im BIOS aktivieren"
+      manual_steps: "Server BIOS → Boot → Secure Boot = Enabled; ESXi mit signiertem Image-Profil starten"
+      risk: "Hardware-Neustart; nicht-signierte Treiber laden nicht — HCL prüfen"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
