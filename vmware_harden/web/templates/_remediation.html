@@ -1,0 +1,48 @@
+{% if suggestion %}
+<div class="bg-emerald-50 border border-emerald-200 rounded p-3 text-sm space-y-2">
+  <div>
+    <span class="font-semibold">Summary:</span> {{ suggestion.summary }}
+  </div>
+  <div class="text-xs text-slate-600">
+    Confidence: <strong>{{ "%.2f"|format(suggestion.confidence) }}</strong>
+    {% if suggestion.human_review_required %}
+      · <span class="text-red-700 font-medium">HUMAN REVIEW REQUIRED</span>
+    {% endif %}
+  </div>
+  {% if suggestion.execution_plan.steps %}
+  <div>
+    <div class="font-semibold text-xs uppercase mt-2">Execution plan</div>
+    <ol class="list-decimal pl-5 text-xs">
+      {% for step in suggestion.execution_plan.steps %}
+      <li class="my-1">
+        <code class="bg-white px-1 rounded">{{ step.mcp_tool }}</code>
+        {% if step.params %}
+          <span class="text-slate-500">params:</span>
+          <code class="text-xs">{{ step.params }}</code>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+  <div class="text-xs">
+    <div>
+      <span class="font-semibold">Impact:</span>
+      affects workload: {{ suggestion.impact_prediction.affects_running_workload }},
+      maintenance window: {{ suggestion.impact_prediction.requires_maintenance_window }}
+      {% if suggestion.impact_prediction.estimated_duration %}
+        · ~{{ suggestion.impact_prediction.estimated_duration }}
+      {% endif %}
+    </div>
+    {% if suggestion.impact_prediction.rollback_plan %}
+    <div class="mt-1"><span class="font-semibold">Rollback:</span>
+      {{ suggestion.impact_prediction.rollback_plan }}</div>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="text-xs text-slate-500 italic">
+  No remediation generated yet. Run
+  <code class="bg-slate-100 px-1 rounded">vmware-harden advise --violation-id {{ violation_id }}</code>.
+</div>
+{% endif %}

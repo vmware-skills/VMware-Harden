@@ -243,3 +243,85 @@ def test_drift_empty_twin_message(app_with_db):
     r = client.get("/drift")
     assert r.status_code == 200
     assert "no drift" in r.text.lower() or "no scans" in r.text.lower()
+
+
+@pytest.fixture
+def app_with_violation_and_suggestion(tmp_path: Path):
+    """Twin with one violation that has a persisted Suggestion."""
+    import uuid as _uuid
+    db = tmp_path / "t.duckdb"
+    twin = Twin(db)
+    snap = twin.start_snapshot("v.lab")
+    twin.conn.execute(
+        "INSERT INTO nodes (id, type, target, name, attrs) "
+        "VALUES (?, 'host', 'v.lab', 'esx', '{}')",
+        ["v.lab:h-1"],
+    )
+    vid = str(_uuid.uuid4())
+    twin.conn.execute(
+        """INSERT INTO violation
+           (id, snapshot_id, baseline_id, rule_id, node_id, severity, evidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        [vid, snap, "b", "r-1", "v.lab:h-1", "high", "{}"],
+    )
+
+    from vmware_harden.baselines.model import (
+        ExecutionPlan, ExecutionStep, ImpactPrediction, Suggestion,
+    )
+    sugg = Suggestion(
+        summary="Configure NTP via vmware-aiops",
+        execution_plan=ExecutionPlan(steps=[
+            ExecutionStep(step=1, mcp_tool="vmware_aiops.host_ntp_configure",
+                          params={"servers": ["ntp1.corp"]})
+        ]),
+        impact_prediction=ImpactPrediction(
+            affects_running_workload=False,
+            requires_maintenance_window=False,
+            estimated_duration="2 minutes",
+            rollback_plan="empty servers list",
+        ),
+        confidence=0.92,
+        human_review_required=False,
+    )
+    twin.save_suggestion(vid, sugg)
+    twin.finish_snapshot(snap)
+    twin.close()
+    from vmware_harden.web.app import build_app
+    app = build_app(db_path=db)
+    app.state.test_violation_id = vid
+    return app
+
+
+@pytest.mark.integration
+def test_remediation_endpoint_returns_suggestion(app_with_violation_and_suggestion):
+    client = TestClient(app_with_violation_and_suggestion)
+    vid = app_with_violation_and_suggestion.state.test_violation_id
+    r = client.get(f"/violations/{vid}/remediation")
+    assert r.status_code == 200
+    assert "Configure NTP" in r.text
+    assert "0.92" in r.text or "92" in r.text
+    assert "vmware_aiops.host_ntp_configure" in r.text
+
+
+@pytest.mark.integration
+def test_remediation_endpoint_returns_empty_state_when_missing(app_with_violations):
+    """Violation with no Suggestion: friendly message, not error."""
+    client = TestClient(app_with_violations)
+    # Pick any seeded violation id (doesn't have Suggestion)
+    r = client.get("/violations")
+    import re
+    m = re.search(r"hx-get=[\"']/violations/([0-9a-f-]+)/evidence[\"']", r.text)
+    vid = m.group(1)
+
+    r2 = client.get(f"/violations/{vid}/remediation")
+    assert r2.status_code == 200
+    assert "no remediation" in r2.text.lower() or "not yet" in r2.text.lower() or "advise" in r2.text.lower()
+
+
+@pytest.mark.integration
+def test_violations_page_includes_remediation_button(app_with_violations):
+    client = TestClient(app_with_violations)
+    r = client.get("/violations")
+    text = r.text
+    # Each row should have an hx-get to /remediation
+    assert "/remediation" in text

@@ -115,6 +115,14 @@ def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
         twin.close()
 
 
+def _fetch_remediation(db_path: Path, violation_id: str):
+    twin = Twin(db_path)
+    try:
+        return twin.get_suggestion(violation_id)
+    finally:
+        twin.close()
+
+
 def _fetch_drift(db_path: Path) -> dict:
     """Last 5 snapshots' event counts + latest snapshot's events."""
     twin = Twin(db_path)
@@ -192,6 +200,15 @@ def build_app(db_path: Path) -> FastAPI:
             request,
             "_evidence.html",
             {"evidence_json": evidence_json, "violation_id": violation_id},
+        )
+
+    @app.get("/violations/{violation_id}/remediation", response_class=HTMLResponse)
+    async def remediation(request: Request, violation_id: str) -> HTMLResponse:
+        suggestion = _fetch_remediation(db_path, violation_id)
+        return templates.TemplateResponse(
+            request,
+            "_remediation.html",
+            {"violation_id": violation_id, "suggestion": suggestion},
         )
 
     @app.get("/drift", response_class=HTMLResponse)

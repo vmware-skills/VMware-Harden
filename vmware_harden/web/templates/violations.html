@@ -43,13 +43,20 @@
           </td>
           <td class="px-4 py-2 text-xs text-slate-600">{{ v.baseline_id }}</td>
           <td class="px-4 py-2">
-            <button class="text-blue-600 text-xs hover:underline"
+            <button class="text-blue-600 text-xs hover:underline mr-2"
                     hx-get="/violations/{{ v.id }}/evidence"
                     hx-target="#evidence-{{ v.id }}"
                     hx-swap="innerHTML">
-              Show
+              Show evidence
+            </button>
+            <button class="text-emerald-700 text-xs hover:underline"
+                    hx-get="/violations/{{ v.id }}/remediation"
+                    hx-target="#remediation-{{ v.id }}"
+                    hx-swap="innerHTML">
+              Remediation
             </button>
             <div id="evidence-{{ v.id }}" class="mt-2"></div>
+            <div id="remediation-{{ v.id }}" class="mt-2"></div>
           </td>
         </tr>
         {% endfor %}
