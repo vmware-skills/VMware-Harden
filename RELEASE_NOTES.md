@@ -1,10 +1,10 @@
 # Release Notes
 
-## v1.5.15 — 2026-05-04
+## v1.5.18 — 2026-05-04
 
 GA promotion + new EU baselines + doctor command.
 
-- **Promoted to GA family** — vmware-harden is now part of `FAMILY` array in family_smoke.sh; version bumped to 1.5.15 for family-wide alignment (all family skills share this version).
+- **Promoted to GA family** — vmware-harden is now part of `FAMILY` array in family_smoke.sh; version bumped to 1.5.18 for family-wide alignment (all family skills share this version).
 - **EU NIS2 Directive baseline** (12 rules) — for "essential entities" under Articles 21/23/24.
 - **BSI IT-Grundschutz Basis-Absicherung baseline** (10 rules) — German federal baseline for VMware ESXi hosts.
 - **`vmware-harden doctor` command** — environment diagnostics (Python, deps, Twin, audit DB, ANTHROPIC_API_KEY).

@@ -6,7 +6,7 @@ import pytest
 def test_package_imports():
     """vmware_harden package can be imported and version is set."""
     import vmware_harden
-    assert vmware_harden.__version__ == "1.5.15"
+    assert vmware_harden.__version__ == "1.5.18"
 
 
 @pytest.mark.unit
