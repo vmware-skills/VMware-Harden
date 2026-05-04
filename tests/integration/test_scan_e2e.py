@@ -133,3 +133,23 @@ def test_scan_expands_user_home(tmp_path: Path, monkeypatch):
     ):
         run_scan(target="lab", baseline="cis-vmware-esxi-8.0-subset", db=db)
     assert (tmp_path / "twin.duckdb").exists()
+
+
+@pytest.mark.integration
+def test_scan_closes_twin_on_collector_error(tmp_path: Path):
+    """run_scan must close Twin even when collector raises."""
+    from vmware_harden.collectors.base import CollectorError
+
+    db = str(tmp_path / "t.duckdb")
+    bad = [{"name": "noid"}]  # missing 'id' triggers CollectorError
+    with patch("vmware_harden.collectors.hosts._fetch_hosts", return_value=bad):
+        with pytest.raises(CollectorError):
+            run_scan(target="lab", baseline="cis-vmware-esxi-8.0-subset", db=db)
+
+    # If Twin wasn't closed, a second connection would either fail
+    # or see stale state; verify we can re-open the file cleanly.
+    from vmware_harden.store.twin import Twin
+    twin2 = Twin(Path(db))
+    rows = twin2.conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()
+    assert rows[0] == 1  # the failed scan still wrote a snapshot row
+    twin2.close()
