@@ -65,6 +65,20 @@ def run_scan(target: str, baseline: str, db: str) -> None:
             typer.echo(f"  Collected {n} {label} entities")
 
         violations = CheckRunner(twin).run_baseline(snap_id, b)
+
+        # Compute and persist drift from prior snapshot, if any.
+        prior_row = twin.conn.execute(
+            "SELECT id FROM snapshots "
+            "WHERE target = ? AND id != ? AND scan_finished_at IS NOT NULL "
+            "ORDER BY scan_started_at DESC LIMIT 1",
+            [target, snap_id],
+        ).fetchone()
+        if prior_row:
+            from vmware_harden.drift.diff import diff_snapshots
+            events = diff_snapshots(twin, prior_row[0], snap_id, persist=True)
+            if events:
+                typer.echo(f"  Detected {len(events)} drift events from prior scan")
+
         twin.finish_snapshot(snap_id)
         typer.echo(f"Found {len(violations)} violations against {b.id}")
     finally:
