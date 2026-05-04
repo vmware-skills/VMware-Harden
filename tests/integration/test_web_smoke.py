@@ -325,3 +325,49 @@ def test_violations_page_includes_remediation_button(app_with_violations):
     text = r.text
     # Each row should have an hx-get to /remediation
     assert "/remediation" in text
+
+
+@pytest.mark.integration
+def test_remediation_panel_shows_pilot_task_id(tmp_path: Path):
+    """When pilot_task_id is set on a remediation row, web shows it."""
+    import uuid as _uuid
+
+    db = tmp_path / "t.duckdb"
+    twin = Twin(db)
+    snap = twin.start_snapshot("v.lab")
+    twin.conn.execute(
+        "INSERT INTO nodes (id, type, target, name, attrs) "
+        "VALUES (?, 'host', 'v.lab', 'esx', '{}')",
+        ["v.lab:h-1"],
+    )
+    vid = str(_uuid.uuid4())
+    twin.conn.execute(
+        """INSERT INTO violation
+           (id, snapshot_id, baseline_id, rule_id, node_id, severity, evidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        [vid, snap, "b", "r", "v.lab:h-1", "high", "{}"],
+    )
+
+    from vmware_harden.baselines.model import (
+        ExecutionPlan, ImpactPrediction, Suggestion,
+    )
+    sugg = Suggestion(
+        summary="x",
+        execution_plan=ExecutionPlan(steps=[]),
+        impact_prediction=ImpactPrediction(
+            affects_running_workload=False, requires_maintenance_window=False,
+        ),
+        confidence=0.5, human_review_required=False,
+    )
+    twin.save_suggestion(vid, sugg)
+    twin.update_pilot_task_id(vid, "mock-pilot-abc12345")
+    twin.finish_snapshot(snap)
+    twin.close()
+
+    from vmware_harden.web.app import build_app
+    app = build_app(db_path=db)
+    client = TestClient(app)
+    r = client.get(f"/violations/{vid}/remediation")
+    assert r.status_code == 200
+    assert "mock-pilot-abc12345" in r.text
+    assert "Pilot task" in r.text

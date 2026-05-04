@@ -116,9 +116,16 @@ def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
 
 
 def _fetch_remediation(db_path: Path, violation_id: str):
+    """Return (suggestion, pilot_task_id) tuple. Either may be None."""
     twin = Twin(db_path)
     try:
-        return twin.get_suggestion(violation_id)
+        suggestion = twin.get_suggestion(violation_id)
+        row = twin.conn.execute(
+            "SELECT pilot_task_id FROM remediation WHERE violation_id = ?",
+            [violation_id],
+        ).fetchone()
+        pilot_task_id = row[0] if row else None
+        return suggestion, pilot_task_id
     finally:
         twin.close()
 
@@ -204,11 +211,15 @@ def build_app(db_path: Path) -> FastAPI:
 
     @app.get("/violations/{violation_id}/remediation", response_class=HTMLResponse)
     async def remediation(request: Request, violation_id: str) -> HTMLResponse:
-        suggestion = _fetch_remediation(db_path, violation_id)
+        suggestion, pilot_task_id = _fetch_remediation(db_path, violation_id)
         return templates.TemplateResponse(
             request,
             "_remediation.html",
-            {"violation_id": violation_id, "suggestion": suggestion},
+            {
+                "violation_id": violation_id,
+                "suggestion": suggestion,
+                "pilot_task_id": pilot_task_id,
+            },
         )
 
     @app.get("/drift", response_class=HTMLResponse)

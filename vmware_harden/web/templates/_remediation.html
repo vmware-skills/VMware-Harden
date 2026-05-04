@@ -39,6 +39,12 @@
       {{ suggestion.impact_prediction.rollback_plan }}</div>
     {% endif %}
   </div>
+  {% if pilot_task_id %}
+  <div class="mt-2 text-xs">
+    <span class="font-semibold">Pilot task:</span>
+    <code class="bg-slate-100 px-1 rounded">{{ pilot_task_id }}</code>
+  </div>
+  {% endif %}
 </div>
 {% else %}
 <div class="text-xs text-slate-500 italic">
