@@ -1,4 +1,4 @@
-"""Baseline YAML loader with extends merge."""
+"""Baseline YAML loader with extends merge + user dir discovery."""
 from pathlib import Path
 
 import yaml
@@ -6,6 +6,7 @@ import yaml
 from vmware_harden.baselines.model import Baseline, ScriptCheck
 
 BUILTIN_DIR = Path(__file__).parent / "builtin"
+USER_DIR = Path("~/.vmware-harden/baselines").expanduser()
 
 
 def _merge_with_parent(child: Baseline, parent: Baseline) -> Baseline:
@@ -24,7 +25,7 @@ def load_baseline(path: Path | str) -> Baseline:
     """Parse a YAML file into a Baseline model.
 
     If the YAML has `extends: <parent-id>`, the parent baseline is
-    loaded from the built-in directory and rules are merged
+    loaded (user dir first, then built-in directory) and rules are merged
     (child overrides parent by rule id).
 
     Raises:
@@ -50,11 +51,39 @@ def load_baseline(path: Path | str) -> Baseline:
     return baseline
 
 
+def _resolve_baseline_path(name: str) -> Path:
+    """User dir takes precedence over package builtin.
+
+    Raises FileNotFoundError if the baseline is not found in either location.
+    """
+    for base in (USER_DIR, BUILTIN_DIR):
+        candidate = base / f"{name}.yaml"
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"Baseline {name!r} not found in {USER_DIR} or {BUILTIN_DIR}"
+    )
+
+
 def load_builtin(name: str) -> Baseline:
-    """Load a built-in baseline by name (without `.yaml` suffix)."""
-    return load_baseline(BUILTIN_DIR / f"{name}.yaml")
+    """Load a baseline by name (without `.yaml` suffix).
+
+    Searches user dir (~/.vmware-harden/baselines) first, then the
+    package's built-in directory.
+    """
+    return load_baseline(_resolve_baseline_path(name))
 
 
 def list_builtins() -> list[str]:
-    """Return sorted names of all built-in baselines."""
-    return sorted(p.stem for p in BUILTIN_DIR.glob("*.yaml"))
+    """Return sorted names of all discoverable baselines.
+
+    Includes both user dir (~/.vmware-harden/baselines) and package
+    built-in directory; deduplicated by stem (user wins on collision).
+    """
+    names: set[str] = set()
+    for base in (USER_DIR, BUILTIN_DIR):
+        if not base.exists():
+            continue
+        for p in base.glob("*.yaml"):
+            names.add(p.stem)
+    return sorted(names)
