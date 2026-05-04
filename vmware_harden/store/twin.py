@@ -12,6 +12,7 @@ class Twin:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self.conn = duckdb.connect(str(db_path))
+        self.init_schema()  # idempotent; CREATE IF NOT EXISTS
 
     def init_schema(self) -> None:
         """Create all tables if they don't exist (idempotent)."""

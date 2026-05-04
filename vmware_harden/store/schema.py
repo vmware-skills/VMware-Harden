@@ -4,6 +4,8 @@ Schema reference: docs/plans/2026-05-03-vmware-harden-design.md §3.
 """
 
 DDL: list[str] = [
+    # Note: DuckDB has no ON UPDATE CURRENT_TIMESTAMP support; collectors must
+    # set last_seen_at explicitly on upsert.
     """
     CREATE TABLE IF NOT EXISTS nodes (
         id VARCHAR PRIMARY KEY,
