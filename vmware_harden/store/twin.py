@@ -65,5 +65,41 @@ class Twin:
         )
         return state_hash
 
+    def save_suggestion(self, violation_id: str, suggestion) -> str:
+        """Persist a Suggestion against a violation. Idempotent — replaces existing.
+
+        Returns the remediation row id.
+        """
+        rid = str(uuid.uuid4())
+        suggestion_json = suggestion.model_dump_json()
+        self.conn.execute("BEGIN TRANSACTION")
+        try:
+            self.conn.execute(
+                "DELETE FROM remediation WHERE violation_id = ?", [violation_id]
+            )
+            self.conn.execute(
+                """INSERT INTO remediation
+                   (id, violation_id, suggestion, confidence)
+                   VALUES (?, ?, ?, ?)""",
+                [rid, violation_id, suggestion_json, suggestion.confidence],
+            )
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+        return rid
+
+    def get_suggestion(self, violation_id: str):
+        """Load the saved Suggestion for a violation, or None if absent."""
+        from vmware_harden.baselines.model import Suggestion
+
+        row = self.conn.execute(
+            "SELECT suggestion FROM remediation WHERE violation_id = ?",
+            [violation_id],
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return Suggestion.model_validate_json(row[0])
+
     def close(self) -> None:
         self.conn.close()
