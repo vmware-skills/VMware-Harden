@@ -2,9 +2,9 @@
 
 Schema reference: docs/plans/2026-05-03-vmware-harden-design.md §4.
 """
-from typing import Literal, Union
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 Severity = Literal["critical", "high", "medium", "low", "info"]
@@ -25,6 +25,8 @@ NodeType = Literal[
 class QueryCheck(BaseModel):
     """SQL query against the Twin. Returns rows = violations."""
 
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["query"]
     sql: str
 
@@ -32,26 +34,32 @@ class QueryCheck(BaseModel):
 class ScriptCheck(BaseModel):
     """Python function check. Reserved for v2 implementation deferred."""
 
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["script"]
     module: str
     function: str
 
 
-Check = Union[QueryCheck, ScriptCheck]
+Check = QueryCheck | ScriptCheck
 
 
 class Remediation(BaseModel):
     """Remediation guidance for a violation."""
 
+    model_config = ConfigDict(extra="forbid")
+
     summary: str
     mcp_tool: str | None = None
-    params_template: dict | None = None
+    params_template: dict[str, Any] | None = None
     manual_steps: str | None = None
     risk: str | None = None
 
 
 class ReviewPolicy(BaseModel):
     """Whether a rule's auto-remediation requires human approval."""
+
+    model_config = ConfigDict(extra="forbid")
 
     human_review_required: bool = True
     min_confidence: float = 0.8
@@ -60,6 +68,8 @@ class ReviewPolicy(BaseModel):
 class Rule(BaseModel):
     """A single compliance rule within a baseline."""
 
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     title: str
     severity: Severity
@@ -67,11 +77,13 @@ class Rule(BaseModel):
     rationale: str | None = None
     check: Check = Field(discriminator="type")
     remediation: Remediation
-    review_policy: ReviewPolicy = ReviewPolicy()
+    review_policy: ReviewPolicy = Field(default_factory=ReviewPolicy)
 
 
 class Baseline(BaseModel):
     """A complete baseline of compliance rules."""
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str

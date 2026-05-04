@@ -157,3 +157,49 @@ def test_baseline_extends_field():
     }
     b = Baseline(**raw)
     assert b.extends == "parent-baseline"
+
+
+@pytest.mark.unit
+def test_unknown_baseline_field_rejected():
+    """Typo in baseline field caught by extra='forbid'."""
+    raw = {
+        "id": "t",
+        "name": "t",
+        "version": "1.0.0",
+        "applies_too": ["host"],  # typo: applies_too vs applies_to
+        "applies_to": ["host"],
+        "rules": [],
+    }
+    with pytest.raises(ValidationError):
+        Baseline(**raw)
+
+
+@pytest.mark.unit
+def test_unknown_rule_field_rejected():
+    """Typo in rule field caught by extra='forbid'."""
+    raw_rule = {
+        "id": "r",
+        "title": "x",
+        "severity": "low",
+        "category": "x",
+        "check": {"type": "query", "sql": "SELECT 1"},
+        "remediation": {"summary": "x"},
+        "severtiy": "high",  # typo
+    }
+    with pytest.raises(ValidationError):
+        Rule(**raw_rule)
+
+
+@pytest.mark.unit
+def test_check_type_field_mismatch_rejected():
+    """Type='query' with script-shaped fields rejected (M3)."""
+    raw_rule = {
+        "id": "r",
+        "title": "x",
+        "severity": "low",
+        "category": "x",
+        "check": {"type": "query", "module": "m", "function": "f"},  # mismatched
+        "remediation": {"summary": "x"},
+    }
+    with pytest.raises(ValidationError):
+        Rule(**raw_rule)
