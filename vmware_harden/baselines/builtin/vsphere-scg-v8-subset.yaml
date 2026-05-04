@@ -1,0 +1,299 @@
+id: vsphere-scg-v8-subset
+name: "VMware vSphere Security Configuration Guide v8 (subset)"
+version: "1.0.0-subset"
+source: "https://github.com/vmware/vcf-security-and-compliance-guidelines"
+applies_to:
+  - host
+  - vm
+
+rules:
+  # --- host-hardening (5) ---
+  - id: scg-host-1
+    title: "Ensure TPM 2.0 attestation is enabled on hosts"
+    severity: high
+    category: host-hardening
+    rationale: "TPM 2.0 attestation 验证主机启动链完整性，是 vSphere Trust Authority 的基础。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable TPM 2.0 attestation on host"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Trust Authority / Attestation"
+      risk: "需要硬件 TPM 2.0 支持；无 TPM 的旧硬件无法满足，需硬件升级"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: scg-host-2
+    title: "Ensure Secure Boot is enabled on ESXi hosts"
+    severity: high
+    category: host-hardening
+    rationale: "Secure Boot 阻止未签名内核模块加载，防止 boot-time rootkit。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable UEFI Secure Boot on host"
+      manual_steps: "BIOS/UEFI → Secure Boot → Enable；reboot ESXi"
+      risk: "需 UEFI 固件；社区 VIB 在 Secure Boot 下无法加载，需评估自定义驱动兼容性"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: scg-host-3
+    title: "Ensure image profile signing is enforced"
+    severity: high
+    category: host-hardening
+    rationale: "允许 community 签名意味着可加载未经验证的 VIB，增加供应链攻击面。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.image_profile_acceptance') = 'community'
+    remediation:
+      summary: "Set image profile acceptance level to PartnerSupported or stricter"
+      manual_steps: "esxcli software acceptance set --level=PartnerSupported"
+      risk: "已安装的 community VIB 升级时会被阻断；需先清单确认"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: scg-host-4
+    title: "Ensure VIB acceptance level is PartnerSupported or stricter"
+    severity: medium
+    category: host-hardening
+    rationale: "VIB acceptance level 控制可安装的驱动来源，community 级别绕过 VMware 验证。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.vib_acceptance') = 'community'
+    remediation:
+      summary: "Tighten VIB acceptance level on the host"
+      manual_steps: "esxcli software acceptance set --level=PartnerSupported"
+      risk: "现有 community VIB 在升级阶段会被拒绝安装"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: scg-host-5
+    title: "Ensure TLS 1.2 or higher is enforced on host services"
+    severity: high
+    category: host-hardening
+    rationale: "TLS < 1.2 含已知协议级漏洞（POODLE/BEAST），不满足现代合规要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.tls_min_version') < '1.2'
+    remediation:
+      summary: "Configure host services to require TLS 1.2+"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiVPsDisabledProtocols"
+      risk: "旧版 PowerCLI / 第三方备份/监控客户端可能仅支持 TLS 1.0/1.1，需先升级客户端"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # --- vm-hardening (5) ---
+  - id: scg-vm-1
+    title: "Ensure VM Secure Boot is enabled"
+    severity: high
+    category: vm-hardening
+    rationale: "VM Secure Boot 阻止 guest 内核被未签名 bootloader 替换。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable Secure Boot on the VM"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Boot Options → Secure Boot"
+      risk: "guest OS 必须使用签名 bootloader；旧 Linux/自定义内核可能启动失败"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: scg-vm-2
+    title: "Ensure VM hardware version is 19 or higher"
+    severity: low
+    category: vm-hardening
+    rationale: "hw v19+ 引入 vTPM、virtual SGX 等安全特性；过旧版本缺少现代加固原语。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.hw_version_int') AS INTEGER) < 19
+    remediation:
+      summary: "Upgrade VM compatibility to hardware version 19+"
+      manual_steps: "vCenter → VM → Compatibility → Upgrade VM Compatibility"
+      risk: "需关机；某些旧 guest OS 在新 hw 版本下需重装 VMware Tools"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.85
+
+  - id: scg-vm-3
+    title: "Ensure VMware Tools is running on the VM"
+    severity: medium
+    category: vm-hardening
+    rationale: "Tools 是 vCenter 与 guest 之间安全通信通道；未运行时无法做心跳/quiesce snapshot。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.tools_running') AS BOOLEAN) = false
+    remediation:
+      summary: "Install or start VMware Tools / open-vm-tools in guest"
+      manual_steps: "Linux: systemctl enable --now vmtoolsd；Windows: 安装 VMware Tools"
+      risk: "无业务影响；安装时 Windows 需重启"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: scg-vm-4
+    title: "Ensure Public-tagged VMs have encryption enabled"
+    severity: critical
+    category: vm-hardening
+    rationale: "标记为 Public 的 VM 通常承载敏感外网工作负载，未加密违反数据保护策略。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND json_extract_string(attrs, '$.tags') LIKE '%Public%'
+          AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable VM encryption via storage policy"
+      manual_steps: "vCenter → VM → VM Policies → Edit → Apply 'VM Encryption Policy'"
+      risk: "需 KMS 集群；初次加密触发完整磁盘重写，需充足存储 I/O 容量"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: scg-vm-5
+    title: "Ensure copy/paste between guest and remote console is disabled"
+    severity: medium
+    category: vm-hardening
+    rationale: "copy/paste 通道是数据外泄路径，且历史上多次出现 VM escape CVE。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.isolation_copy_disabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Set isolation.tools.copy.disable / paste.disable = TRUE"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Advanced → Configuration Parameters"
+      risk: "运维 console 内复制粘贴失效；需切到 SSH/RDP"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # --- network-segregation (3) ---
+  - id: scg-net-1
+    title: "Ensure management VLAN is tagged (not VLAN 0)"
+    severity: medium
+    category: network-segregation
+    rationale: "VLAN 0 = 无标签，与业务流量混用违反二层隔离原则。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
+    remediation:
+      summary: "Tag management portgroup with dedicated VLAN ID"
+      manual_steps: "vCenter → Host → Networking → Management portgroup → Edit → VLAN ID"
+      risk: "VLAN 切换可能导致管理面瞬断；需 maintenance window 与 OOB 应急通道"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: scg-net-2
+    title: "Ensure vSwitch MAC address changes policy is reject"
+    severity: high
+    category: network-segregation
+    rationale: "允许 MAC 变更使 VM 可冒充其他 VM，破坏二层准入。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.mac_address_changes') != 'reject'
+    remediation:
+      summary: "Set vSwitch security: MAC address changes = Reject"
+      manual_steps: "vCenter → Host → Networking → vSwitch → Edit → Security → MAC address changes: Reject"
+      risk: "Microsoft NLB / 某些集群心跳依赖 MAC 切换；需先清单"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: scg-net-3
+    title: "Ensure standard vSwitches are not used in production"
+    severity: medium
+    category: network-segregation
+    rationale: "Standard vSwitch 缺少集中策略与 NetFlow / port-mirroring，违反企业级网络可观测性要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.standard_vswitch_count') AS INTEGER) > 0
+    remediation:
+      summary: "Migrate workloads to vSphere Distributed Switch"
+      manual_steps: "vCenter → Networking → Distributed Switch → Add and Manage Hosts → Migrate VMkernel & VM networking"
+      risk: "迁移过程网络瞬断；DVS 需 vCenter 可达；需要 Enterprise Plus 许可"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.85
+
+  # --- encryption (2) ---
+  - id: scg-enc-1
+    title: "Ensure vSAN encryption is enabled when vSAN is active"
+    severity: critical
+    category: encryption
+    rationale: "vSAN 启用但未加密则数据落盘明文，违反 PCI/等保数据保护。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
+          AND CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable vSAN data-at-rest encryption with KMS"
+      manual_steps: "vCenter → Cluster → Configure → vSAN → Services → Data-At-Rest encryption"
+      risk: "需 KMS；启用过程触发 rolling reformat，需充足容量与 maintenance window"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: scg-enc-2
+    title: "Ensure encrypted vMotion is required"
+    severity: critical
+    category: encryption
+    rationale: "vMotion 包含 VM 内存页明文，未加密时管理网嗅探即可还原敏感数据。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.encrypted_vmotion') != 'required'
+    remediation:
+      summary: "Set Encrypted vMotion = Required cluster-wide"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → Encrypted vMotion: Required"
+      risk: "对端主机不支持加密 vMotion 时迁移失败；先验证全集群兼容性"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
