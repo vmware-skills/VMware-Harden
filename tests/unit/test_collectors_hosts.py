@@ -102,3 +102,18 @@ def test_host_collector_updates_attrs_on_revisit(tmp_path: Path):
     ).fetchone()
     assert json.loads(row[0])["ntp_enabled"] is True
     twin.close()
+
+
+@pytest.mark.unit
+def test_host_collector_raises_on_malformed_host(tmp_path: Path):
+    """Missing required 'id' or 'name' raises CollectorError with context."""
+    from vmware_harden.collectors.base import CollectorError
+
+    twin = Twin(tmp_path / "t.duckdb")
+    snap_id = twin.start_snapshot("v.lab")
+
+    bad = [{"name": "esx-bad", "build": 1}]  # missing 'id'
+    with patch("vmware_harden.collectors.hosts._fetch_hosts", return_value=bad):
+        with pytest.raises(CollectorError, match="missing required field"):
+            HostCollector(twin).collect(snap_id, target="v.lab")
+    twin.close()

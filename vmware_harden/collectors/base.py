@@ -11,3 +11,7 @@ class Collector:
     def collect(self, snapshot_id: str, target: str) -> int:
         """Fetch and write inventory for the given snapshot. Returns count written."""
         raise NotImplementedError
+
+
+class CollectorError(Exception):
+    """Raised when a collector encounters malformed inventory data."""
