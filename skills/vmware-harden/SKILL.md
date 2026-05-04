@@ -87,7 +87,7 @@ Use vmware-harden when the user needs to:
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
-5. Report: `vmware-harden report --target prod-vcenter --format html > report.html`
+5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard)
 
    **Failure branch**: If you see `ConnectError: vmware-aiops target not found`, the aiops side is not configured. Run `vmware-aiops init` first; harden cannot scan without a working collector.
 
@@ -98,17 +98,17 @@ Use vmware-harden when the user needs to:
 3. Import: `vmware-harden baseline import ~/.vmware-harden/baselines/my-corp.yaml`
 4. Scan: `vmware-harden scan --baseline my-corp --target prod-vcenter`
 
-   **Failure branch**: `baseline validate` failure usually means a `check.path` references a node type the collectors do not produce (e.g. `nsx.gateway.*` when no NSX collector ran). Check `vmware-harden baseline schema` for valid node paths.
+   **Failure branch**: `baseline validate` failure usually means a `check.path` references a node type the collectors do not produce (e.g. `nsx.gateway.*` when no NSX collector ran). See [references/cli-reference.md](./references/cli-reference.md) for valid node paths and the baseline schema.
 
 ### 3. Drift investigation
 
 1. Run scan today: `vmware-harden scan --target prod-vcenter --baseline cis-vmware-esxi-8.0-subset`
 2. Run scan again next week (or after a change window): same command
-3. View drift: `vmware-harden drift list --target prod-vcenter --since 7d`
-4. Get advice on critical drift: `vmware-harden advise <violation_id>` (uses `ANTHROPIC_API_KEY`; falls back to mock template if unset)
+3. View drift: `vmware-harden drift` (renders the latest snapshot vs its prior snapshot for the same target)
+4. Get advice on critical drift: `vmware-harden advise --violation-id <id>` or `vmware-harden advise --all-critical` (uses `ANTHROPIC_API_KEY`; falls back to mock template if unset)
 5. Open web view: `vmware-harden web --port 8080` then navigate to `/drift`
 
-   **Failure branch**: If `drift list` returns nothing, ensure both scans completed against the same `--target` and the Twin DB at `~/.vmware-harden/twin.duckdb` contains both snapshots: `vmware-harden snapshot list`.
+   **Failure branch**: If `vmware-harden drift` reports `No drift detected since previous snapshot`, both scans likely ran against the same state. Ensure two scans actually completed against the same `--target`; the Twin DB at `~/.vmware-harden/twin.duckdb` must contain at least two snapshots for that target.
 
 ## Usage Mode
 
@@ -139,9 +139,9 @@ vmware-harden baseline list
 vmware-harden baseline import <path>
 vmware-harden baseline validate <path>
 vmware-harden scan --baseline <id> --target <name>
-vmware-harden report --target <name> [--format html|json|text]
-vmware-harden drift list --target <name> [--since 7d]
-vmware-harden advise <violation_id>
+vmware-harden report [--format text|json]
+vmware-harden drift [--format text|json]
+vmware-harden advise (--violation-id <id> | --all-critical)
 vmware-harden web [--host 127.0.0.1] [--port 8080]
 ```
 
