@@ -1,0 +1,47 @@
+id: cis-vmware-esxi-8.0-subset
+name: "CIS VMware ESXi 8.0 Benchmark (subset)"
+version: "1.0.0-subset"
+source: "https://www.cisecurity.org/benchmark/vmware"
+applies_to:
+  - host
+
+rules:
+  - id: cis-esxi-2.1.1
+    title: "Ensure NTP is configured on all hosts"
+    severity: medium
+    category: time-sync
+    rationale: "NTP 不一致破坏审计日志时间相关性，影响合规审计与事件取证。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable and configure NTP on the host"
+      mcp_tool: vmware_aiops.host_ntp_configure
+      manual_steps: |
+        vCenter → Host → Configure → Time Configuration → Edit → enable NTP, supply server list.
+      risk: "无业务影响，可热配置；若主机已是 NTP client 则该规则也可能由策略漂移触发"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-2.2.1
+    title: "Ensure ESXi build is current"
+    severity: high
+    category: patching
+    rationale: "未打补丁的 ESXi 暴露在已知 CVE 下，违反多数合规框架（CIS / 等保 / PCI）。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.build') AS INTEGER) < 23305546
+    remediation:
+      summary: "Upgrade ESXi to build 23305546 or newer"
+      manual_steps: "vCenter Lifecycle Manager → Apply latest baseline to host"
+      risk: "需 maintenance mode；DRS 关闭时需手动 vMotion；建议 off-hours"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
