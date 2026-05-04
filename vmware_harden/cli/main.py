@@ -1,6 +1,7 @@
 """vmware-harden CLI entry point."""
 import typer
 
+from vmware_harden.cli import advise as advise_cmd
 from vmware_harden.cli import baseline as baseline_cmd
 from vmware_harden.cli import drift as drift_cmd
 from vmware_harden.cli import report as report_cmd
@@ -17,6 +18,7 @@ app.add_typer(report_cmd.app, name="report", help="Generate compliance reports."
 app.add_typer(baseline_cmd.app, name="baseline", help="Manage compliance baselines.")
 app.add_typer(drift_cmd.app, name="drift", help="Show drift between snapshots.")
 app.add_typer(web_cmd.app, name="web", help="Start the web dashboard.")
+app.add_typer(advise_cmd.app, name="advise", help="Generate LLM remediation suggestions.")
 
 
 if __name__ == "__main__":
