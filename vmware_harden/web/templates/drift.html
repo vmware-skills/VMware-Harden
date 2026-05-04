@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Drift — vmware-harden{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Drift Timeline</h2>
+
+{% if not has_data %}
+  <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded">
+    <p class="font-medium">No scans yet — no drift to show.</p>
+    <p class="text-sm">Run <code class="bg-yellow-100 px-1 rounded">vmware-harden scan --target &lt;vc&gt;</code> twice; drift is computed automatically on the second scan.</p>
+  </div>
+{% else %}
+
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+  <h3 class="text-lg font-medium mb-3">Events per snapshot (last 5)</h3>
+  <div id="drift-timeline" style="width:100%; height:280px;"></div>
+</div>
+
+<div class="bg-white rounded-lg shadow p-6">
+  <h3 class="text-lg font-medium mb-3">Most recent events ({{ events|length }})</h3>
+  {% if events|length == 0 %}
+    <p class="text-sm text-slate-500">No drift detected since the previous snapshot.</p>
+  {% else %}
+  <table class="min-w-full text-sm">
+    <thead class="text-slate-600 text-xs uppercase">
+      <tr>
+        <th class="px-3 py-2 text-left">Node</th>
+        <th class="px-3 py-2 text-left">Field</th>
+        <th class="px-3 py-2 text-left">Old</th>
+        <th class="px-3 py-2 text-left">→ New</th>
+        <th class="px-3 py-2 text-left">Detected</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr class="border-t">
+        <td class="px-3 py-2 font-mono text-xs">{{ e.node_id }}</td>
+        <td class="px-3 py-2 font-mono text-xs">{{ e.field }}</td>
+        <td class="px-3 py-2 text-xs">{{ e.old_value if e.old_value is not none else '—' }}</td>
+        <td class="px-3 py-2 text-xs">{{ e.new_value if e.new_value is not none else '—' }}</td>
+        <td class="px-3 py-2 text-xs text-slate-500">{{ e.detected_at or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<script>
+  const tl = echarts.init(document.getElementById('drift-timeline'));
+  tl.setOption({
+    tooltip: { trigger: 'axis' },
+    xAxis: {
+      type: 'category',
+      data: [{% for t in timeline %}{{ t.label|tojson }},{% endfor %}],
+    },
+    yAxis: { type: 'value' },
+    series: [{
+      type: 'bar',
+      data: [{% for t in timeline %}{{ t.count }},{% endfor %}],
+      itemStyle: { color: '#3b82f6' }
+    }]
+  });
+</script>
+
+{% endif %}
+{% endblock %}

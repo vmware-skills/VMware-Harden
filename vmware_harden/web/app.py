@@ -115,6 +115,56 @@ def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
         twin.close()
 
 
+def _fetch_drift(db_path: Path) -> dict:
+    """Last 5 snapshots' event counts + latest snapshot's events."""
+    twin = Twin(db_path)
+    try:
+        snaps = twin.conn.execute(
+            "SELECT id, target, scan_started_at FROM snapshots "
+            "ORDER BY scan_started_at DESC LIMIT 5"
+        ).fetchall()
+        if not snaps:
+            return {"has_data": False}
+
+        # Reverse so oldest first on chart x-axis
+        snaps_rev = list(reversed(snaps))
+        timeline = []
+        for snap_id, target, started in snaps_rev:
+            count = twin.conn.execute(
+                "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
+                [snap_id],
+            ).fetchone()[0]
+            timeline.append({
+                "snapshot_id": snap_id,
+                "label": str(started)[:19] if started else snap_id[:8],
+                "count": count,
+            })
+
+        latest_id = snaps[0][0]
+        events = twin.conn.execute(
+            "SELECT node_id, field, old_value, new_value, detected_at "
+            "FROM change_event WHERE snapshot_id = ? "
+            "ORDER BY node_id, field",
+            [latest_id],
+        ).fetchall()
+        return {
+            "has_data": True,
+            "timeline": timeline,
+            "events": [
+                {
+                    "node_id": e[0],
+                    "field": e[1],
+                    "old_value": e[2],
+                    "new_value": e[3],
+                    "detected_at": str(e[4]) if e[4] else None,
+                }
+                for e in events
+            ],
+        }
+    finally:
+        twin.close()
+
+
 def build_app(db_path: Path) -> FastAPI:
     app = FastAPI(title="vmware-harden")
     app.state.db_path = db_path
@@ -142,6 +192,13 @@ def build_app(db_path: Path) -> FastAPI:
             request,
             "_evidence.html",
             {"evidence_json": evidence_json, "violation_id": violation_id},
+        )
+
+    @app.get("/drift", response_class=HTMLResponse)
+    async def drift_page(request: Request) -> HTMLResponse:
+        data = _fetch_drift(db_path)
+        return templates.TemplateResponse(
+            request, "drift.html", {"page": "drift", **data}
         )
 
     return app

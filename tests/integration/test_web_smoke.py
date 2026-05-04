@@ -171,3 +171,75 @@ def test_violations_empty_twin_message(app_with_db):
     r = client.get("/violations")
     assert r.status_code == 200
     assert "no violations" in r.text.lower() or "no scans" in r.text.lower()
+
+
+@pytest.fixture
+def app_with_drift(tmp_path: Path):
+    """A Twin pre-seeded with 3 snapshots and change events on the latest two."""
+    db = tmp_path / "t.duckdb"
+    twin = Twin(db)
+    snap1 = twin.start_snapshot("v.lab")
+    twin.finish_snapshot(snap1)
+    snap2 = twin.start_snapshot("v.lab")
+    import uuid
+    twin.conn.execute(
+        "INSERT INTO change_event "
+        "(id, snapshot_id, node_id, field, old_value, new_value) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [str(uuid.uuid4()), snap2, "h-1", "ntp_enabled", "True", "False"],
+    )
+    twin.finish_snapshot(snap2)
+    snap3 = twin.start_snapshot("v.lab")
+    twin.conn.execute(
+        "INSERT INTO change_event "
+        "(id, snapshot_id, node_id, field, old_value, new_value) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [str(uuid.uuid4()), snap3, "h-1", "build", "100", "200"],
+    )
+    twin.conn.execute(
+        "INSERT INTO change_event "
+        "(id, snapshot_id, node_id, field, old_value, new_value) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [str(uuid.uuid4()), snap3, "h-2", "_added", None, '{"new": true}'],
+    )
+    twin.finish_snapshot(snap3)
+    twin.close()
+    from vmware_harden.web.app import build_app
+    return build_app(db_path=db)
+
+
+@pytest.mark.integration
+def test_drift_page_renders(app_with_drift):
+    client = TestClient(app_with_drift)
+    r = client.get("/drift")
+    assert r.status_code == 200
+    text = r.text
+    assert "Drift" in text or "drift" in text.lower()
+
+
+@pytest.mark.integration
+def test_drift_page_shows_recent_events(app_with_drift):
+    client = TestClient(app_with_drift)
+    r = client.get("/drift")
+    text = r.text
+    # Latest snapshot's events visible
+    assert "h-1" in text
+    assert "build" in text
+    assert "h-2" in text
+    assert "_added" in text
+
+
+@pytest.mark.integration
+def test_drift_page_includes_echarts(app_with_drift):
+    client = TestClient(app_with_drift)
+    r = client.get("/drift")
+    text = r.text
+    assert "echarts.init" in text
+
+
+@pytest.mark.integration
+def test_drift_empty_twin_message(app_with_db):
+    client = TestClient(app_with_db)
+    r = client.get("/drift")
+    assert r.status_code == 200
+    assert "no drift" in r.text.lower() or "no scans" in r.text.lower()
