@@ -41,7 +41,7 @@ def test_host_collector_writes_to_twin(tmp_path: Path):
     nodes = twin.conn.execute(
         "SELECT id, type, name FROM nodes WHERE type = 'host' ORDER BY id"
     ).fetchall()
-    assert [r[0] for r in nodes] == ["host-01", "host-02"]
+    assert [r[0] for r in nodes] == ["v.lab:host-01", "v.lab:host-02"]
     assert [r[1] for r in nodes] == ["host", "host"]
     assert [r[2] for r in nodes] == ["esx01.lab", "esx02.lab"]
     twin.close()
@@ -98,7 +98,7 @@ def test_host_collector_updates_attrs_on_revisit(tmp_path: Path):
         HostCollector(twin).collect(snap_id2, target="v.lab")
 
     row = twin.conn.execute(
-        "SELECT attrs FROM nodes WHERE id = 'host-02'"
+        "SELECT attrs FROM nodes WHERE id = 'v.lab:host-02'"
     ).fetchone()
     assert json.loads(row[0])["ntp_enabled"] is True
     twin.close()

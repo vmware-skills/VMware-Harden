@@ -1,7 +1,4 @@
 """Host inventory collector. Pulls ESXi host data via vmware_aiops."""
-# TODO(planning): currently assumes single-target Twin. If multi-vCenter
-# Twins are added, namespace IDs as f"{target}:{h['id']}" or add a
-# target column to nodes. Raised in Task 4 code review.
 import json
 from datetime import datetime, timezone
 
@@ -29,24 +26,28 @@ class HostCollector(Collector):
         now = datetime.now(timezone.utc)
         for h in hosts:
             try:
-                node_id = h["id"]
+                moref = h["id"]
                 node_name = h["name"]
             except KeyError as e:
                 raise CollectorError(
                     f"HostCollector: host record missing required field {e}; "
                     f"target={target}, record={h!r}"
                 ) from e
+            # Namespace by target so identical MoRefs from different vCenters
+            # don't collide in a multi-target Twin.
+            node_id = f"{target}:{moref}"
 
             self.twin.conn.execute("BEGIN TRANSACTION")
             try:
                 self.twin.conn.execute(
-                    """INSERT INTO nodes (id, type, name, attrs, last_seen_at)
-                       VALUES (?, 'host', ?, ?, ?)
+                    """INSERT INTO nodes (id, type, target, name, attrs, last_seen_at)
+                       VALUES (?, 'host', ?, ?, ?, ?)
                        ON CONFLICT (id) DO UPDATE SET
+                           target = excluded.target,
                            name = excluded.name,
                            attrs = excluded.attrs,
                            last_seen_at = excluded.last_seen_at""",
-                    [node_id, node_name, json.dumps(h), now],
+                    [node_id, target, node_name, json.dumps(h), now],
                 )
                 self.twin.write_node_state(snapshot_id, node_id, h)
                 self.twin.conn.execute("COMMIT")

@@ -10,6 +10,7 @@ DDL: list[str] = [
     CREATE TABLE IF NOT EXISTS nodes (
         id VARCHAR PRIMARY KEY,
         type VARCHAR NOT NULL,
+        target VARCHAR NOT NULL DEFAULT '_legacy',
         name VARCHAR,
         parent_id VARCHAR,
         attrs JSON,
