@@ -4,9 +4,10 @@ Compares two snapshots in the same Twin and emits ChangeEvents:
 - inventory drift (nodes added/removed)
 - config drift (same node, different state — field-level diff)
 
-Pure function — no persistence. Task 13 adds optional persistence.
+Pure compute by default; opt-in persistence via persist=True (Task 13).
 """
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -80,10 +81,8 @@ def _dict_field_diff(
     return events
 
 
-def diff_snapshots(
-    twin: Twin, snap_a: str, snap_b: str
-) -> list[ChangeEvent]:
-    """Diff two snapshots; return list of ChangeEvents (sorted by node_id, field)."""
+def _compute_events(twin: Twin, snap_a: str, snap_b: str) -> list[ChangeEvent]:
+    """Pure diff between two snapshots; no persistence."""
     states_a = _load_states(twin, snap_a)
     states_b = _load_states(twin, snap_b)
 
@@ -114,4 +113,51 @@ def diff_snapshots(
             events.extend(
                 _dict_field_diff(node_id, states_a[node_id], states_b[node_id])
             )
+    return events
+
+
+def _persist_events(twin: Twin, snap_b: str, events: list[ChangeEvent]) -> None:
+    """Write events to change_event idempotently for snap_b.
+
+    Uses DELETE + INSERT in a single transaction: clear any prior rows for
+    snap_b first, then insert all current events. Diff is deterministic for
+    a fixed (snap_a, snap_b) pair, so this is correct and simpler than
+    per-row UPSERT.
+    """
+    twin.conn.execute("BEGIN TRANSACTION")
+    try:
+        twin.conn.execute(
+            "DELETE FROM change_event WHERE snapshot_id = ?", [snap_b]
+        )
+        for e in events:
+            twin.conn.execute(
+                """INSERT INTO change_event
+                   (id, snapshot_id, node_id, field, old_value, new_value)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                [
+                    str(uuid.uuid4()),
+                    snap_b,
+                    e.node_id,
+                    e.field,
+                    e.old_value,
+                    e.new_value,
+                ],
+            )
+        twin.conn.execute("COMMIT")
+    except Exception:
+        twin.conn.execute("ROLLBACK")
+        raise
+
+
+def diff_snapshots(
+    twin: Twin, snap_a: str, snap_b: str, persist: bool = False
+) -> list[ChangeEvent]:
+    """Diff two snapshots; return list of ChangeEvents (sorted by node_id, field).
+
+    If ``persist=True``, idempotently write events to the ``change_event``
+    table keyed on snap_b (re-runs replace prior rows for that snapshot).
+    """
+    events = _compute_events(twin, snap_a, snap_b)
+    if persist:
+        _persist_events(twin, snap_b, events)
     return events
