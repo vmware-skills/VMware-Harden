@@ -153,3 +153,13 @@ def test_scan_closes_twin_on_collector_error(tmp_path: Path):
     rows = twin2.conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()
     assert rows[0] == 1  # the failed scan still wrote a snapshot row
     twin2.close()
+
+
+@pytest.mark.integration
+def test_report_empty_twin_helpful_message(tmp_path: Path, capsys):
+    """report against an empty Twin should guide the user, not show 'No violations'."""
+    db = str(tmp_path / "empty.duckdb")
+    run_report(db=db, format="text")
+    out = capsys.readouterr().out
+    assert "No scans yet" in out
+    assert "vmware-harden scan" in out

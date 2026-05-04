@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.5,<3.0",
     "duckdb>=0.10,<2.0",
     "pyyaml>=6.0,<7.0",
+    # Reserved for v1.1 MCP integration (@vmware_tool decorator + audit logging).
     "vmware-policy>=1.0.0,<2.0",
 ]
 

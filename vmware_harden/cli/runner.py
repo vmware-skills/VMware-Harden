@@ -52,6 +52,12 @@ def run_report(db: str, format: str = "text") -> None:
     """
     twin = _open_twin(db)
     try:
+        snapshot_count = twin.conn.execute(
+            "SELECT COUNT(*) FROM snapshots"
+        ).fetchone()[0]
+        if snapshot_count == 0:
+            typer.echo("No scans yet. Run `vmware-harden scan --target <vc>` first.")
+            return
         rows = twin.conn.execute(
             """
             SELECT v.rule_id, v.node_id, n.name, v.severity, v.evidence
