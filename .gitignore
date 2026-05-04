@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+*.duckdb
+*.duckdb.wal
+.env
+.coverage
+htmlcov/
