@@ -39,7 +39,7 @@ def _seed_db(tmp_path: Path):
 @pytest.mark.unit
 def test_list_violations(tmp_path: Path):
     db, vid = _seed_db(tmp_path)
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     out = srv.list_violations()
     assert any(v["id"] == vid and v["severity"] == "high" for v in out)
@@ -48,7 +48,7 @@ def test_list_violations(tmp_path: Path):
 @pytest.mark.unit
 def test_list_violations_severity_filter(tmp_path: Path):
     db, _ = _seed_db(tmp_path)
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     high_only = srv.list_violations(severity="high")
     assert all(v["severity"] == "high" for v in high_only)
@@ -59,7 +59,7 @@ def test_list_violations_severity_filter(tmp_path: Path):
 @pytest.mark.unit
 def test_get_remediation_returns_none_when_missing(tmp_path: Path):
     db, vid = _seed_db(tmp_path)
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     assert srv.get_remediation(vid) is None
 
@@ -85,7 +85,7 @@ def test_get_remediation_returns_dict_when_present(tmp_path: Path):
     twin.save_suggestion(vid, sugg)
     twin.close()
 
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     out = srv.get_remediation(vid)
     assert out is not None
@@ -96,7 +96,7 @@ def test_get_remediation_returns_dict_when_present(tmp_path: Path):
 @pytest.mark.unit
 def test_list_drift_events(tmp_path: Path):
     db, _ = _seed_db(tmp_path)
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     events = srv.list_drift_events()
     assert any(e["field"] == "ntp_enabled" for e in events)
@@ -104,7 +104,7 @@ def test_list_drift_events(tmp_path: Path):
 
 @pytest.mark.unit
 def test_get_baseline_rules():
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     rules = srv.get_baseline_rules("cis-vmware-esxi-8.0-subset")
     assert len(rules) == 20
     assert all("id" in r and "title" in r and "severity" in r for r in rules)
@@ -125,7 +125,7 @@ def test_scan_target_invokes_collectors(tmp_path: Path):
          "encrypted_vmotion": "required", "dcui_timeout_seconds": 600,
          "shell_timeout_seconds": 900, "console_keyboard": "US Default"},
     ]
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     with patch("vmware_harden.collectors.hosts._fetch_hosts", return_value=fake_hosts):
         out = srv.scan_target(target="lab", baseline="cis-vmware-esxi-8.0-subset")

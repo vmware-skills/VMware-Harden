@@ -22,7 +22,7 @@ def test_list_baselines_tool_exposed():
 @pytest.mark.unit
 def test_list_baselines_returns_built_ins():
     """list_baselines returns a list with our 4 known built-ins."""
-    from mcp_server.server import list_baselines
+    from vmware_harden.mcp.tools import list_baselines
 
     out = list_baselines()
     names = {b["id"] for b in out}

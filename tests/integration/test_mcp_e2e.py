@@ -9,7 +9,6 @@ from mcp_server import server as srv
 @pytest.mark.integration
 def test_list_baselines_via_fastmcp_dispatch(tmp_path: Path):
     """Call the tool through the FastMCP server's internal dispatch layer."""
-    srv._DB_PATH = tmp_path / "twin.duckdb"
     server = srv.build_server(db_path=tmp_path / "twin.duckdb")
 
     tools = server._tool_manager._tools
@@ -27,7 +26,6 @@ def test_list_baselines_via_fastmcp_dispatch(tmp_path: Path):
 
 @pytest.mark.integration
 def test_get_baseline_rules_via_fastmcp_dispatch(tmp_path: Path):
-    srv._DB_PATH = tmp_path / "twin.duckdb"
     server = srv.build_server(db_path=tmp_path / "twin.duckdb")
     tool = server._tool_manager._tools["get_baseline_rules"]
     rules = tool.fn(baseline_id="cis-vmware-esxi-8.0-subset")

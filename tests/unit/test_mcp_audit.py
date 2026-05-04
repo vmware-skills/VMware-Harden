@@ -20,7 +20,7 @@ def audit_db_in_tmp(tmp_path: Path, monkeypatch):
 @pytest.mark.unit
 def test_list_baselines_writes_audit_row(audit_db_in_tmp):
     """After calling list_baselines, an audit row exists for it."""
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
 
     srv.list_baselines()
 
@@ -35,11 +35,13 @@ def test_list_baselines_writes_audit_row(audit_db_in_tmp):
     conn.close()
     assert len(rows) >= 1
     assert rows[0][1] == "list_baselines"
+    # Skill should be inferred from module path (vmware_harden.mcp.tools → harden)
+    assert rows[0][0] == "harden", f"expected skill=harden, got {rows[0][0]!r}"
 
 
 @pytest.mark.unit
 def test_get_baseline_rules_audited(audit_db_in_tmp):
-    from mcp_server import server as srv
+    from vmware_harden.mcp import tools as srv
 
     srv.get_baseline_rules("cis-vmware-esxi-8.0-subset")
 
