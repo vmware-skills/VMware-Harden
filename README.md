@@ -6,7 +6,7 @@
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
-## v1.0.1 — first public release
+## v1.5.15 — GA family member
 
 Production-ready compliance platform with **4 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0), **65 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, and a 3-page web dashboard.
 
