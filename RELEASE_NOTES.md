@@ -42,7 +42,11 @@ First public release. Production-ready compliance platform for VMware infrastruc
 
 - **MCP audit `skill` field** logs as `unknown` due to `vmware_policy._infer_skill` looking for `vmware_<skill>` package layout (we use `mcp_server`). Same as sibling skills; not a regression.
 - **vmware-pilot integration** is in this release (v1.0) but real Pilot endpoint integration may need adjustment based on Pilot v1.x API. Mock client is fully functional.
-- **`ScriptCheck` baseline rules** still rejected at load time (script-type checks reserved for v2).
+- **ScriptCheck rules rejected at load time** — declarative SQL (`QueryCheck`)
+  covers all v1.0 baselines (CIS, SCG, 等保, PCI). Implementing executable
+  script checks is a v2 feature gated on a security threat model
+  (sandboxing arbitrary Python from baseline YAML). Tracked at
+  `vmware_harden/baselines/loader.py` (search for "DEFERRED to v2.0").
 
 ### Upgrade notes
 

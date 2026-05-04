@@ -42,11 +42,16 @@ def load_baseline(path: Path | str) -> Baseline:
         parent = load_builtin(baseline.extends)
         baseline = _merge_with_parent(baseline, parent)
 
+    # ScriptCheck rejection — DEFERRED to v2.0 (tracked in RELEASE_NOTES "Known
+    # limitations"). Implementing executable script checks requires a security
+    # threat model (sandboxing arbitrary Python from baseline YAML) plus a
+    # subprocess/AST-restricted executor. v1.0 limits checks to declarative SQL.
     for rule in baseline.rules:
         if isinstance(rule.check, ScriptCheck):
             raise NotImplementedError(
                 f"{path}: rule {rule.id!r} uses script check; "
-                "script checks reserved for v2"
+                "script checks reserved for v2 (see RELEASE_NOTES.md "
+                "'Known limitations' for rationale and tracking)"
             )
     return baseline
 
