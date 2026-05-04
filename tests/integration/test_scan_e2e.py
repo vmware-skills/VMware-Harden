@@ -163,3 +163,54 @@ def test_report_empty_twin_helpful_message(tmp_path: Path, capsys):
     out = capsys.readouterr().out
     assert "No scans yet" in out
     assert "vmware-harden scan" in out
+
+
+@pytest.mark.integration
+def test_scan_dispatches_multiple_collectors_for_dengbao(tmp_path: Path, capsys):
+    """Scanning with the 等保 baseline (host+vm+datastore+dfw_rule) must invoke all 4 collectors."""
+    db = str(tmp_path / "t.duckdb")
+
+    one_host = [
+        {"id": "h-1", "name": "esx", "ntp_enabled": True, "build": 99999999,
+         "ntp_servers": ["10.0.0.1"], "ntp_service_policy": "on",
+         "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
+         "persistent_logs": True, "audit_retention_days": 200,
+         "mgmt_vmk_isolated": True, "vswitch_promiscuous_mode": "reject",
+         "forged_transmits": "reject", "firewall_enabled": True,
+         "ssh_running": False, "ad_joined": True,
+         "lockdown_exceptions_count": 0, "root_ssh_key_auth": False,
+         "vsan_enabled": False, "vsan_encryption_enabled": False,
+         "encrypted_vmotion": "required", "dcui_timeout_seconds": 600,
+         "shell_timeout_seconds": 900, "console_keyboard": "US Default",
+         "host_secure_boot": True, "host_tpm_attested": True,
+         "tls_min_version": "1.2"},
+    ]
+    one_vm = [
+        {"id": "vm-1", "name": "v", "host_id": "h-1", "tools_running": True,
+         "secure_boot": True, "encryption_enabled": False, "tags": []},
+    ]
+    one_ds = [
+        {"id": "ds-1", "name": "d", "type": "vmfs", "capacity_gb": 100,
+         "free_gb": 50, "encryption_enabled": True, "ssd": True},
+    ]
+    one_dfw = {
+        "sections": [{"id": "s-1", "name": "S"}],
+        "rules": [{"id": "r-1", "name": "deny", "section_id": "s-1",
+                   "action": "reject", "source": ["ANY"], "destination": ["ANY"],
+                   "services": ["ANY"], "applied_to": [], "hit_count": 0,
+                   "disabled": False}],
+    }
+
+    with patch("vmware_harden.collectors.hosts._fetch_hosts", return_value=one_host), \
+         patch("vmware_harden.collectors.vms._fetch_vms", return_value=one_vm), \
+         patch("vmware_harden.collectors.datastores._fetch_datastores",
+               return_value=one_ds), \
+         patch("vmware_harden.collectors.dfw._fetch_dfw", return_value=one_dfw):
+        run_scan(target="lab", baseline="dengbao-2.0-level3-vmware", db=db)
+
+    out = capsys.readouterr().out
+    # All 4 collector summaries should appear
+    assert "host" in out.lower()
+    assert "vm" in out.lower()
+    assert "datastore" in out.lower()
+    assert ("dfw" in out.lower()) or ("dfw_rule" in out.lower())
