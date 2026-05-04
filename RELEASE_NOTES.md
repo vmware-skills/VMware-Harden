@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.0.1 — 2026-05-04
+
+Patch release for MCP Registry submission.
+
+- Add `mcp-name: io.github.zw008/vmware-harden` marker to README for MCP Registry ownership validation.
+- No code or behavior changes; identical to 1.0.0 functionally.
+
 ## v1.0.0 — 2026-05-04
 
 First public release. Production-ready compliance platform for VMware infrastructure with AI-native remediation guidance.

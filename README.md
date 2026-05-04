@@ -1,10 +1,12 @@
 # vmware-harden
 
+<!-- mcp-name: io.github.zw008/vmware-harden -->
+
 > **Disclaimer**: Community-maintained open-source project. **Not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware", "vSphere", "ESXi", and "NSX" are trademarks of Broadcom. Source code is publicly auditable at [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden) under the MIT license.
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
-## v1.0.0 — first public release
+## v1.0.1 — first public release
 
 Production-ready compliance platform with **4 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0), **65 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, and a 3-page web dashboard.
 
