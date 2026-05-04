@@ -139,3 +139,28 @@ def test_runner_skips_script_checks(tmp_path: Path):
     violations = CheckRunner(twin).run_baseline(snap_id, baseline)
     assert violations == []  # script check silently skipped
     twin.close()
+
+
+@pytest.mark.unit
+def test_runner_duplicates_violations_on_rerun(tmp_path: Path):
+    """Pin current behavior: re-running creates duplicate violation rows.
+
+    Each call generates fresh uuids, so this is observable. v2 may add a
+    unique constraint to deduplicate; for MVP the runner is single-shot
+    per (snapshot, baseline).
+    """
+    twin = Twin(tmp_path / "t.duckdb")
+    snap_id = twin.start_snapshot("v.lab")
+    _insert_host(twin, "host-02", "esx02", {"ntp_enabled": False, "build": 99999999})
+
+    baseline = load_builtin("cis-vmware-esxi-8.0-subset")
+    runner = CheckRunner(twin)
+    runner.run_baseline(snap_id, baseline)
+    runner.run_baseline(snap_id, baseline)
+
+    count = twin.conn.execute(
+        "SELECT COUNT(*) FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "AND node_id = 'host-02'"
+    ).fetchone()[0]
+    assert count == 2  # current MVP behavior — duplicates allowed
+    twin.close()

@@ -44,7 +44,7 @@ class CheckRunner:
                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
                         [
                             v["id"], snapshot_id, baseline.id, rule.id,
-                            node_id, rule.severity, json.dumps(row),
+                            node_id, rule.severity, json.dumps(row, default=str),
                         ],
                     )
             # ScriptCheck and any unknown check types are silently skipped
