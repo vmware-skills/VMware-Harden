@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from vmware_policy import vmware_tool
 
 # Module-level state — set by build_server() so tools can read it
 _DB_PATH: Path | None = None
@@ -20,6 +21,7 @@ def _resolve_db() -> Path:
     return _DB_PATH or Path(os.path.expanduser("~/.vmware-harden/twin.duckdb"))
 
 
+@vmware_tool(risk_level="low")
 def list_baselines() -> list[dict]:
     """List built-in and user-imported baselines.
 
@@ -45,6 +47,7 @@ def list_baselines() -> list[dict]:
     return out
 
 
+@vmware_tool(risk_level="low")
 def list_violations(severity: str | None = None) -> list[dict]:
     """[READ] Latest snapshot's violations, optionally filtered by severity."""
     from vmware_harden.store.twin import Twin
@@ -87,6 +90,7 @@ def list_violations(severity: str | None = None) -> list[dict]:
         twin.close()
 
 
+@vmware_tool(risk_level="low")
 def get_remediation(violation_id: str) -> dict | None:
     """[READ] Get the persisted Suggestion for a violation, or None."""
     from vmware_harden.store.twin import Twin
@@ -101,6 +105,7 @@ def get_remediation(violation_id: str) -> dict | None:
         twin.close()
 
 
+@vmware_tool(risk_level="low")
 def list_drift_events(limit: int = 50) -> list[dict]:
     """[READ] Latest snapshot's change events."""
     from vmware_harden.store.twin import Twin
@@ -132,6 +137,7 @@ def list_drift_events(limit: int = 50) -> list[dict]:
         twin.close()
 
 
+@vmware_tool(risk_level="low")
 def get_baseline_rules(baseline_id: str) -> list[dict]:
     """[READ] Return all rules of a given baseline."""
     from vmware_harden.baselines.loader import load_builtin
@@ -148,6 +154,7 @@ def get_baseline_rules(baseline_id: str) -> list[dict]:
     ]
 
 
+@vmware_tool(risk_level="medium")
 def scan_target(
     target: str, baseline: str = "cis-vmware-esxi-8.0-subset"
 ) -> dict:
