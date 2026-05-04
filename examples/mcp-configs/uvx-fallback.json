@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Fallback config for users without `uv tool install vmware-harden`.",
+    "Uses uvx to resolve the package on each launch.",
+    "",
+    "Corporate TLS proxy: set UV_NATIVE_TLS=true so uv uses the system CA store",
+    "(otherwise uv's bundled webpki rejects MitM proxies; see CLAUDE.md 踩坑 #25).",
+    "Prefer `uv tool install vmware-harden` + the entry-point configs whenever possible —",
+    "uvx re-resolves PyPI on every launch and is fragile on restricted networks."
+  ],
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "uvx",
+      "args": ["--from", "vmware-harden", "vmware-harden-mcp"],
+      "env": {
+        "UV_NATIVE_TLS": "true",
+        "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb"
+      }
+    }
+  }
+}

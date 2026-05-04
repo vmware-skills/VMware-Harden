@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Claude Code / Claude Desktop MCP configuration for vmware-harden.",
+    "Prerequisites:",
+    "  1. Install: uv tool install vmware-harden  (or: pip install vmware-harden)",
+    "  2. Optional: set ANTHROPIC_API_KEY to enable the LLM Remediation Advisor",
+    "     (without it, the advisor falls back to a deterministic mock provider)",
+    "  3. Twin DB defaults to ~/.vmware-harden/twin.duckdb; override with VMWARE_HARDEN_DB",
+    "  4. Corporate TLS / proxy issues: see references/setup-guide.md (踩坑 #25)"
+  ],
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "vmware-harden-mcp",
+      "args": [],
+      "env": {
+        "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb"
+      }
+    }
+  }
+}
