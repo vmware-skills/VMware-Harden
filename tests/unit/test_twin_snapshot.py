@@ -64,3 +64,22 @@ def test_finish_snapshot_default_status_is_completed(tmp_path: Path):
     ).fetchone()
     assert row[0] == "completed"
     twin.close()
+
+
+@pytest.mark.unit
+def test_write_node_state_idempotent_within_snapshot(tmp_path: Path):
+    """ON CONFLICT (snapshot_id, node_id) DO NOTHING — first write wins."""
+    twin = Twin(tmp_path / "t.duckdb")
+    snap = twin.start_snapshot("v.lab")
+    h1 = twin.write_node_state(snap, "host-01", {"build": 1})
+    h2 = twin.write_node_state(snap, "host-01", {"build": 2})  # second write ignored
+
+    rows = twin.conn.execute(
+        "SELECT state_hash FROM node_state WHERE snapshot_id = ? AND node_id = ?",
+        [snap, "host-01"],
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == h1
+    # h2 is the hash of the new state but not stored
+    assert h1 != h2
+    twin.close()
