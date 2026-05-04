@@ -1,4 +1,8 @@
 """Estate Digital Twin — DuckDB-backed persistent store."""
+import hashlib
+import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import duckdb
@@ -26,6 +30,40 @@ class Twin:
             "WHERE table_schema = 'main'"
         ).fetchall()
         return [r[0] for r in rows]
+
+    def start_snapshot(self, target: str) -> str:
+        """Begin a new scan snapshot. Returns the snapshot id (UUID)."""
+        snap_id = str(uuid.uuid4())
+        self.conn.execute(
+            "INSERT INTO snapshots (id, target, scan_started_at) VALUES (?, ?, ?)",
+            [snap_id, target, datetime.now(timezone.utc)],
+        )
+        return snap_id
+
+    def finish_snapshot(self, snapshot_id: str, status: str = "completed") -> None:
+        """Mark a snapshot finished with the given status."""
+        self.conn.execute(
+            "UPDATE snapshots SET scan_finished_at = ?, status = ? WHERE id = ?",
+            [datetime.now(timezone.utc), status, snapshot_id],
+        )
+
+    def write_node_state(
+        self, snapshot_id: str, node_id: str, state: dict
+    ) -> str:
+        """Write a node state for a snapshot. Returns the sha256 content hash.
+
+        State is canonicalized via json.dumps(sort_keys=True) before hashing,
+        so equivalent dicts produce identical hashes regardless of key order.
+        """
+        state_json = json.dumps(state, sort_keys=True)
+        state_hash = hashlib.sha256(state_json.encode()).hexdigest()
+        self.conn.execute(
+            """INSERT INTO node_state (snapshot_id, node_id, state_hash, state_json)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (snapshot_id, node_id) DO NOTHING""",
+            [snapshot_id, node_id, state_hash, state_json],
+        )
+        return state_hash
 
     def close(self) -> None:
         self.conn.close()
