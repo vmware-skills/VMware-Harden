@@ -2,5 +2,58 @@
 {% block title %}Compliance Summary — vmware-harden{% endblock %}
 {% block content %}
 <h2 class="text-2xl font-semibold mb-4">Compliance Summary</h2>
-<p class="text-slate-600">Page content lands in M2-Task 17.</p>
+
+{% if not summary.has_data %}
+  <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded">
+    <p class="font-medium">No scans yet.</p>
+    <p class="text-sm mt-1">Run <code class="bg-yellow-100 px-1 rounded">vmware-harden scan --target &lt;vc&gt;</code> first.</p>
+  </div>
+{% else %}
+  <div class="text-sm text-slate-500 mb-4">
+    Latest scan against <strong>{{ summary.target }}</strong>
+    {% if summary.finished_at %} at {{ summary.finished_at }}{% endif %}
+    — total <strong>{{ summary.total }}</strong> violations
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+    {% for sev in summary.severity %}
+    <div class="bg-white rounded-lg shadow p-4 border-l-4
+                {% if sev.name == 'critical' %}border-red-600{% endif %}
+                {% if sev.name == 'high' %}border-orange-500{% endif %}
+                {% if sev.name == 'medium' %}border-yellow-400{% endif %}
+                {% if sev.name == 'low' %}border-blue-400{% endif %}
+                {% if sev.name == 'info' %}border-slate-300{% endif %}">
+      <div class="text-xs uppercase text-slate-500 tracking-wide">{{ sev.name|capitalize }}</div>
+      <div class="text-3xl font-bold">{{ sev.count }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-6">
+    <h3 class="text-lg font-medium mb-3">Violations by Category</h3>
+    <div id="radar-chart" style="width:100%; height:380px;"></div>
+  </div>
+
+  <script>
+    const chart = echarts.init(document.getElementById('radar-chart'));
+    const indicator = [
+      {% for c in summary.categories %}
+      { name: {{ c.name|tojson }}, max: {{ summary.total }} },
+      {% endfor %}
+    ];
+    const values = [
+      {% for c in summary.categories %}{{ c.count }},{% endfor %}
+    ];
+    chart.setOption({
+      tooltip: {},
+      radar: { indicator: indicator },
+      series: [{
+        name: 'Violations',
+        type: 'radar',
+        data: [{ value: values, name: 'Latest scan' }],
+        areaStyle: { opacity: 0.2 }
+      }]
+    });
+  </script>
+{% endif %}
 {% endblock %}
