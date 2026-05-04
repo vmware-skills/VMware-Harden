@@ -8,7 +8,7 @@ AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` 
 
 ## v1.5.18 — GA family member
 
-Production-ready compliance platform with **4 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0), **65 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, and a 3-page web dashboard.
+Production-ready compliance platform with **6 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**), **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
 
 ## Quickstart
 
@@ -44,6 +44,8 @@ vmware-harden web --port 8080  # → http://127.0.0.1:8080
 | `vsphere-scg-v8-subset` | 15 | host, vm | [VMware vcf-security-and-compliance-guidelines](https://github.com/vmware/vcf-security-and-compliance-guidelines) |
 | `dengbao-2.0-level3-vmware` | 20 | host, vm, datastore, dfw_rule | GB/T 22239-2019 三级 |
 | `pci-dss-4.0-vmware` | 10 | host, dfw_rule | PCI-DSS v4.0 |
+| `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 Directive (Articles 21/23, Annex I) |
+| `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz (OPS.1.1.4 + SYS.1.1) |
 
 ## Custom baselines
 
@@ -89,14 +91,16 @@ pytest tests/eval/regression -v -m lab
 - **vmware-pilot** — execute remediations (writes; out of scope for harden)
 - **vmware-policy** — `@vmware_tool` audit decorator
 
-## Acceptance criteria for v1.0
+## Acceptance criteria for v1.5.18
 
-- 189+ tests passing
+- 221 tests passing
 - Bandit: 0 issues at any severity
 - All 6 MCP tools audited
 - SKILL.md ≤ 3000 words, family-convention compliant
 - SECURITY.md with 6 elements + Broadcom disclaimer
-- 4 built-in baselines
+- 6 built-in baselines (87 rules)
+- `vmware-harden doctor` for environment diagnostics
+- GA member of vmware-* family (version-aligned at 1.5.18)
 
 ## References
 
