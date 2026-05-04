@@ -62,6 +62,59 @@ def _fetch_summary(db_path: Path) -> dict:
         twin.close()
 
 
+def _fetch_violations(db_path: Path) -> dict:
+    twin = Twin(db_path)
+    try:
+        latest = twin.conn.execute(
+            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
+        ).fetchone()
+        if not latest:
+            return {"has_data": False, "violations": []}
+        snap_id = latest[0]
+        rows = twin.conn.execute(
+            """SELECT v.id, v.rule_id, v.node_id, COALESCE(n.name, ''),
+                      v.severity, v.baseline_id
+               FROM violation v LEFT JOIN nodes n ON n.id = v.node_id
+               WHERE v.snapshot_id = ?
+               ORDER BY
+                 CASE v.severity
+                   WHEN 'critical' THEN 0
+                   WHEN 'high' THEN 1
+                   WHEN 'medium' THEN 2
+                   WHEN 'low' THEN 3
+                   WHEN 'info' THEN 4
+                   ELSE 5
+                 END,
+                 v.rule_id""",
+            [snap_id],
+        ).fetchall()
+        violations = [
+            {
+                "id": r[0],
+                "rule_id": r[1],
+                "node_id": r[2],
+                "node_name": r[3],
+                "severity": r[4],
+                "baseline_id": r[5],
+            }
+            for r in rows
+        ]
+        return {"has_data": True, "violations": violations}
+    finally:
+        twin.close()
+
+
+def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
+    twin = Twin(db_path)
+    try:
+        row = twin.conn.execute(
+            "SELECT evidence FROM violation WHERE id = ?", [violation_id]
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        twin.close()
+
+
 def build_app(db_path: Path) -> FastAPI:
     app = FastAPI(title="vmware-harden")
     app.state.db_path = db_path
@@ -73,6 +126,22 @@ def build_app(db_path: Path) -> FastAPI:
         summary = _fetch_summary(db_path)
         return templates.TemplateResponse(
             request, "index.html", {"page": "summary", "summary": summary}
+        )
+
+    @app.get("/violations", response_class=HTMLResponse)
+    async def violations(request: Request) -> HTMLResponse:
+        data = _fetch_violations(db_path)
+        return templates.TemplateResponse(
+            request, "violations.html", {"page": "violations", **data}
+        )
+
+    @app.get("/violations/{violation_id}/evidence", response_class=HTMLResponse)
+    async def evidence(request: Request, violation_id: str) -> HTMLResponse:
+        evidence_json = _fetch_evidence(db_path, violation_id)
+        return templates.TemplateResponse(
+            request,
+            "_evidence.html",
+            {"evidence_json": evidence_json, "violation_id": violation_id},
         )
 
     return app

@@ -122,3 +122,52 @@ def test_summary_empty_twin_shows_no_scans_message(app_with_db):
     r = client.get("/")
     assert r.status_code == 200
     assert "no scans" in r.text.lower() or "no violations" in r.text.lower()
+
+
+@pytest.mark.integration
+def test_violations_page_renders(app_with_violations):
+    client = TestClient(app_with_violations)
+    r = client.get("/violations")
+    assert r.status_code == 200
+    text = r.text
+    assert "Violations" in text or "violations" in text
+    # Each seeded rule appears
+    for rid in ["rule-c1", "rule-c2", "rule-h1", "rule-m1", "rule-l1"]:
+        assert rid in text
+
+
+@pytest.mark.integration
+def test_violations_page_has_severity_badges(app_with_violations):
+    client = TestClient(app_with_violations)
+    r = client.get("/violations")
+    text = r.text.lower()
+    # All 4 severities present in seeded data
+    for sev in ("critical", "high", "medium", "low"):
+        assert sev in text
+
+
+@pytest.mark.integration
+def test_violation_evidence_endpoint_returns_fragment(app_with_violations):
+    """GET /violations/{id}/evidence returns just the evidence as an HTML fragment."""
+    client = TestClient(app_with_violations)
+    # Find a violation id from the page
+    r = client.get("/violations")
+    text = r.text
+    # Page must include hx-get URLs for evidence — find one
+    import re
+    m = re.search(r"hx-get=[\"']/violations/([0-9a-f-]+)/evidence[\"']", text)
+    assert m, f"No hx-get for evidence found in:\n{text[:500]}"
+    vid = m.group(1)
+
+    r2 = client.get(f"/violations/{vid}/evidence")
+    assert r2.status_code == 200
+    # Fragment should contain evidence JSON content
+    assert "v.lab:h-1" in r2.text or "category" in r2.text
+
+
+@pytest.mark.integration
+def test_violations_empty_twin_message(app_with_db):
+    client = TestClient(app_with_db)
+    r = client.get("/violations")
+    assert r.status_code == 200
+    assert "no violations" in r.text.lower() or "no scans" in r.text.lower()

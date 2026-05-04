@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Violations — vmware-harden{% endblock %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Violations</h2>
+
+{% if not has_data or violations|length == 0 %}
+  <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded">
+    <p class="font-medium">No violations.</p>
+    <p class="text-sm">Either no scans have run, or the estate is fully compliant.</p>
+  </div>
+{% else %}
+  <div class="text-sm text-slate-500 mb-3">
+    Showing {{ violations|length }} violations from latest snapshot.
+  </div>
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-100 text-slate-600">
+        <tr>
+          <th class="px-4 py-2 text-left">Severity</th>
+          <th class="px-4 py-2 text-left">Rule</th>
+          <th class="px-4 py-2 text-left">Node</th>
+          <th class="px-4 py-2 text-left">Baseline</th>
+          <th class="px-4 py-2 text-left">Evidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in violations %}
+        <tr class="border-t hover:bg-slate-50">
+          <td class="px-4 py-2">
+            <span class="inline-block px-2 py-1 text-xs rounded font-medium
+              {% if v.severity == 'critical' %}bg-red-100 text-red-800{% endif %}
+              {% if v.severity == 'high' %}bg-orange-100 text-orange-800{% endif %}
+              {% if v.severity == 'medium' %}bg-yellow-100 text-yellow-800{% endif %}
+              {% if v.severity == 'low' %}bg-blue-100 text-blue-800{% endif %}
+              {% if v.severity == 'info' %}bg-slate-100 text-slate-700{% endif %}">
+              {{ v.severity|upper }}
+            </span>
+          </td>
+          <td class="px-4 py-2 font-mono">{{ v.rule_id }}</td>
+          <td class="px-4 py-2">
+            <div class="font-mono text-xs">{{ v.node_id }}</div>
+            {% if v.node_name %}<div class="text-slate-500">{{ v.node_name }}</div>{% endif %}
+          </td>
+          <td class="px-4 py-2 text-xs text-slate-600">{{ v.baseline_id }}</td>
+          <td class="px-4 py-2">
+            <button class="text-blue-600 text-xs hover:underline"
+                    hx-get="/violations/{{ v.id }}/evidence"
+                    hx-target="#evidence-{{ v.id }}"
+                    hx-swap="innerHTML">
+              Show
+            </button>
+            <div id="evidence-{{ v.id }}" class="mt-2"></div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}
