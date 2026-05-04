@@ -101,5 +101,12 @@ class Twin:
             return None
         return Suggestion.model_validate_json(row[0])
 
+    def update_pilot_task_id(self, violation_id: str, pilot_task_id: str) -> None:
+        """Persist the pilot task id back onto the remediation row for tracking."""
+        self.conn.execute(
+            "UPDATE remediation SET pilot_task_id = ? WHERE violation_id = ?",
+            [pilot_task_id, violation_id],
+        )
+
     def close(self) -> None:
         self.conn.close()
