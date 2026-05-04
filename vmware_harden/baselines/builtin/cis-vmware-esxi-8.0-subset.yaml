@@ -45,3 +45,347 @@ rules:
     review_policy:
       human_review_required: true
       min_confidence: 0.95
+
+  - id: cis-esxi-2.1.2
+    title: "Ensure NTP service is enabled to start with the host"
+    severity: medium
+    category: time-sync
+    rationale: "NTP 服务必须随主机自启，否则重启后时间漂移导致审计日志失真。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
+    remediation:
+      summary: "Set NTP service policy to start with host"
+      manual_steps: "vCenter → Host → Configure → Services → ntpd → Policy: Start and stop with host"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-2.2.2
+    title: "Ensure ESXi has lockdown mode enabled"
+    severity: high
+    category: patching
+    rationale: "Lockdown mode 限制直接访问主机的能力，强制通过 vCenter 管理，降低攻击面。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable lockdown mode (Normal or Strict)"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Edit"
+      risk: "可能阻断既有自动化脚本对 ESXi 的直连访问；需先评估异常列表"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-3.1.1
+    title: "Ensure remote syslog server is configured"
+    severity: high
+    category: logging
+    rationale: "无远程 syslog 时主机重启或被攻陷会丢失审计日志，违反合规要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+               OR json_extract_string(attrs, '$.syslog_remote_host') = '')
+    remediation:
+      summary: "Configure Syslog.global.logHost to remote syslog endpoint"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.logHost"
+      risk: "无业务影响；需确保目标 syslog 收集器可达"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-3.1.2
+    title: "Ensure persistent log location is set"
+    severity: medium
+    category: logging
+    rationale: "日志写到 RAM disk 时主机重启即丢失，违反审计留存要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.persistent_logs') AS BOOLEAN) = false
+    remediation:
+      summary: "Set Syslog.global.logDir to persistent datastore path"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.logDir"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-3.1.3
+    title: "Ensure audit logs retained at least 30 days"
+    severity: medium
+    category: logging
+    rationale: "短于 30 天的审计日志保留无法满足多数合规框架要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 30
+    remediation:
+      summary: "Increase audit log retention to >= 30 days"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.auditRecord.storageCapacity"
+      risk: "需评估存储容量"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-4.1.1
+    title: "Ensure management VMK isolated on dedicated VLAN"
+    severity: high
+    category: network
+    rationale: "管理网络与业务网络共享 VLAN 增加横向移动攻击面。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.mgmt_vmk_isolated') AS BOOLEAN) = false
+    remediation:
+      summary: "Move management VMK to a dedicated isolated VLAN"
+      manual_steps: "vCenter → Host → Configure → VMkernel adapters → migrate to dedicated port group/VLAN"
+      risk: "网络变更可能导致管理面短时不可达；需 maintenance window"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-4.1.2
+    title: "Ensure vSwitch promiscuous mode is reject"
+    severity: high
+    category: network
+    rationale: "Promiscuous mode 允许 VM 嗅探整个 vSwitch 流量，违反最小权限原则。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.vswitch_promiscuous_mode') != 'reject'
+    remediation:
+      summary: "Set vSwitch security policy: Promiscuous mode = Reject"
+      manual_steps: "vCenter → Host → Configure → Virtual switches → Edit → Security → Promiscuous mode: Reject"
+      risk: "可能影响依赖镜像端口的 IDS/网络分析虚机；变更前评估"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-4.1.3
+    title: "Ensure forged transmits is reject"
+    severity: high
+    category: network
+    rationale: "Forged transmits 允许 VM 伪造源 MAC，可被用于 ARP 欺骗。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.forged_transmits') != 'reject'
+    remediation:
+      summary: "Set vSwitch security policy: Forged transmits = Reject"
+      manual_steps: "vCenter → Host → Configure → Virtual switches → Edit → Security → Forged transmits: Reject"
+      risk: "可能影响 NLB/某些防火墙虚机的 MAC 切换；先评估"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-5.1.1
+    title: "Ensure ESXi firewall is enabled"
+    severity: critical
+    category: firewall
+    rationale: "ESXi 内置防火墙关闭则所有服务端口暴露，严重违反纵深防御。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable ESXi firewall"
+      manual_steps: "esxcli network firewall set --enabled true"
+      risk: "需确认管理服务的 ruleset 已放行；否则可能锁死管理面"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: cis-esxi-5.1.2
+    title: "Ensure SSH is not running by default"
+    severity: high
+    category: firewall
+    rationale: "SSH 默认开启增加凭据爆破和持久化后门风险，应仅按需启用。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.ssh_running') AS BOOLEAN) = true
+    remediation:
+      summary: "Stop SSH service and set policy to off"
+      manual_steps: "vCenter → Host → Configure → Services → SSH → Stop, Policy: Start and stop manually"
+      risk: "依赖 SSH 的运维脚本将失效；需事先迁移到 vCenter API/PowerCLI"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-6.1.1
+    title: "Ensure host is joined to AD for centralized authentication"
+    severity: medium
+    category: auth
+    rationale: "本地账户难以集中审计与撤销，AD 集成支持统一身份治理。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
+    remediation:
+      summary: "Join ESXi host to Active Directory domain"
+      manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
+      risk: "依赖 AD 可达性；AD 故障可能影响登录"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.85
+
+  - id: cis-esxi-6.1.2
+    title: "Ensure exception list for lockdown mode is empty"
+    severity: high
+    category: auth
+    rationale: "Lockdown 异常列表中的账户可绕过 lockdown 限制，应保持为空。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.lockdown_exceptions_count') AS INTEGER) > 0
+    remediation:
+      summary: "Remove all entries from lockdown exception users list"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Exception Users"
+      risk: "若存在自动化运维账户，移除前需迁移到 vCenter 凭据"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-6.1.3
+    title: "Ensure root SSH key authentication is disabled"
+    severity: high
+    category: auth
+    rationale: "保留的 SSH 公钥相当于持久化后门，绕过 lockdown 与密码策略。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
+    remediation:
+      summary: "Remove /etc/ssh/keys-root/authorized_keys entries"
+      manual_steps: "SSH 到主机后清空 /etc/ssh/keys-root/authorized_keys；或通过 host profile 强制"
+      risk: "依赖 key auth 的自动化将失效；需切换为 vCenter API"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-7.1.1
+    title: "Ensure vSAN encryption is enabled where applicable"
+    severity: high
+    category: encryption
+    rationale: "启用 vSAN 但未启加密则数据落盘明文，违反合规中数据保护要求。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
+          AND CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable vSAN data-at-rest encryption with KMS"
+      manual_steps: "vCenter → Cluster → Configure → vSAN → Services → Data-At-Rest encryption"
+      risk: "需 KMS 部署；启用过程触发磁盘 reformat（rolling），需充足容量与 maintenance window"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: cis-esxi-7.1.2
+    title: "Ensure encrypted vMotion is required"
+    severity: medium
+    category: encryption
+    rationale: "vMotion 流量包含 VM 内存页，未加密时在管理网可被嗅探。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.encrypted_vmotion') != 'required'
+    remediation:
+      summary: "Set Encrypted vMotion = Required on host/VM level"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → Encrypted vMotion: Required"
+      risk: "对端主机不支持加密时 vMotion 失败；需先评估全集群兼容性"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: cis-esxi-8.1.1
+    title: "Ensure DCUI auto-logout timeout <= 600 seconds"
+    severity: low
+    category: misc
+    rationale: "DCUI 长时间空闲会话给物理访问者机会，应设上限。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
+    remediation:
+      summary: "Set UserVars.DcuiTimeOut <= 600"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.DcuiTimeOut"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-8.1.2
+    title: "Ensure ESXi shell auto-logout <= 900 seconds"
+    severity: low
+    category: misc
+    rationale: "ESXi shell 长时间空闲会话被劫持风险高。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
+    remediation:
+      summary: "Set UserVars.ESXiShellInteractiveTimeOut <= 900"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellInteractiveTimeOut"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: cis-esxi-8.1.3
+    title: "Ensure console keyboard layout is US Default"
+    severity: info
+    category: misc
+    rationale: "非标准键盘布局可能导致紧急救援场景下无法输入正确密码。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.console_keyboard') != 'US Default'
+    remediation:
+      summary: "Set console keyboard layout to US Default"
+      manual_steps: "DCUI → Configure Keyboard → US Default"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.85

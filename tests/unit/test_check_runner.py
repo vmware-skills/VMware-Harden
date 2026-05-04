@@ -57,12 +57,44 @@ def test_violations_persisted_to_db(tmp_path: Path):
     twin.close()
 
 
+_FULLY_COMPLIANT_HOST_ATTRS = {
+    # time-sync
+    "ntp_enabled": True,
+    "ntp_service_policy_on": True,
+    # patching
+    "build": 99999999,
+    "lockdown_mode_enabled": True,
+    # logging
+    "syslog_remote_host": "syslog.lab.local:514",
+    "persistent_logs": True,
+    "audit_retention_days": 90,
+    # network
+    "mgmt_vmk_isolated": True,
+    "vswitch_promiscuous_mode": "reject",
+    "forged_transmits": "reject",
+    # firewall
+    "firewall_enabled": True,
+    "ssh_running": False,
+    # auth
+    "ad_joined": True,
+    "lockdown_exceptions_count": 0,
+    "root_ssh_key_auth": False,
+    # encryption
+    "vsan_enabled": False,
+    "vsan_encryption_enabled": False,
+    "encrypted_vmotion": "required",
+    # misc
+    "dcui_timeout_seconds": 600,
+    "shell_timeout_seconds": 900,
+    "console_keyboard": "US Default",
+}
+
+
 @pytest.mark.unit
 def test_compliant_estate_yields_zero_violations(tmp_path: Path):
     twin = Twin(tmp_path / "t.duckdb")
     snap_id = twin.start_snapshot("v.lab")
-    _insert_host(twin, "host-ok", "esx-ok",
-                 {"ntp_enabled": True, "build": 99999999})
+    _insert_host(twin, "host-ok", "esx-ok", _FULLY_COMPLIANT_HOST_ATTRS)
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
     violations = CheckRunner(twin).run_baseline(snap_id, baseline)
