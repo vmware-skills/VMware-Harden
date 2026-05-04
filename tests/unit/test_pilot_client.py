@@ -54,3 +54,15 @@ def test_protocol_satisfied_by_mock():
     """MockPilotClient is structurally a PilotClient."""
     client: PilotClient = MockPilotClient()
     assert client.submit_remediation(_make_suggestion()).startswith("mock-")
+
+
+@pytest.mark.lab
+def test_real_pilot_client_against_installed_pilot():
+    """If vmware-pilot is installed, RealPilotClient constructs and is callable."""
+    pytest.importorskip("vmware_pilot")
+    from vmware_harden.pilot.client import RealPilotClient
+
+    client = RealPilotClient()
+    # Construction should not crash; full submit requires a dispatch + workflow
+    # context which is exercised in lab environments only.
+    assert client is not None

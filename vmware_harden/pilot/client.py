@@ -9,7 +9,8 @@ Two implementations:
 - `MockPilotClient` — for tests + offline use; records calls; can simulate
   failures.
 """
-from typing import Protocol
+from datetime import datetime, timezone
+from typing import Any, Callable, Protocol
 from uuid import uuid4
 
 from vmware_harden.baselines.model import Suggestion
@@ -41,24 +42,104 @@ class MockPilotClient:
         return f"mock-pilot-{uuid4().hex[:8]}"
 
 
-class RealPilotClient:
-    """Thin wrapper around vmware-pilot. Lazy-imports to keep the family loose.
+# Type alias for the dispatch function pilot calls per step.
+DispatchFn = Callable[[str, str, dict[str, Any]], Any]
 
-    Note: as of v1.0, the Pilot integration is functional but the actual
-    pilot API call site may need adjustment based on Pilot v1.x evolution.
-    Default execution mode goes through Pilot's standard workflow with its
-    own approval gates — vmware-harden never bypasses pilot's safeguards.
+
+class RealPilotClient:
+    """Pilot integration via vmware_pilot.executor.WorkflowExecutor.
+
+    Builds a Workflow from the Suggestion's execution_plan, runs it through
+    pilot's executor up to the first approval checkpoint. Caller can use the
+    returned task id (== workflow.id) to poll/resume via pilot's own CLI.
+
+    Lazy-imports vmware_pilot so harden runs without it; raises
+    PilotSubmissionError with an install hint when the dep is missing.
     """
+
+    def __init__(self, dispatch: DispatchFn | None = None):
+        # Caller can supply a DispatchFn (skill, tool, params) -> result.
+        # Default in pilot is a no-op logger; harden's CLI passes a real
+        # dispatcher that invokes sibling MCP tools.
+        self._dispatch = dispatch
 
     def submit_remediation(self, suggestion: Suggestion) -> str:
         try:
-            from vmware_pilot.workflow import submit  # type: ignore[import-not-found]
+            from vmware_pilot.executor import WorkflowExecutor
+            from vmware_pilot.models import (
+                Workflow,
+                WorkflowState,
+                WorkflowStep,
+                WorkflowStore,
+                new_workflow_id,
+            )
         except ImportError as e:
             raise PilotSubmissionError(
-                "vmware-pilot is not installed. Install it and retry, or "
-                "use --pilot mock for testing."
+                "vmware-pilot is not installed. Install it with "
+                "`uv tool install vmware-pilot` and retry, or use "
+                "MockPilotClient for testing."
             ) from e
+
+        # Translate Suggestion → Workflow.
+        steps: list[Any] = []
+        if suggestion.human_review_required:
+            steps.append(
+                WorkflowStep(
+                    index=len(steps),
+                    action="require_approval",
+                    skill="harden",
+                    tool="approval_gate",
+                    params={"summary": suggestion.summary},
+                )
+            )
+        for s in suggestion.execution_plan.steps:
+            steps.append(
+                WorkflowStep(
+                    index=len(steps),
+                    action="execute",
+                    skill=_infer_skill_from_tool(s.mcp_tool),
+                    tool=_strip_skill_prefix(s.mcp_tool),
+                    params=dict(s.params),
+                )
+            )
+
+        now = datetime.now(tz=timezone.utc).isoformat()
+        workflow = Workflow(
+            id=new_workflow_id(),
+            workflow_type="harden-remediation",
+            state=WorkflowState.DRAFT,
+            steps=steps,
+            params={
+                "summary": suggestion.summary[:200],
+                "human_review_required": suggestion.human_review_required,
+            },
+            created_at=now,
+            updated_at=now,
+        )
+
+        store = WorkflowStore()
+        executor = WorkflowExecutor(store=store, dispatch=self._dispatch)
         try:
-            return submit(suggestion.model_dump())  # type: ignore[no-any-return]
+            executor.run_until_checkpoint(workflow)
         except Exception as e:
-            raise PilotSubmissionError(f"pilot.submit failed: {e}") from e
+            raise PilotSubmissionError(f"pilot.executor failed: {e}") from e
+        return workflow.id
+
+
+def _infer_skill_from_tool(mcp_tool: str) -> str:
+    """`vmware_aiops.host_ntp_configure` → 'aiops'.
+
+    Falls back to 'unknown' for non-namespaced tools.
+    """
+    if "." in mcp_tool:
+        ns = mcp_tool.split(".", 1)[0]
+        if ns.startswith("vmware_"):
+            return ns.replace("vmware_", "", 1)
+    return "unknown"
+
+
+def _strip_skill_prefix(mcp_tool: str) -> str:
+    """`vmware_aiops.host_ntp_configure` → 'host_ntp_configure'."""
+    if "." in mcp_tool:
+        return mcp_tool.split(".", 1)[1]
+    return mcp_tool
