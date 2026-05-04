@@ -92,3 +92,48 @@ class Baseline(BaseModel):
     extends: str | None = None
     applies_to: list[NodeType]
     rules: list[Rule]
+
+
+class ExecutionStep(BaseModel):
+    """A single step in a remediation execution plan."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: int
+    mcp_tool: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionPlan(BaseModel):
+    """Ordered MCP tool calls implementing a remediation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    steps: list[ExecutionStep] = Field(default_factory=list)
+
+
+class ImpactPrediction(BaseModel):
+    """LLM-estimated impact of executing a remediation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    affects_running_workload: bool
+    requires_maintenance_window: bool
+    estimated_duration: str | None = None
+    rollback_plan: str | None = None
+
+
+class Suggestion(BaseModel):
+    """Runtime remediation suggestion from the Advisor (LLM-generated).
+
+    Distinct from `Remediation` (static YAML guidance) — Suggestion is
+    a per-violation, context-aware execution plan with confidence scoring.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    execution_plan: ExecutionPlan
+    impact_prediction: ImpactPrediction
+    confidence: float = Field(ge=0.0, le=1.0)
+    human_review_required: bool
