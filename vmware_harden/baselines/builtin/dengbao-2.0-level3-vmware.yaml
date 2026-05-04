@@ -1,0 +1,482 @@
+id: dengbao-2.0-level3-vmware
+name: "等保 2.0 三级 — VMware 基础设施合规要求"
+version: "1.0.0-subset"
+source: "GB/T 22239-2019《信息安全技术 网络安全等级保护基本要求》第三级要求"
+applies_to:
+  - host
+  - vm
+  - datastore
+  - dfw_rule
+
+rules:
+  # ============================================================
+  # 8.1.2 网络与通信安全 (5 rules)
+  # ============================================================
+  - id: db-l3-net-1
+    title: "DFW 默认拒绝策略已启用"
+    severity: critical
+    category: 区域边界访问控制
+    rationale: |
+      GB/T 22239-2019 8.1.2 区域边界访问控制要求"应在网络边界或区域之间根据访问控制策略
+      设置访问控制规则，默认情况下除允许通信外受控接口拒绝所有通信"。
+      检测目标基础设施是否存在至少 1 条默认 deny rule。
+    check:
+      type: query
+      sql: |
+        SELECT 'dfw-default-deny-missing' AS id, 'DFW 默认拒绝策略缺失' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND json_extract_string(attrs, '$.action') IN ('reject', 'drop', 'deny')
+        )
+    remediation:
+      summary: "在 DFW 末尾追加默认 deny rule"
+      manual_steps: "NSX → DFW → Application Section → 末尾追加 ANY/ANY/ANY action=reject"
+      risk: "可能阻断未声明的合法流量；需先在审计模式（log only）观察 1 周"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-net-2
+    title: "禁止 ANY-to-ANY allow DFW 规则"
+    severity: critical
+    category: 区域边界访问控制
+    rationale: |
+      GB/T 22239-2019 8.1.2 要求"应根据访问控制策略设置访问控制规则"，明确放行
+      ANY/ANY/ANY 等同于无访问控制，违背最小化原则。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'dfw_rule'
+          AND json_extract_string(attrs, '$.action') = 'allow'
+          AND json_extract_string(attrs, '$.source') LIKE '%ANY%'
+          AND json_extract_string(attrs, '$.destination') LIKE '%ANY%'
+    remediation:
+      summary: "细化 source/destination，避免 ANY/ANY allow"
+      manual_steps: "NSX → DFW → 编辑该规则，按业务最小化范围拆分"
+      risk: "拆分不当可能阻断业务流量；需配合应用拓扑分析"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-net-3
+    title: "ESXi 主机加密 vMotion 强制启用"
+    severity: high
+    category: 通信完整性
+    rationale: |
+      GB/T 22239-2019 8.1.2 通信传输要求"应采用密码技术保证通信过程中数据的完整性"。
+      vMotion 流量包含内存全量副本，未加密则在迁移期间暴露 VM 状态。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.encrypted_vmotion') NOT IN ('required', 'opportunistic')
+    remediation:
+      summary: "启用加密 vMotion (required 模式)"
+      manual_steps: "vCenter → Host → Configure → vMotion → Encryption = Required"
+      risk: "older ESXi 版本性能损失约 5%；可先用 opportunistic 过渡"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: db-l3-net-4
+    title: "TLS 最低版本 1.2+"
+    severity: high
+    category: 通信完整性
+    rationale: |
+      GB/T 22239-2019 8.1.2 要求采用密码技术保证通信保密性。TLS 1.0/1.1 已被
+      国际密码学界证明存在 BEAST/POODLE 等可利用漏洞，不满足三级要求。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.tls_min_version') IN ('1.0', '1.1')
+    remediation:
+      summary: "强制 TLS 1.2 或更高"
+      manual_steps: "vCenter → Host → Configure → System → Advanced Settings → UserVars.ESXiVPsDisabledProtocols"
+      risk: "老版本管理工具可能不支持 TLS 1.2，需先评估兼容性"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-net-5
+    title: "管理网络 VLAN 隔离"
+    severity: high
+    category: 区域边界访问控制
+    rationale: |
+      GB/T 22239-2019 8.1.2 要求"应划分不同的网络区域，并按照方便管理和控制的原则
+      为各网络区域分配地址"。管理流量必须与业务流量逻辑隔离。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
+    remediation:
+      summary: "为 management vmkernel 配置 VLAN tag"
+      manual_steps: "vCenter → Host → Networking → vmk0 → Edit → VLAN ID"
+      risk: "改 VLAN 期间管理网络短暂中断，需带外 console 兜底"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # 8.1.3 设备和计算安全 (9 rules)
+  # ============================================================
+  - id: db-l3-host-1
+    title: "禁用 root SSH 公钥免密登录"
+    severity: critical
+    category: 身份鉴别
+    rationale: |
+      GB/T 22239-2019 8.1.3 身份鉴别要求"应对登录的用户进行身份标识和鉴别，身份标识
+      具有唯一性"。root SSH key 共享会绕过个人账号审计，违反三级要求。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
+    remediation:
+      summary: "清空 /etc/ssh/keys-root/authorized_keys"
+      manual_steps: "ESXi shell → rm /etc/ssh/keys-root/authorized_keys"
+      risk: "依赖该 key 的自动化（备份/监控）会失败，需先迁移到具名服务账户"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-host-2
+    title: "ESXi 主机加入 AD 域 (集中身份鉴别)"
+    severity: high
+    category: 身份鉴别
+    rationale: |
+      GB/T 22239-2019 8.1.3 要求"应采用口令、密码技术、生物技术等两种或两种以上组合
+      的鉴别技术"，并集中管理用户。AD 集成是企业落地的标准方式。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
+    remediation:
+      summary: "Join host to Active Directory"
+      manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
+      risk: "AD 故障会影响登录，需保留本地 break-glass 账号"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: db-l3-host-3
+    title: "ESXi Lockdown Mode 启用"
+    severity: high
+    category: 访问控制
+    rationale: |
+      GB/T 22239-2019 8.1.3 访问控制要求"应限制默认账户的访问权限"。Lockdown Mode
+      强制所有管理操作经 vCenter 审计，杜绝直连 ESXi 绕过权限管控。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "启用 Normal 或 Strict Lockdown Mode"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode"
+      risk: "Strict 模式下 vCenter 故障会导致无法登录 ESXi，建议 Normal + DCUI exception list"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-host-4
+    title: "ESXi Firewall 启用"
+    severity: high
+    category: 入侵防范
+    rationale: |
+      GB/T 22239-2019 8.1.3 入侵防范要求"应关闭不需要的系统服务、默认共享和高危端口"。
+      ESXi 内置防火墙是端口最小化的执行点。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "启用 ESXi firewall"
+      manual_steps: "vCenter → Host → Configure → Firewall → Enable"
+      risk: "关闭后 vSphere API 仍可达，但跳过端口白名单审计"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.95
+
+  - id: db-l3-host-5
+    title: "ESXi Syslog 远程服务器已配置"
+    severity: high
+    category: 安全审计
+    rationale: |
+      GB/T 22239-2019 8.1.3 安全审计要求"应对审计记录进行保护，定期备份，避免受到
+      未预期的删除、修改或覆盖等"。日志必须外送至独立审计服务器。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+            OR json_extract_string(attrs, '$.syslog_remote_host') = ''
+          )
+    remediation:
+      summary: "配置 Syslog.global.logHost 指向集中日志服务器"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.logHost = tcp://siem:514"
+      risk: "无业务影响，仅日志路径变更"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.95
+
+  - id: db-l3-host-6
+    title: "审计日志保留 ≥ 180 天 (三级要求)"
+    severity: high
+    category: 安全审计
+    rationale: |
+      GB/T 22239-2019 8.1.3 安全审计要求三级系统审计日志保留时间不少于六个月，
+      高于二级 30 天的要求。本规则按 180 天阈值检查。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 180
+    remediation:
+      summary: "调高审计日志保留时长到 180 天以上"
+      manual_steps: "集中日志平台调整 retention policy；本地需 Syslog.global.logDirUnique=true 配持久 datastore"
+      risk: "存储容量增长，需评估 SIEM 容量"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.95
+
+  - id: db-l3-host-7
+    title: "ESXi Secure Boot 启用"
+    severity: high
+    category: 可信验证
+    rationale: |
+      GB/T 22239-2019 8.1.3 可信验证要求"应基于可信根对计算设备的系统引导程序、
+      系统程序、重要配置参数和应用程序等进行可信验证"。Secure Boot 是平台层落地。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
+    remediation:
+      summary: "在 UEFI 中启用 Secure Boot"
+      manual_steps: "BIOS/UEFI → Secure Boot → Enable；reboot ESXi"
+      risk: "需 UEFI 固件；社区 VIB 在 Secure Boot 下无法加载"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-host-8
+    title: "ESXi TPM 2.0 attestation 启用"
+    severity: high
+    category: 可信验证
+    rationale: |
+      GB/T 22239-2019 8.1.3 可信验证要求"应在应用程序的关键执行环节进行动态可信验证"。
+      TPM 2.0 attestation 提供启动链度量证据，是 vSphere Trust Authority 基础。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
+    remediation:
+      summary: "Enable TPM 2.0 attestation"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Trust Authority"
+      risk: "需硬件 TPM 2.0 支持，无 TPM 的旧硬件需替换"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: db-l3-host-9
+    title: "NTP 已配置且服务持续运行"
+    severity: medium
+    category: 安全审计
+    rationale: |
+      GB/T 22239-2019 8.1.3 安全审计要求"应保证审计记录的时间戳准确"。集群内时间
+      偏移会导致审计追踪混乱，NTP 是时间同步基础设施。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (
+            CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
+            OR CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
+          )
+    remediation:
+      summary: "配置 NTP 服务并设置随主机启动"
+      manual_steps: "vCenter → Host → Configure → Time Configuration → NTP server + Policy = Start with host"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.95
+
+  # ============================================================
+  # 8.1.3 (恶意代码防范 + 可信验证 — VM-level) (2 rules)
+  # ============================================================
+  - id: db-l3-vm-1
+    title: "VMware Tools 运行中 (Guest OS 维护证据)"
+    severity: medium
+    category: 恶意代码防范
+    rationale: |
+      GB/T 22239-2019 8.1.3 恶意代码防范要求"应采取免受恶意代码攻击的技术措施"。
+      VMware Tools 运行是 Guest OS 仍在维护的间接证据，未运行的 VM 通常长期未补丁。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.tools_running') AS BOOLEAN) = false
+    remediation:
+      summary: "在 Guest OS 内启动/安装 VMware Tools"
+      manual_steps: "Guest OS 内 systemctl start vmtoolsd 或重新安装 open-vm-tools"
+      risk: "无业务影响；停机 VM 视为已知例外"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.85
+
+  - id: db-l3-vm-2
+    title: "VM Secure Boot 启用"
+    severity: high
+    category: 可信验证
+    rationale: |
+      GB/T 22239-2019 8.1.3 可信验证要求贯穿到应用层。VM Secure Boot 阻止恶意
+      bootloader 加载，是 Guest 层可信启动的入口。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
+    remediation:
+      summary: "VM Settings → VM Options → Boot Options → Secure Boot"
+      manual_steps: "需关机操作；将 firmware 切到 EFI 后启用 Secure Boot"
+      risk: "需 EFI firmware；BIOS 模式 VM 必须先迁移引导方式"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # 8.1.4 应用和数据安全 (2 rules)
+  # ============================================================
+  - id: db-l3-vm-3
+    title: "标签为 public/external 的 VM 必须加密"
+    severity: critical
+    category: 数据保密性
+    rationale: |
+      GB/T 22239-2019 8.1.4 数据保密性要求"应采用密码技术保证重要数据在存储过程中的
+      保密性"。对外暴露的工作负载属重要资产，磁盘必须加密。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'vm'
+          AND json_extract_string(attrs, '$.tags') LIKE '%public%'
+          AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
+    remediation:
+      summary: "对 public-tagged VM 启用 vSphere VM Encryption"
+      manual_steps: "VM → Policies → VM Storage Policies → 切到加密策略 → Reconfigure"
+      risk: "存量 VM 加密需关机重新写盘，迁移窗口需评估"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.95
+
+  - id: db-l3-data-1
+    title: "至少存在一个加密的非临时 datastore"
+    severity: high
+    category: 数据保密性
+    rationale: |
+      GB/T 22239-2019 8.1.4 数据保密性要求重要数据存储加密。集群级别若无任何加密
+      datastore，则无法承载重要数据，三级合规无法满足。
+    check:
+      type: query
+      sql: |
+        SELECT 'no-encrypted-datastore' AS id, '集群缺少加密 datastore' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'datastore'
+            AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = true
+        )
+    remediation:
+      summary: "至少创建一个 vSAN encryption 或外部加密的 datastore"
+      manual_steps: "vCenter → Storage → vSAN cluster → Services → Data-at-rest encryption"
+      risk: "vSAN encryption 需先配置 KMS；启用过程不停机但有 reformat 阶段"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # ============================================================
+  # 8.1.5 安全管理中心 (1 rule)
+  # ============================================================
+  - id: db-l3-mgmt-1
+    title: "全部主机统一指向同一审计中心 (集中管控)"
+    severity: high
+    category: 集中审计
+    rationale: |
+      GB/T 22239-2019 8.1.5 安全管理中心要求"应对分散在各个设备上的安全相关事件
+      进行收集、汇总和集中分析"。所有 ESXi 必须将日志送至集中 SIEM，且地址应一致。
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.syslog_remote_host') NOT IN (
+            SELECT json_extract_string(attrs, '$.syslog_remote_host')
+            FROM nodes
+            WHERE type = 'host'
+              AND json_extract_string(attrs, '$.syslog_remote_host') IS NOT NULL
+              AND json_extract_string(attrs, '$.syslog_remote_host') != ''
+            GROUP BY json_extract_string(attrs, '$.syslog_remote_host')
+            ORDER BY COUNT(*) DESC
+            LIMIT 1
+          )
+    remediation:
+      summary: "全部 host 的 Syslog.global.logHost 指向同一集中日志平台"
+      manual_steps: "vCenter → Host Profiles → 应用统一 syslog 配置"
+      risk: "切换日志接收端需协调 SIEM 侧准备好接入"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.85
+
+  # ============================================================
+  # 8.1.6 安全管理制度 (1 rule — 制度可见证据)
+  # ============================================================
+  - id: db-l3-policy-1
+    title: "DFW 中存在按业务命名的策略段 (分级管理可见证据)"
+    severity: medium
+    category: 安全管理制度
+    rationale: |
+      GB/T 22239-2019 8.1.6 安全管理制度要求落地分级管理。DFW Section 按业务/环境
+      命名 (如 'Production'/'DMZ') 是制度落地到技术层的可审计证据；缺失意味着策略
+      未按制度组织。
+    check:
+      type: query
+      sql: |
+        SELECT 'no-named-section' AS id, 'DFW 缺少按业务命名的 Section' AS name
+        WHERE NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND (
+              json_extract_string(attrs, '$.section_name') LIKE '%Production%'
+              OR json_extract_string(attrs, '$.section_name') LIKE '%Prod%'
+              OR json_extract_string(attrs, '$.section_name') LIKE '%DMZ%'
+              OR json_extract_string(attrs, '$.section_name') LIKE '%生产%'
+            )
+        )
+    remediation:
+      summary: "在 NSX DFW 中按业务/环境创建命名 Section"
+      manual_steps: "NSX → Security → Distributed Firewall → Add Section (Production/DMZ/Dev)"
+      risk: "无业务影响；仅是规则组织重排"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.8
