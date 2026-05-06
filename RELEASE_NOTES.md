@@ -1,5 +1,14 @@
 # Release Notes
 
+## v1.5.19 (2026-05-06)
+
+**Performance + correctness fixes** — Twin DB query speed and report completeness.
+
+- **perf(store):** Added `CREATE INDEX IF NOT EXISTS` for `violation.snapshot_id`, `node_state.snapshot_id`, `change_event.snapshot_id` in `store/schema.py`. Without these, every `list_violations` / `report` / drift diff query performed a full table scan, with cost scaling linearly in scan history (yjs review 2026-05-06; CLAUDE.md 踩坑 #28).
+- **fix(cli):** `vmware-harden report` now uses `LEFT JOIN nodes` with `COALESCE(name, '[orphan]')`. Previously the INNER JOIN silently dropped violations whose node had been deleted between scans — drift scenarios appeared falsely clean (CLAUDE.md 踩坑 #29).
+- **smoke:** Family `scripts/family_smoke.sh` now recursively walks every Typer subcommand to trigger lazy imports.
+- **align:** Family version bump to v1.5.19.
+
 ## v1.5.18 — 2026-05-04
 
 GA promotion + new EU baselines + doctor command.

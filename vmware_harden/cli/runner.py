@@ -98,9 +98,9 @@ def run_report(db: str, format: str = "text") -> None:
 
         rows = twin.conn.execute(
             """
-            SELECT v.rule_id, v.node_id, n.name, v.severity, v.evidence
+            SELECT v.rule_id, v.node_id, COALESCE(n.name, '[orphan]') AS name, v.severity, v.evidence
             FROM violation v
-            JOIN nodes n ON n.id = v.node_id
+            LEFT JOIN nodes n ON n.id = v.node_id
             WHERE v.snapshot_id = (
                 SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1
             )

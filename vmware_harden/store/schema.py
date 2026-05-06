@@ -79,4 +79,9 @@ DDL: list[str] = [
         pilot_task_id VARCHAR
     )
     """,
+    # snapshot_id is the hot filter for list/report/diff; without these indexes
+    # the violation table degrades to full scan as scans accumulate.
+    "CREATE INDEX IF NOT EXISTS idx_violation_snapshot ON violation(snapshot_id)",
+    "CREATE INDEX IF NOT EXISTS idx_node_state_snapshot ON node_state(snapshot_id)",
+    "CREATE INDEX IF NOT EXISTS idx_change_event_snapshot ON change_event(snapshot_id)",
 ]
