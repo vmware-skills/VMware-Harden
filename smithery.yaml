@@ -1,0 +1,15 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      db_path:
+        type: string
+        description: "Path to vmware-harden DuckDB file (default: ~/.vmware-harden/twin.duckdb)"
+    required: []
+  commandFunction: |
+    (config) => ({
+      command: "python",
+      args: ["-m", "mcp_server"],
+      env: config.db_path ? { VMWARE_HARDEN_DB: config.db_path } : {}
+    })

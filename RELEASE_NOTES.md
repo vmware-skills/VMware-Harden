@@ -1,3 +1,12 @@
+## v1.5.22 (2026-05-08)
+
+**Smithery onboarding** — `vmware-harden` is now installable via Smithery.
+
+- **feat:** Added `Dockerfile` (Python 3.12-slim + uv) for containerized stdio MCP server.
+- **feat:** Added `smithery.yaml` declaring stdio transport + config schema for the Smithery registry.
+- **feat:** Added `mcp_server/__main__.py` so `python -m mcp_server` works inside the container.
+- **align:** Tracks v1.5.22 family bump.
+
 ## v1.5.21 (2026-05-08)
 
 **Family alignment** — no source changes in this skill.
