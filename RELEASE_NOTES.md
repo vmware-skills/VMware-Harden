@@ -1,3 +1,12 @@
+## v1.5.23 (2026-05-19)
+
+**VCF 9.0 / 9.1 compatibility — scan path works; new 9.0 baselines planned.**
+
+- **docs:** README clarifies that the existing `cis-vmware-esxi-8.0-subset` and `vsphere-scg-v8` baselines successfully scan VCF 9.0 / 9.1 clusters — most rules carry over since they target host advanced settings and config that are stable across 8.x → 9.x. A small subset of rules may produce false negatives if a control's setting key changed in 9.0; users should treat those as informational until 9.0 baselines ship.
+- **planned:** `cis-vmware-esxi-9.0` and `vsphere-scg-v9` baselines are tracked for a future release once CIS Benchmark v1.0 for ESXi 9.0 and the VMware Security Configuration Guide v9 are published.
+- **docs:** Added `Official Broadcom References` pointer to [vSphere Security Configuration Guide](https://core.vmware.com/security/) and the [VCF Python SDK](https://developer.broadcom.com/sdks).
+- **align:** Family v1.5.23 — all 9 skills tracking VCF 9.0 / 9.1 compatibility declaration.
+
 ## v1.5.22 (2026-05-08)
 
 **Smithery onboarding** — `vmware-harden` is now installable via Smithery.

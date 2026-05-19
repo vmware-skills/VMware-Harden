@@ -47,6 +47,16 @@ vmware-harden web --port 8080  # → http://127.0.0.1:8080
 | `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 Directive (Articles 21/23, Annex I) |
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz (OPS.1.1.4 + SYS.1.1) |
 
+### VCF 9.0 / 9.1 Compatibility
+
+The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0` and `vsphere-scg-v9` baselines are planned for a future release.
+
+#### Official Broadcom References
+
+- **Security Configuration Guides**: <https://core.vmware.com/security/> — vSphere SCG v8 / future v9
+- **SDKs**: <https://developer.broadcom.com/sdks> — VCF Python SDK (for fetching host config via REST)
+- **CIS Benchmarks**: <https://www.cisecurity.org/cis-benchmarks/> — CIS VMware ESXi Benchmark v1.0 (8.0 / future 9.0)
+
 ## Custom baselines
 
 ```bash
