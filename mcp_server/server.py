@@ -5,6 +5,7 @@ This module wires them into a FastMCP server and provides the stdio entry point.
 """
 import os
 from pathlib import Path
+from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -22,12 +23,12 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         return t.list_baselines()
 
     @server.tool(name="list_violations")
-    def _list_violations_impl(severity: str | None = None) -> list[dict]:
+    def _list_violations_impl(severity: Optional[str] = None) -> list[dict]:
         """[READ] Latest snapshot's violations, optionally filtered by severity."""
         return t.list_violations(severity)
 
     @server.tool(name="get_remediation")
-    def _get_remediation_impl(violation_id: str) -> dict | None:
+    def _get_remediation_impl(violation_id: str) -> Optional[dict]:
         """[READ] Get the persisted Suggestion for a violation, or None."""
         return t.get_remediation(violation_id)
 

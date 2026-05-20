@@ -1,6 +1,6 @@
 [project]
 name = "vmware-harden"
-version = "1.5.23"
+version = "1.5.26"
 description = "AI-native VMware compliance and baseline enforcement"
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ dependencies = [
     "jinja2>=3.1,<4.0",
     "httpx>=0.27,<1.0",
     "anthropic>=0.40,<1.0",
-    "mcp>=1.0,<2.0",
+    "mcp>=1.10,<2.0",
 ]
 
 [dependency-groups]
