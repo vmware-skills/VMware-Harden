@@ -10,3 +10,4 @@ build/
 .env
 .coverage
 htmlcov/
+.DS_Store
