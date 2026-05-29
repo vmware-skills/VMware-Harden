@@ -1,3 +1,14 @@
+## v1.5.29 (2026-05-29) — Doctor / Smithery / Python 3.10 Troubleshooting Docs
+
+### Documentation
+- README.md: refreshed v1.5.18 framing to make it clear the project is at v1.5.28-aligned (now v1.5.29), not v1.5.18 (commit `27035a1`).
+- `references/cli-reference.md`: added full `doctor` command section — synopsis, no-options note, table of 10 environment checks from `vmware_harden/doctor.py::run_diagnostics`, example output, exit codes.
+- `references/setup-guide.md`: new "Alternative Deployment: Container / Smithery" section mirroring AVI style (Docker build/run with Twin DB volume mount note, Smithery config schema, deployment-choice table); new "Troubleshooting" section above Security with the Python 3.10 / `subclass() arg 1 must be a class` fix (upgrade to v1.5.28+ or `mcp[cli]>=1.14`).
+- `references/capabilities.md`: "Performance & Correctness Notes" section covering v1.5.19 snapshot_id indexes (`IF NOT EXISTS`, idempotent, no migration) and LEFT JOIN + COALESCE orphan-preservation in `list_violations` / `report` (踩坑 #28 / #29 cross-refs).
+
+### No code changes
+Documentation-only release.
+
 ## v1.5.28 (2026-05-20)
 
 **Fix `subclass() arg 1 must be a class` in goose/old mcp environments** —
