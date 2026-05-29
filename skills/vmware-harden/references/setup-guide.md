@@ -47,6 +47,55 @@ uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
+### Alternative Deployment: Container / Smithery
+
+For platforms that prefer containerized MCP servers (e.g., Smithery registry, Kubernetes-hosted agents, isolated CI runners), `vmware-harden` ships a `Dockerfile` and `smithery.yaml` at the repository root (added v1.5.22).
+
+#### Docker
+
+Build and run the MCP server in a container. The image uses `python:3.12-slim` with `uv` for dependency installation and runs `python -m mcp_server` on stdio (no port exposed — MCP uses stdin/stdout).
+
+```bash
+git clone https://github.com/zw008/VMware-Harden.git
+cd VMware-Harden
+
+# Build
+docker build -t vmware-harden-mcp .
+
+# Run — mount your Twin DuckDB directory into the container
+docker run -i --rm \
+  -v ~/.vmware-harden:/root/.vmware-harden \
+  -e VMWARE_HARDEN_DB=/root/.vmware-harden/twin.duckdb \
+  vmware-harden-mcp
+```
+
+The container's `CMD` is `python -m mcp_server`, which is wired through `mcp_server/__main__.py` to the same FastMCP entry point as the installed `vmware-harden-mcp` console script. All 6 read-only tools are available.
+
+Note: `scan_target` relies on the upstream `vmware-aiops` collectors. To
+run scans from inside the container, mount the upstream skill's config
+(`~/.vmware-aiops`) into the container as well. Without it, the container
+is still useful for read-only Twin queries (`list_violations`,
+`list_drift_events`, `get_remediation`, etc.) over a Twin DuckDB that
+was scanned on the host.
+
+#### Smithery
+
+`vmware-harden` is publishable to the [Smithery](https://smithery.ai) registry. The `smithery.yaml` at the repo root declares:
+
+- `startCommand.type: stdio` — Smithery launches the server over stdio
+- `configSchema.properties.db_path` — optional override for the Twin DuckDB file location
+- `commandFunction` — invokes `python -m mcp_server` with `VMWARE_HARDEN_DB` set from the user's Smithery config
+
+Users can install via the Smithery UI or CLI without managing Python environments locally. Smithery handles the container build and stdio bridge automatically.
+
+#### When to use which deployment
+
+| Deployment | Best For |
+|------------|----------|
+| `uv tool install vmware-harden` + `vmware-harden-mcp` | Local developer workstation, single-user CLI + MCP |
+| Docker image | Self-hosted agents, CI runners, isolated environments, multi-user servers |
+| Smithery | Zero-install agent integration, registry-managed discovery, hosted-MCP workflows |
+
 ## Configuration
 
 `vmware-harden` is intentionally near-stateless. The only on-disk
@@ -175,6 +224,37 @@ export UV_NATIVE_TLS=true
 
 This makes `uv` consult the system CA store (which your IT department's
 proxy CA is presumably in), and PyPI resolution works again.
+
+## Troubleshooting
+
+### MCP server crashes on launch with `subclass() arg 1 must be a class`
+
+Seen on Python 3.10 environments (e.g. Goose default sandbox, Ubuntu 22.04
+system python) where an older `mcp` package (1.10–1.13) was pinned. Under
+that combination, FastMCP's `Tool.from_function` calls
+`issubclass(param.annotation, Context)` without resolving forward
+references, so PEP 604 string annotations (`"str | None"`) blow up the
+entire server load. Fixed across v1.5.26–1.5.28 (踩坑 #33).
+
+**Resolution** — upgrade to v1.5.28+ which (a) replaces PEP 604 unions in
+`mcp_server/server.py` with `Optional[X]`, and (b) drops
+`from __future__ import annotations` from that file so annotations are
+real classes:
+
+```bash
+uv tool install --upgrade vmware-harden
+# or, if you bring your own mcp package:
+pip install -U 'mcp[cli]>=1.14'
+```
+
+Python 3.10 is supported from v1.5.27 onward; older versions of this
+skill required Python 3.11+.
+
+### `mcp` command exits with "Python 3.10+ required"
+
+The `mcp_cmd()` guard exits 1 when run on Python 3.9 or earlier. Install
+Python 3.10+ (e.g. `uv python install 3.12`) and re-install
+`vmware-harden` against that interpreter.
 
 ## Security
 

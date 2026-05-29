@@ -2,9 +2,9 @@
 
 Full command reference for `vmware-harden`. Source of truth: `vmware_harden/cli/`.
 
-The CLI is a Typer app with six top-level command groups: `scan`, `report`,
-`baseline`, `drift`, `advise`, `web`. Run `vmware-harden --help` for the
-auto-generated overview.
+The CLI is a Typer app with seven top-level command groups: `scan`, `report`,
+`baseline`, `drift`, `advise`, `web`, `doctor`. Run `vmware-harden --help`
+for the auto-generated overview.
 
 ## scan
 
@@ -221,6 +221,64 @@ vmware-harden web --host 0.0.0.0 --port 9000
 
 Exits 1 with a message if the Twin DuckDB does not exist; run a scan
 first.
+
+## doctor
+
+Run environment diagnostics. Added in v1.5.18 to give users (and CI) a
+single command that confirms whether their install is wired up correctly
+before they run a scan.
+
+### Synopsis
+
+```bash
+vmware-harden doctor
+```
+
+### Options
+
+None. The command takes no flags or arguments.
+
+### What it checks
+
+Source of truth: `vmware_harden/doctor.py::run_diagnostics`.
+
+| Check | Severity on failure | What it means |
+|-------|--------------------:|---------------|
+| Python version | error | Python `>= 3.10` required. |
+| Twin DB | warn | `~/.vmware-harden/twin.duckdb` exists; if missing, run a scan first. |
+| Built-in baselines | error | At least 4 built-in baselines load successfully. |
+| `vmware-aiops` | warn | Optional — host/VM collectors. |
+| `vmware-storage` | warn | Optional — datastore collector. |
+| `vmware-nsx-security` | warn | Optional — DFW collector. |
+| `vmware-policy` | **error** | **Required** — provides the `@vmware_tool` audit decorator. |
+| `ANTHROPIC_API_KEY` | warn | Unset → advisor falls back to `MockProvider`. |
+| `vmware-pilot` | info | Optional — required only by `vmware-harden apply --pilot real`. |
+| Audit DB dir | warn / error | `~/.vmware/audit.db` parent dir is writable. |
+
+### Example output
+
+```
+  ✓ Python version                  Python 3.12.7
+  ✓ Twin DB                         /Users/me/.vmware-harden/twin.duckdb
+  ✓ Built-in baselines              6 loaded
+  ✓ vmware-aiops                    vmware_aiops available
+  ⚠ vmware-storage                  install: `uv tool install vmware-storage` (datastore collector)
+  ⚠ vmware-nsx-security             install: `uv tool install vmware-nsx-security` (DFW collector)
+  ✓ vmware-policy                   vmware_policy available
+  ⚠ ANTHROPIC_API_KEY               unset — Advisor will use MockProvider
+  i vmware-pilot                    optional — `vmware-harden apply --pilot real` requires it
+  ✓ Audit DB dir                    /Users/me/.vmware
+
+  All checks passed (3 warning(s))
+```
+
+### Exit codes
+
+- `0` — no `error` results (warnings are non-fatal).
+- `1` — at least one `error` result (e.g. Python `< 3.10`, missing
+  `vmware-policy`, or audit dir not writable).
+
+Use `doctor` as a non-zero gate in CI before running `scan` in pipelines.
 
 ## MCP server entry point
 

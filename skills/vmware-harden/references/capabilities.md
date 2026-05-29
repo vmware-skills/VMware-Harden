@@ -325,3 +325,28 @@ A small summary:
 
 ~80–150 tokens (the response is intentionally a compact summary; the
 agent should follow up with `list_violations` for details).
+
+## Performance & Correctness Notes
+
+### Snapshot-keyed indexes (v1.5.19)
+
+`vmware_harden/store/schema.py` declares `CREATE INDEX IF NOT EXISTS`
+indexes on `violation.snapshot_id`, `node_state.snapshot_id`, and
+`change_event.snapshot_id`. Every `list_violations` /
+`list_drift_events` / `report` query filters by `snapshot_id`; without
+these indexes DuckDB performed a full table scan whose cost grew with
+the cumulative scan history. New installs pick the indexes up on first
+`scan`; existing installs pick them up on the next `scan` after upgrade
+(the `IF NOT EXISTS` guard makes this idempotent — no migration needed).
+See CLAUDE.md 踩坑 #28.
+
+### Orphan violations are preserved in reports (v1.5.19)
+
+`vmware-harden report` (and the corresponding `list_violations` MCP
+tool) use `LEFT JOIN nodes` with `COALESCE(name, '[orphan]')` so
+violations whose node has been deleted between scans **still appear** in
+the result set, labelled `[orphan]`. The previous `INNER JOIN` silently
+dropped them, which made drift scenarios (node deleted, violations went
+away) appear falsely clean. Agents should treat a violation whose node
+renders as `[orphan]` as a deleted-node finding worth surfacing to the
+user. See CLAUDE.md 踩坑 #29.
