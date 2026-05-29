@@ -6,7 +6,7 @@
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
-## v1.5.18 — GA family member
+## GA family member (since v1.5.18)
 
 Production-ready compliance platform with **6 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**), **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
 
@@ -101,7 +101,7 @@ pytest tests/eval/regression -v -m lab
 - **vmware-pilot** — execute remediations (writes; out of scope for harden)
 - **vmware-policy** — `@vmware_tool` audit decorator
 
-## Acceptance criteria for v1.5.18
+## Acceptance criteria (v1.5.18 GA)
 
 - 221 tests passing
 - Bandit: 0 issues at any severity
@@ -110,7 +110,7 @@ pytest tests/eval/regression -v -m lab
 - SECURITY.md with 6 elements + Broadcom disclaimer
 - 6 built-in baselines (87 rules)
 - `vmware-harden doctor` for environment diagnostics
-- GA member of vmware-* family (version-aligned at 1.5.18)
+- GA member of vmware-* family (version-aligned at 1.5.28)
 
 ## References
 
