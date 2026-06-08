@@ -1,3 +1,12 @@
+## v1.5.32 (2026-06-08) — Family version alignment + test hygiene
+
+No functional changes. Version-alignment release with the v1.5.32 family
+(spec-audit fixes in sibling skills).
+
+### Tests
+- Smoke test no longer pins a stale version literal — asserts semver shape +
+  agreement with pyproject.toml.
+
 ## v1.5.30 (2026-06-07) — Tool description quality (Glama TDQS)
 
 ### Improved
