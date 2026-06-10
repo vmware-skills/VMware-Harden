@@ -1,3 +1,13 @@
+## v1.5.35 (2026-06-10) — security fix: baseline loader path traversal
+
+### Fixed
+- **Baseline name path traversal**: `_resolve_baseline_path()` now rejects names containing
+  path separators, leading dots, or null bytes and confirms the resolved path stays inside the
+  baseline directory. Closes a read-arbitrary-file vector reachable via the CLI, MCP, or a
+  malicious `extends:` field.
+
+This release aligns the whole family back to a single version (1.5.35); vmware-policy and vmware-pilot return to the shared number after sitting at 1.5.22.
+
 ## v1.5.32 (2026-06-08) — Family version alignment + test hygiene
 
 No functional changes. Version-alignment release with the v1.5.32 family

@@ -59,10 +59,25 @@ def load_baseline(path: Path | str) -> Baseline:
 def _resolve_baseline_path(name: str) -> Path:
     """User dir takes precedence over package builtin.
 
+    ``name`` is an untrusted identifier (CLI arg, MCP param, or a YAML
+    ``extends:`` value). Reject any path separators / traversal so it cannot
+    escape the baseline directories and read arbitrary files.
+
     Raises FileNotFoundError if the baseline is not found in either location.
     """
+    if not name or "/" in name or "\\" in name or name.startswith(".") or "\x00" in name:
+        raise FileNotFoundError(
+            f"Invalid baseline name {name!r}: must be a plain identifier "
+            "(no path separators, leading dots, or null bytes)"
+        )
+
     for base in (USER_DIR, BUILTIN_DIR):
         candidate = base / f"{name}.yaml"
+        # Defence in depth: confirm the resolved path stays inside ``base``.
+        try:
+            candidate.resolve().relative_to(base.resolve())
+        except ValueError:
+            continue
         if candidate.exists():
             return candidate
     raise FileNotFoundError(
