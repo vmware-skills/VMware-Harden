@@ -26,13 +26,11 @@ def show(
 
     twin = Twin(p)
     try:
-        latest = twin.conn.execute(
-            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        if not latest:
-            typer.echo("No scans yet. Run `vmware-harden scan --target <vc>` first.")
+        latest = twin.latest_snapshot()
+        if latest is None:
+            typer.echo("No completed scans yet. Run `vmware-harden scan --target <vc>` first.")
             return
-        snap_id = latest[0]
+        snap_id = latest["id"]
         rows = twin.conn.execute(
             "SELECT node_id, field, old_value, new_value, detected_at "
             "FROM change_event WHERE snapshot_id = ? "

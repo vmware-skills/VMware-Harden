@@ -51,61 +51,91 @@ def _required_collectors(baseline: Baseline) -> list[type[Collector]]:
     return result
 
 
-def run_scan(target: str, baseline: str, db: str) -> None:
-    """Scan target vCenter against the named baseline, persist to Twin."""
+def run_scan(target: str, baseline: str, db: str) -> str:
+    """Scan target vCenter against the named baseline, persist to Twin.
+
+    Returns the snapshot id. On any failure the snapshot is marked
+    status='failed' (so it never becomes the "latest" snapshot for reports)
+    and the error is re-raised.
+    """
     twin = _open_twin(db)
     try:
         snap_id = twin.start_snapshot(target)
         typer.echo(f"Snapshot {snap_id} started against {target}")
 
-        b = load_builtin(baseline)
-        for collector_cls in _required_collectors(b):
-            n = collector_cls(twin).collect(snap_id, target)
-            label = collector_cls.__name__.replace("Collector", "").lower()
-            typer.echo(f"  Collected {n} {label} entities")
+        try:
+            b = load_builtin(baseline)
+            for collector_cls in _required_collectors(b):
+                n = collector_cls(twin).collect(snap_id, target)
+                label = collector_cls.__name__.replace("Collector", "").lower()
+                typer.echo(f"  Collected {n} {label} entities")
 
-        violations = CheckRunner(twin).run_baseline(snap_id, b)
+            violations = CheckRunner(twin).run_baseline(snap_id, b)
 
-        # Compute and persist drift from prior snapshot, if any.
-        prior_row = twin.conn.execute(
-            "SELECT id FROM snapshots "
-            "WHERE target = ? AND id != ? AND scan_finished_at IS NOT NULL "
-            "ORDER BY scan_started_at DESC LIMIT 1",
-            [target, snap_id],
-        ).fetchone()
-        if prior_row:
-            from vmware_harden.drift.diff import diff_snapshots
-            events = diff_snapshots(twin, prior_row[0], snap_id, persist=True)
-            if events:
-                typer.echo(f"  Detected {len(events)} drift events from prior scan")
+            # Compute and persist drift from prior completed snapshot, if any.
+            prior_row = twin.conn.execute(
+                "SELECT id FROM snapshots "
+                "WHERE target = ? AND id != ? AND status = 'completed' "
+                "ORDER BY scan_started_at DESC LIMIT 1",
+                [target, snap_id],
+            ).fetchone()
+            if prior_row:
+                from vmware_harden.drift.diff import diff_snapshots
+                events = diff_snapshots(twin, prior_row[0], snap_id, persist=True)
+                if events:
+                    typer.echo(f"  Detected {len(events)} drift events from prior scan")
 
-        twin.finish_snapshot(snap_id)
+            twin.finish_snapshot(snap_id)
+        except ModuleNotFoundError as e:
+            twin.finish_snapshot(snap_id, status="failed")
+            pkg = (e.name or "dependency").replace("_", "-")
+            raise RuntimeError(
+                f"{pkg} not installed — install it with `uv tool install {pkg}` "
+                f"(collector dependency for baseline {baseline!r}). "
+                f"Snapshot {snap_id} was marked 'failed' and is excluded from reports."
+            ) from e
+        except Exception as e:
+            twin.finish_snapshot(snap_id, status="failed")
+            typer.echo(
+                f"Scan of {target!r} failed; snapshot {snap_id} marked 'failed' "
+                f"and excluded from reports. Cause: {e}",
+                err=True,
+            )
+            raise
+
         typer.echo(f"Found {len(violations)} violations against {b.id}")
+        return snap_id
     finally:
         twin.close()
 
 
 def run_report(db: str, format: str = "text") -> None:
-    """Print a report of the most recent snapshot's violations."""
-    twin = _open_twin(db)
+    """Print a report of the most recent completed snapshot's violations."""
+    from vmware_harden.store.schema import SEVERITY_RANK_SQL
+
+    # Do not silently create the DB file just to report on it (item: a
+    # report run must never leave an empty database behind).
+    db_path = Path(os.path.expanduser(db))
+    if not db_path.exists():
+        typer.echo("No scans yet. Run `vmware-harden scan --target <vc>` first.")
+        return
+
+    twin = Twin(db_path)
     try:
-        snapshot_count = twin.conn.execute(
-            "SELECT COUNT(*) FROM snapshots"
-        ).fetchone()[0]
-        if snapshot_count == 0:
-            typer.echo("No scans yet. Run `vmware-harden scan --target <vc>` first.")
+        latest = twin.latest_snapshot()
+        if latest is None:
+            typer.echo("No completed scans yet. Run `vmware-harden scan --target <vc>` first.")
             return
 
         rows = twin.conn.execute(
-            """
+            f"""
             SELECT v.rule_id, v.node_id, COALESCE(n.name, '[orphan]') AS name, v.severity, v.evidence
             FROM violation v
             LEFT JOIN nodes n ON n.id = v.node_id
-            WHERE v.snapshot_id = (
-                SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1
-            )
-            ORDER BY v.severity DESC, v.rule_id
-            """
+            WHERE v.snapshot_id = ?
+            ORDER BY {SEVERITY_RANK_SQL.format(col="v.severity")}, v.rule_id
+            """,  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
+            [latest["id"]],
         ).fetchall()
 
         if format == "json":

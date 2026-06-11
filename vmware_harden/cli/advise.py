@@ -64,13 +64,14 @@ def advise(
         if violation_id:
             target_ids = [violation_id]
         elif all_critical:
+            latest = twin.latest_snapshot()
+            if latest is None:
+                typer.echo("No completed scans yet. Run `vmware-harden scan --target <vc>` first.")
+                return
             rows = twin.conn.execute(
                 """SELECT id FROM violation
-                   WHERE severity = 'critical'
-                     AND snapshot_id = (
-                        SELECT id FROM snapshots
-                        ORDER BY scan_started_at DESC LIMIT 1
-                     )"""
+                   WHERE severity = 'critical' AND snapshot_id = ?""",
+                [latest["id"]],
             ).fetchall()
             target_ids = [r[0] for r in rows]
             if not target_ids:

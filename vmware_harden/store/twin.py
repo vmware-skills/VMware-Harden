@@ -18,6 +18,20 @@ class Twin:
         self.conn = duckdb.connect(str(db_path))
         self.init_schema()  # idempotent; CREATE IF NOT EXISTS
 
+    @classmethod
+    def open_readonly(cls, db_path: Path) -> "Twin":
+        """Open an existing Twin file read-only.
+
+        DuckDB is single-writer; web/dashboard readers must use this so they
+        never contend for the write lock held by a concurrent scan. Skips
+        init_schema (DDL is a write). Raises duckdb.Error if the file does
+        not exist or the write lock cannot be shared.
+        """
+        twin = cls.__new__(cls)
+        twin.db_path = db_path
+        twin.conn = duckdb.connect(str(db_path), read_only=True)
+        return twin
+
     def init_schema(self) -> None:
         """Create all tables if they don't exist (idempotent)."""
         for stmt in DDL:
@@ -46,6 +60,31 @@ class Twin:
             "UPDATE snapshots SET scan_finished_at = ?, status = ? WHERE id = ?",
             [datetime.now(timezone.utc), status, snapshot_id],
         )
+
+    def latest_snapshot(self, completed_only: bool = True) -> dict | None:
+        """Return the most recent snapshot as a dict, or None if there is none.
+
+        By default only status='completed' snapshots qualify, so a crashed or
+        in-flight scan (status 'running'/'failed') never becomes the baseline
+        for reports, drift views, or MCP tools.
+        """
+        sql = (
+            "SELECT id, target, scan_started_at, scan_finished_at, status "
+            "FROM snapshots "
+        )
+        if completed_only:
+            sql += "WHERE status = 'completed' "
+        sql += "ORDER BY scan_started_at DESC LIMIT 1"
+        row = self.conn.execute(sql).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "target": row[1],
+            "scan_started_at": row[2],
+            "scan_finished_at": row[3],
+            "status": row[4],
+        }
 
     def write_node_state(
         self, snapshot_id: str, node_id: str, state: dict

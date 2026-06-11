@@ -1,3 +1,22 @@
+## v1.5.36 (2026-06-12) — compliance-correctness fixes: scoping, severity, approval gate
+
+### Fixed
+- **Absence-check violations are no longer dropped** — the snapshot-scoping filter wrongly removed
+  "control entirely absent" findings (e.g. PCI default-deny, no-encryption, no-segmentation) because
+  they emit a synthetic node id; the most severe estate-wide gaps could report as CLEAN.
+- **Cross-target / decommissioned-node bleed fixed** — rule SQL ran against the cumulative node store,
+  so one target's scan reported another target's violations.
+- **Failed scans no longer masquerade as the latest clean snapshot** — a collector failure now marks
+  the snapshot `failed`, and every "latest snapshot" consumer filters to completed scans.
+- **Severity ordering** was alphabetical (critical sorted *last*); now critical-first everywhere.
+- **Approval gate no longer trusts the LLM alone** — a rule's `review_policy` (human-review-required /
+  min-confidence) is enforced; unresolvable rules default to requiring review for high/critical.
+- `list_violations(severity=…)` validates the value; teaching errors for missing dependency / DB.
+
+### Added
+- Indexes on `change_event(node_id)` and `remediation(violation_id)`; read-only DuckDB access for the
+  web dashboard (no lock conflict with a running scan).
+
 ## v1.5.35 (2026-06-10) — security fix: baseline loader path traversal
 
 ### Fixed

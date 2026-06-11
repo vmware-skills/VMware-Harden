@@ -17,6 +17,45 @@ from vmware_harden.store.twin import Twin
 app = typer.Typer()
 
 
+def _review_required(twin: Twin, violation_id: str, suggestion) -> bool:
+    """Decide whether human review is required before pilot submission.
+
+    Safety gates are OR-combined (any one failing gate forces review — see
+    CLAUDE.md pitfall #30): the rule's declared review policy, the
+    suggestion's confidence vs. the rule's min_confidence, and the LLM's own
+    human_review_required flag. If the rule/baseline cannot be resolved
+    (custom baseline, renamed rule), fall back to requiring review for
+    high/critical severity violations.
+    """
+    from vmware_harden.baselines.loader import load_builtin
+
+    row = twin.conn.execute(
+        "SELECT baseline_id, rule_id, severity FROM violation WHERE id = ?",
+        [violation_id],
+    ).fetchone()
+    if row is None:  # caller already verified existence; defensive
+        return True
+    baseline_id, rule_id, severity = row
+
+    rule = None
+    try:
+        baseline = load_builtin(baseline_id)
+        rule = next((r for r in baseline.rules if r.id == rule_id), None)
+    except Exception:
+        rule = None
+
+    if rule is None:
+        # No resolvable review_policy → conservative severity-based default.
+        return suggestion.human_review_required or severity in ("high", "critical")
+
+    policy = rule.review_policy
+    return (
+        policy.human_review_required
+        or suggestion.confidence < policy.min_confidence
+        or suggestion.human_review_required
+    )
+
+
 def _get_pilot_client(mode: str) -> PilotClient:
     if mode == "real":
         return RealPilotClient()
@@ -84,8 +123,8 @@ def apply(
             f"Requires maintenance window: {suggestion.impact_prediction.requires_maintenance_window}"
         )
 
-        # Approval gate
-        if suggestion.human_review_required and not auto_approve:
+        # Approval gate — rule review_policy + confidence + LLM flag (OR'd)
+        if _review_required(twin, violation_id, suggestion) and not auto_approve:
             typer.echo("\nThis remediation requires human review.")
             confirm = typer.prompt("Approve? [y/N]", default="N")
             if confirm.lower() not in ("y", "yes"):

@@ -15,7 +15,8 @@ cli = CliRunner()
 def _seed_drift(tmp_path: Path, db: str) -> str:
     """Create a Twin with two snapshots and pre-baked change events for snap_b."""
     twin = Twin(Path(db))
-    twin.start_snapshot("v.lab")  # snap_a (id used purely for ordering)
+    snap_a = twin.start_snapshot("v.lab")  # snap_a (id used purely for ordering)
+    twin.finish_snapshot(snap_a)
     snap_b = twin.start_snapshot("v.lab")
     # Insert prebaked change_event rows for snap_b
     import uuid
@@ -29,6 +30,7 @@ def _seed_drift(tmp_path: Path, db: str) -> str:
         "VALUES (?, ?, ?, ?, ?, ?)",
         [str(uuid.uuid4()), snap_b, "h-2", "_added", None, '{"ntp": true}'],
     )
+    twin.finish_snapshot(snap_b)  # only completed snapshots qualify as latest
     twin.close()
     return snap_b
 
@@ -65,7 +67,7 @@ def test_drift_empty_twin_helpful_message(tmp_path: Path):
     Twin(Path(db)).close()
     result = cli.invoke(app, ["drift", "--db", db])
     assert result.exit_code == 0
-    assert "No drift" in result.output or "No scans" in result.output
+    assert "No drift" in result.output or "scans yet" in result.output
 
 
 @pytest.mark.unit

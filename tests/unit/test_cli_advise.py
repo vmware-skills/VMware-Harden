@@ -110,6 +110,55 @@ def test_advise_all_critical_processes_only_critical(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
+def test_advise_all_critical_skips_failed_latest_snapshot(tmp_path, monkeypatch):
+    """Regression (MEDIUM): after a failed/running scan, `advise --all-critical`
+    must advise the last GOOD (completed) snapshot's criticals, not the empty
+    failed snapshot. The old raw `ORDER BY scan_started_at DESC LIMIT 1` (no
+    status filter) targeted the empty failed snapshot and said "no critical
+    violations" while real criticals went unadvised. Must use
+    twin.latest_snapshot() (completed_only=True)."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    db = tmp_path / "t.duckdb"
+    twin = Twin(db)
+    twin.conn.execute(
+        "INSERT INTO nodes (id, type, target, name, attrs) "
+        "VALUES (?, 'host', 'lab', 'esx', '{}')",
+        ["lab:h-1"],
+    )
+    # Last GOOD scan: completed, has a critical violation.
+    good_snap = twin.start_snapshot("lab")
+    crit_id = str(uuid.uuid4())
+    twin.conn.execute(
+        """INSERT INTO violation
+           (id, snapshot_id, baseline_id, rule_id, node_id, severity, evidence)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        [crit_id, good_snap, "b", "r-c", "lab:h-1", "critical", "{}"],
+    )
+    twin.finish_snapshot(good_snap, status="completed")
+    # Newer scan crashed: status='failed', no violations recorded.
+    bad_snap = twin.start_snapshot("lab")
+    twin.finish_snapshot(bad_snap, status="failed")
+    twin.close()
+
+    import vmware_harden.cli.advise as advise_mod
+    from vmware_harden.advisor.llm import MockProvider
+    monkeypatch.setattr(advise_mod, "_get_provider",
+                        lambda: MockProvider(canned_response=CANNED))
+
+    result = cli.invoke(app, ["advise", "--db", str(db), "--all-critical"])
+    assert result.exit_code == 0
+    # The good snapshot's critical must have been advised (not reported clean).
+    assert "No critical violations" not in result.output
+
+    twin = Twin(db)
+    crit_count = twin.conn.execute(
+        "SELECT COUNT(*) FROM remediation WHERE violation_id = ?", [crit_id]
+    ).fetchone()[0]
+    assert crit_count == 1
+    twin.close()
+
+
+@pytest.mark.unit
 def test_advise_no_args_shows_help_or_error(tmp_path):
     db, _ = _seed_twin(tmp_path)
     result = cli.invoke(app, ["advise", "--db", db])

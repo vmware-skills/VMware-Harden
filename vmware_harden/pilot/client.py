@@ -49,19 +49,31 @@ DispatchFn = Callable[[str, str, dict[str, Any]], Any]
 class RealPilotClient:
     """Pilot integration via vmware_pilot.executor.WorkflowExecutor.
 
-    Builds a Workflow from the Suggestion's execution_plan, runs it through
-    pilot's executor up to the first approval checkpoint. Caller can use the
-    returned task id (== workflow.id) to poll/resume via pilot's own CLI.
+    Builds a Workflow from the Suggestion's execution_plan and submits it to
+    pilot's workflow store. Behavior depends on whether a dispatch callable
+    was supplied:
+
+    - WITH ``dispatch``: the workflow is executed through pilot's executor up
+      to the first approval checkpoint; steps genuinely run via the dispatcher.
+    - WITHOUT ``dispatch``: NOTHING is executed. The workflow is persisted in
+      state PENDING and the returned task id (== workflow.id) is the handle
+      for the calling agent to drive it via pilot's MCP tools
+      (``run_workflow`` / ``approve`` / ``get_workflow_status``), performing
+      each pending step's skill/tool call itself. This client never fakes
+      execution: a remediation can only complete when its steps actually ran.
 
     Lazy-imports vmware_pilot so harden runs without it; raises
     PilotSubmissionError with an install hint when the dep is missing.
     """
 
-    def __init__(self, dispatch: DispatchFn | None = None):
-        # Caller can supply a DispatchFn (skill, tool, params) -> result.
-        # Default in pilot is a no-op logger; harden's CLI passes a real
-        # dispatcher that invokes sibling MCP tools.
+    def __init__(self, dispatch: DispatchFn | None = None, store: Any = None):
+        # Caller can supply a DispatchFn (skill, tool, params) -> result that
+        # invokes sibling MCP tools. Without it, submit_remediation only
+        # persists the workflow (PENDING) — it never noop-"executes" steps.
         self._dispatch = dispatch
+        # Optional vmware_pilot.models.WorkflowStore (mainly for tests);
+        # defaults to pilot's standard store (~/.vmware/workflows.db).
+        self._store = store
 
     def submit_remediation(self, suggestion: Suggestion) -> str:
         try:
@@ -107,7 +119,7 @@ class RealPilotClient:
         workflow = Workflow(
             id=new_workflow_id(),
             workflow_type="harden-remediation",
-            state=WorkflowState.DRAFT,
+            state=WorkflowState.PENDING,
             steps=steps,
             params={
                 "summary": suggestion.summary[:200],
@@ -117,7 +129,26 @@ class RealPilotClient:
             updated_at=now,
         )
 
-        store = WorkflowStore()
+        store = self._store if self._store is not None else WorkflowStore()
+
+        if self._dispatch is None:
+            # No dispatcher → do NOT execute anything (pilot's noop path
+            # would otherwise record fictional successes). Persist the
+            # workflow PENDING; the caller drives it via pilot's MCP tools
+            # (run_workflow / approve), performing each step itself.
+            workflow.log(
+                "submitted_pending_dispatch",
+                "Submitted by vmware-harden without a dispatcher: steps are "
+                "NOT executed. Drive this workflow via pilot's MCP "
+                "run_workflow/approve tools and perform the returned "
+                "pending_dispatch steps, or resubmit with a dispatch callable.",
+            )
+            try:
+                store.save(workflow)
+            except Exception as e:
+                raise PilotSubmissionError(f"pilot.store failed: {e}") from e
+            return workflow.id
+
         executor = WorkflowExecutor(store=store, dispatch=self._dispatch)
         try:
             executor.run_until_checkpoint(workflow)

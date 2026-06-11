@@ -33,9 +33,9 @@ AI-native VMware compliance scanner — built-in CIS / DISA STIG / vSphere SCG /
 
 | Category | Tools | Count | Read or Write |
 |----------|-------|-------|---------------|
-| Baseline Management | 4 built-in baselines (CIS ESXi 8.0, vSphere SCG v8, 等保 2.0 L3, PCI-DSS 4.0) + custom YAML loader | 4+N | Read |
+| Baseline Management | 6 built-in baselines (CIS ESXi 8.0, vSphere SCG v8, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 6+N | Read |
 | Scanning | Multi-collector (vCenter, ESXi, NSX, vSAN, K8s) → typed Twin store | 1 pipeline | Read (no target writes) |
-| Drift Detection | Snapshot diff, rule status diff, evidence diff | 3 types | Read |
+| Drift Detection | Snapshot-to-snapshot configuration diff (per-node added/removed/changed fields) | 1 type | Read |
 | Remediation Advisor | LLM-driven (Anthropic) suggestions per violation; mock fallback when no key | 1 advisor | Read |
 | Web Dashboard | FastAPI + Jinja2 read-only UI for violations / drift / advice | 1 server | Read |
 | MCP Server | Compliance query tools | 6 | All Read |

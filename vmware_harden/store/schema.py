@@ -84,4 +84,21 @@ DDL: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_violation_snapshot ON violation(snapshot_id)",
     "CREATE INDEX IF NOT EXISTS idx_node_state_snapshot ON node_state(snapshot_id)",
     "CREATE INDEX IF NOT EXISTS idx_change_event_snapshot ON change_event(snapshot_id)",
+    # node_id / violation_id are the other high-frequency WHERE paths
+    # (per-node drift history, suggestion lookup per violation).
+    "CREATE INDEX IF NOT EXISTS idx_change_event_node ON change_event(node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_remediation_violation ON remediation(violation_id)",
 ]
+
+# Severity is stored as plain text; a bare `ORDER BY severity DESC` sorts
+# alphabetically and puts 'critical' LAST. Use this CASE expression (with the
+# severity column substituted for {col}) wherever violations are ranked.
+SEVERITY_RANK_SQL = (
+    "CASE {col} "
+    "WHEN 'critical' THEN 0 "
+    "WHEN 'high' THEN 1 "
+    "WHEN 'medium' THEN 2 "
+    "WHEN 'low' THEN 3 "
+    "WHEN 'info' THEN 4 "
+    "ELSE 5 END"
+)

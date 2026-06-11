@@ -1,28 +1,54 @@
 """FastAPI dashboard."""
+import contextlib
 from collections import Counter
 from pathlib import Path
 
+import duckdb
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from vmware_harden.store.schema import SEVERITY_RANK_SQL
 from vmware_harden.store.twin import Twin
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
-def _fetch_summary(db_path: Path) -> dict:
-    """Fetch the latest scan's violation distribution by severity + category."""
-    twin = Twin(db_path)
+class DatabaseBusyError(Exception):
+    """Raised when the Twin DB is locked by a concurrent writer (scan)."""
+
+
+@contextlib.contextmanager
+def _open_ro(db_path: Path):
+    """Open the Twin read-only for web fetches.
+
+    DuckDB is single-writer; the dashboard must never take the write lock
+    (it would block a running scan and vice versa). A lock/IO conflict is
+    surfaced as DatabaseBusyError so routes can render a friendly page
+    instead of a raw 500.
+    """
     try:
-        latest = twin.conn.execute(
-            "SELECT id, target, scan_finished_at FROM snapshots "
-            "ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        if not latest:
+        twin = Twin.open_readonly(db_path)
+    except duckdb.Error as e:
+        raise DatabaseBusyError(str(e)) from e
+    try:
+        yield twin
+    finally:
+        twin.close()
+
+
+def _fetch_summary(db_path: Path) -> dict:
+    """Fetch the latest completed scan's violation distribution by severity + category."""
+    if not db_path.exists():
+        return {"has_data": False}
+    with _open_ro(db_path) as twin:
+        latest_snap = twin.latest_snapshot()
+        if latest_snap is None:
             return {"has_data": False}
-        snap_id, target, finished_at = latest
+        snap_id = latest_snap["id"]
+        target = latest_snap["target"]
+        finished_at = latest_snap["scan_finished_at"]
 
         rows = twin.conn.execute(
             "SELECT severity, evidence FROM violation WHERE snapshot_id = ?",
@@ -58,34 +84,24 @@ def _fetch_summary(db_path: Path) -> dict:
             "severity": severity,
             "categories": categories,
         }
-    finally:
-        twin.close()
 
 
 def _fetch_violations(db_path: Path) -> dict:
-    twin = Twin(db_path)
-    try:
-        latest = twin.conn.execute(
-            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        if not latest:
+    if not db_path.exists():
+        return {"has_data": False, "violations": []}
+    with _open_ro(db_path) as twin:
+        latest = twin.latest_snapshot()
+        if latest is None:
             return {"has_data": False, "violations": []}
-        snap_id = latest[0]
+        snap_id = latest["id"]
         rows = twin.conn.execute(
-            """SELECT v.id, v.rule_id, v.node_id, COALESCE(n.name, ''),
+            f"""
+               SELECT v.id, v.rule_id, v.node_id, COALESCE(n.name, ''),
                       v.severity, v.baseline_id
                FROM violation v LEFT JOIN nodes n ON n.id = v.node_id
                WHERE v.snapshot_id = ?
-               ORDER BY
-                 CASE v.severity
-                   WHEN 'critical' THEN 0
-                   WHEN 'high' THEN 1
-                   WHEN 'medium' THEN 2
-                   WHEN 'low' THEN 3
-                   WHEN 'info' THEN 4
-                   ELSE 5
-                 END,
-                 v.rule_id""",
+               ORDER BY {SEVERITY_RANK_SQL.format(col="v.severity")},
+                 v.rule_id""",  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
             [snap_id],
         ).fetchall()
         violations = [
@@ -100,25 +116,23 @@ def _fetch_violations(db_path: Path) -> dict:
             for r in rows
         ]
         return {"has_data": True, "violations": violations}
-    finally:
-        twin.close()
 
 
 def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
-    twin = Twin(db_path)
-    try:
+    if not db_path.exists():
+        return None
+    with _open_ro(db_path) as twin:
         row = twin.conn.execute(
             "SELECT evidence FROM violation WHERE id = ?", [violation_id]
         ).fetchone()
         return row[0] if row else None
-    finally:
-        twin.close()
 
 
 def _fetch_remediation(db_path: Path, violation_id: str):
     """Return (suggestion, pilot_task_id) tuple. Either may be None."""
-    twin = Twin(db_path)
-    try:
+    if not db_path.exists():
+        return None, None
+    with _open_ro(db_path) as twin:
         suggestion = twin.get_suggestion(violation_id)
         row = twin.conn.execute(
             "SELECT pilot_task_id FROM remediation WHERE violation_id = ?",
@@ -126,14 +140,13 @@ def _fetch_remediation(db_path: Path, violation_id: str):
         ).fetchone()
         pilot_task_id = row[0] if row else None
         return suggestion, pilot_task_id
-    finally:
-        twin.close()
 
 
 def _fetch_drift(db_path: Path) -> dict:
     """Last 5 snapshots' event counts + latest snapshot's events."""
-    twin = Twin(db_path)
-    try:
+    if not db_path.exists():
+        return {"has_data": False}
+    with _open_ro(db_path) as twin:
         snaps = twin.conn.execute(
             "SELECT id, target, scan_started_at FROM snapshots "
             "ORDER BY scan_started_at DESC LIMIT 5"
@@ -176,8 +189,18 @@ def _fetch_drift(db_path: Path) -> dict:
                 for e in events
             ],
         }
-    finally:
-        twin.close()
+
+
+_BUSY_HTML = """<!doctype html>
+<html><head><title>vmware-harden — database busy</title></head>
+<body style="font-family: sans-serif; max-width: 40em; margin: 4em auto;">
+<h1>Database busy</h1>
+<p>The compliance database is currently locked, most likely by a running
+scan (<code>vmware-harden scan</code>). DuckDB allows a single writer at a
+time.</p>
+<p>Wait for the scan to finish, then <a href="javascript:location.reload()">
+reload this page</a>.</p>
+</body></html>"""
 
 
 def build_app(db_path: Path) -> FastAPI:
@@ -185,6 +208,10 @@ def build_app(db_path: Path) -> FastAPI:
     app.state.db_path = db_path
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     app.state.templates = templates
+
+    @app.exception_handler(DatabaseBusyError)
+    async def _busy_handler(request: Request, exc: DatabaseBusyError) -> HTMLResponse:
+        return HTMLResponse(_BUSY_HTML, status_code=503)
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:

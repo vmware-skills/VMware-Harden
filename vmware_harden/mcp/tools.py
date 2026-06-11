@@ -14,9 +14,20 @@ from vmware_policy import vmware_tool
 _DB_PATH: Path | None = None
 
 
-def _resolve_db() -> Path:
-    """Return the configured DB path, defaulting to user dir."""
-    return _DB_PATH or Path(os.path.expanduser("~/.vmware-harden/twin.duckdb"))
+def _resolve_db(must_exist: bool = True) -> Path:
+    """Return the configured DB path, defaulting to user dir.
+
+    Read tools pass must_exist=True (default) so a missing DB raises a
+    teaching error instead of silently creating an empty database that
+    would make every later query return "no data".
+    """
+    path = _DB_PATH or Path(os.path.expanduser("~/.vmware-harden/twin.duckdb"))
+    if must_exist and not path.exists():
+        raise FileNotFoundError(
+            f"Twin DB not found: {path}. No scans have been run yet — "
+            "run scan_target (or `vmware-harden scan --target <vc>`) first."
+        )
+    return path
 
 
 @vmware_tool(risk_level="low")
@@ -47,17 +58,27 @@ def list_baselines() -> list[dict]:
 
 @vmware_tool(risk_level="low")
 def list_violations(severity: str | None = None) -> list[dict]:
-    """[READ] Latest snapshot's violations, optionally filtered by severity."""
+    """[READ] Latest completed snapshot's violations, optionally filtered by severity."""
+    from typing import get_args
+
+    from vmware_harden.baselines.model import Severity
+    from vmware_harden.store.schema import SEVERITY_RANK_SQL
     from vmware_harden.store.twin import Twin
+
+    valid_severities = set(get_args(Severity))
+    if severity is not None and severity not in valid_severities:
+        raise ValueError(
+            f"Invalid severity {severity!r}. Valid values: "
+            f"{', '.join(sorted(valid_severities))}. "
+            "Omit the parameter to list violations of all severities."
+        )
 
     twin = Twin(_resolve_db())
     try:
-        latest = twin.conn.execute(
-            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        if not latest:
+        latest = twin.latest_snapshot()
+        if latest is None:
             return []
-        params: list = [latest[0]]
+        params: list = [latest["id"]]
         sql = (
             "SELECT id, rule_id, node_id, severity, baseline_id, evidence "
             "FROM violation WHERE snapshot_id = ?"
@@ -65,7 +86,7 @@ def list_violations(severity: str | None = None) -> list[dict]:
         if severity:
             sql += " AND severity = ?"
             params.append(severity)
-        sql += " ORDER BY severity DESC, rule_id"
+        sql += f" ORDER BY {SEVERITY_RANK_SQL.format(col='severity')}, rule_id"
         rows = twin.conn.execute(sql, params).fetchall()
         out: list[dict] = []
         for r in rows:
@@ -105,21 +126,19 @@ def get_remediation(violation_id: str) -> dict | None:
 
 @vmware_tool(risk_level="low")
 def list_drift_events(limit: int = 50) -> list[dict]:
-    """[READ] Latest snapshot's change events."""
+    """[READ] Latest completed snapshot's change events."""
     from vmware_harden.store.twin import Twin
 
     twin = Twin(_resolve_db())
     try:
-        latest = twin.conn.execute(
-            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        if not latest:
+        latest = twin.latest_snapshot()
+        if latest is None:
             return []
         rows = twin.conn.execute(
             "SELECT node_id, field, old_value, new_value, detected_at "
             "FROM change_event WHERE snapshot_id = ? "
             "ORDER BY node_id, field LIMIT ?",
-            [latest[0], limit],
+            [latest["id"], limit],
         ).fetchall()
         return [
             {
@@ -160,14 +179,10 @@ def scan_target(
     from vmware_harden.cli.runner import run_scan
     from vmware_harden.store.twin import Twin
 
-    db_path = _resolve_db()
-    run_scan(target=target, baseline=baseline, db=str(db_path))
+    db_path = _resolve_db(must_exist=False)  # scan legitimately creates the DB
+    snap_id = run_scan(target=target, baseline=baseline, db=str(db_path))
     twin = Twin(db_path)
     try:
-        latest = twin.conn.execute(
-            "SELECT id FROM snapshots ORDER BY scan_started_at DESC LIMIT 1"
-        ).fetchone()
-        snap_id = latest[0]
         host_count = twin.conn.execute(
             "SELECT COUNT(*) FROM nodes WHERE type='host' AND target=?",
             [target],

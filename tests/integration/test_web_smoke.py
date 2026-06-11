@@ -371,3 +371,68 @@ def test_remediation_panel_shows_pilot_task_id(tmp_path: Path):
     assert r.status_code == 200
     assert "mock-pilot-abc12345" in r.text
     assert "Pilot task" in r.text
+
+
+@pytest.mark.integration
+def test_web_uses_readonly_connection(app_with_db, monkeypatch):
+    """#10 — web fetches must open the Twin read-only (single-writer DuckDB)."""
+    calls = []
+    orig = Twin.open_readonly.__func__
+
+    def spy(cls, db_path):
+        calls.append(db_path)
+        return orig(cls, db_path)
+
+    monkeypatch.setattr(Twin, "open_readonly", classmethod(spy))
+    client = TestClient(app_with_db)
+    r = client.get("/")
+    assert r.status_code == 200
+    assert calls, "dashboard route did not use Twin.open_readonly"
+
+
+@pytest.mark.integration
+def test_web_lock_conflict_returns_friendly_busy_page(app_with_db, monkeypatch):
+    """#10 — a DuckDB lock conflict renders a friendly 503, not a raw 500."""
+    import duckdb
+
+    def boom(cls, db_path):
+        raise duckdb.IOException(
+            'IO Error: Could not set lock on file: Conflicting lock is held'
+        )
+
+    monkeypatch.setattr(Twin, "open_readonly", classmethod(boom))
+    client = TestClient(app_with_db)
+    r = client.get("/")
+    assert r.status_code == 503
+    assert "busy" in r.text.lower()
+
+
+@pytest.mark.integration
+def test_web_ignores_running_snapshot(tmp_path: Path):
+    """#3 — a newer in-flight (running) snapshot must not become the dashboard's latest."""
+    import json
+    import uuid
+
+    db = tmp_path / "t.duckdb"
+    twin = Twin(db)
+    snap = twin.start_snapshot("v.lab")
+    twin.conn.execute(
+        "INSERT INTO nodes (id, type, target, name, attrs) "
+        "VALUES ('h-1', 'host', 'v.lab', 'esx1', '{}')"
+    )
+    twin.conn.execute(
+        """INSERT INTO violation
+           (id, snapshot_id, baseline_id, rule_id, node_id, severity, evidence)
+           VALUES (?, ?, 'b', 'r-1', 'h-1', 'critical', ?)""",
+        [str(uuid.uuid4()), snap, json.dumps({"category": "auth"})],
+    )
+    twin.finish_snapshot(snap)
+    twin.start_snapshot("v.lab")  # crashed/in-flight scan, status='running'
+    twin.close()
+
+    client = TestClient(build_app(db_path=db))
+    r = client.get("/")
+    assert r.status_code == 200
+    # The completed snapshot's violation is counted; under the old bug the
+    # running snapshot was 'latest' and the dashboard showed 0 violations.
+    assert "total <strong>1</strong>" in r.text
