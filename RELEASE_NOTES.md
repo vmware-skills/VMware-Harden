@@ -1,3 +1,9 @@
+## v1.5.38 (2026-06-12) — backlog finish: collector de-duplication
+
+### Changed
+- Lifted the duplicated collect + batch-persist logic into the `Collector` base class; the host/vm/
+  datastore/dfw collectors shed ~113 lines (~39%) with identical behavior. (#2)
+
 ## v1.5.37 (2026-06-12) — backlog: batched writes, dead-schema cleanup, offline evals
 
 ### Fixed
