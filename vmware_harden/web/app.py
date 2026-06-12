@@ -156,17 +156,23 @@ def _fetch_drift(db_path: Path) -> dict:
 
         # Reverse so oldest first on chart x-axis
         snaps_rev = list(reversed(snaps))
-        timeline = []
-        for snap_id, target, started in snaps_rev:
-            count = twin.conn.execute(
-                "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
-                [snap_id],
-            ).fetchone()[0]
-            timeline.append({
+        # One GROUP BY over the 5 snapshots instead of one COUNT per snapshot.
+        snap_ids = [s[0] for s in snaps_rev]
+        placeholders = ", ".join("?" for _ in snap_ids)
+        count_rows = twin.conn.execute(
+            "SELECT snapshot_id, COUNT(*) FROM change_event "
+            f"WHERE snapshot_id IN ({placeholders}) GROUP BY snapshot_id",  # nosec B608 - {placeholders} is only bound '?' params, no user input
+            snap_ids,
+        ).fetchall()
+        counts = {r[0]: r[1] for r in count_rows}
+        timeline = [
+            {
                 "snapshot_id": snap_id,
                 "label": str(started)[:19] if started else snap_id[:8],
-                "count": count,
-            })
+                "count": counts.get(snap_id, 0),
+            }
+            for snap_id, target, started in snaps_rev
+        ]
 
         latest_id = snaps[0][0]
         events = twin.conn.execute(

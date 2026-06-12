@@ -104,6 +104,29 @@ class Twin:
         )
         return state_hash
 
+    def write_node_states(
+        self, snapshot_id: str, states: list[tuple[str, dict]]
+    ) -> None:
+        """Batch-write node states for a snapshot in one executemany.
+
+        ``states`` is a list of (node_id, state_dict). Each state is hashed
+        the same way as write_node_state. Caller is responsible for the
+        surrounding transaction (collectors batch nodes + states together).
+        """
+        rows = []
+        for node_id, state in states:
+            state_json = json.dumps(state, sort_keys=True)
+            state_hash = hashlib.sha256(state_json.encode()).hexdigest()
+            rows.append([snapshot_id, node_id, state_hash, state_json])
+        if not rows:
+            return
+        self.conn.executemany(
+            """INSERT INTO node_state (snapshot_id, node_id, state_hash, state_json)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (snapshot_id, node_id) DO NOTHING""",
+            rows,
+        )
+
     def save_suggestion(self, violation_id: str, suggestion) -> str:
         """Persist a Suggestion against a violation. Idempotent — replaces existing.
 

@@ -1,3 +1,18 @@
+## v1.5.37 (2026-06-12) — backlog: batched writes, dead-schema cleanup, offline evals
+
+### Fixed
+- **Collectors batch their writes** into one transaction + `executemany` (was one transaction per node —
+  thousands of commits on large inventories); the drift dashboard's 5 COUNT queries collapsed to one
+  GROUP BY. (#1)
+
+### Changed
+- Removed dead schema (`edges` table, `nodes.parent_id`); `violation.status` / `posture_drift` are
+  documented as reserved-but-unwired. (#4)
+
+### Added
+- Offline regression evals (no live-lab env var needed) pinning the v1.5.36 compliance-correctness fixes
+  and the approval-gate truth table. (#5)
+
 ## v1.5.36 (2026-06-12) — compliance-correctness fixes: scoping, severity, approval gate
 
 ### Fixed

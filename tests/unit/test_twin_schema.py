@@ -14,7 +14,6 @@ def test_twin_creates_all_tables(tmp_path: Path):
     tables = twin.list_tables()
     expected = {
         "nodes",
-        "edges",
         "snapshots",
         "node_state",
         "change_event",
@@ -22,6 +21,9 @@ def test_twin_creates_all_tables(tmp_path: Path):
         "remediation",
     }
     assert expected.issubset(set(tables)), f"Missing: {expected - set(tables)}"
+    # `edges` (and nodes.parent_id) were removed as genuinely-dead schema:
+    # nothing in the codebase ever wrote or read them.
+    assert "edges" not in set(tables)
     twin.close()
 
 

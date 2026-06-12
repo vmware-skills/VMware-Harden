@@ -41,6 +41,7 @@ class CheckRunner:
         real_node_ids: set[str] = {
             r[0] for r in self.twin.conn.execute("SELECT id FROM nodes").fetchall()
         }
+        insert_rows: list[list] = []
         for rule in baseline.rules:
             if isinstance(rule.check, QueryCheck):
                 rows = execute_query_check(self.twin, rule.check)
@@ -63,16 +64,29 @@ class CheckRunner:
                         "evidence": evidence,
                     }
                     violations.append(v)
-                    self.twin.conn.execute(
-                        """INSERT INTO violation
-                           (id, snapshot_id, baseline_id, rule_id, node_id,
-                            severity, evidence)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    insert_rows.append(
                         [
                             v["id"], snapshot_id, baseline.id, rule.id,
                             node_id, rule.severity, json.dumps(evidence, default=str),
-                        ],
+                        ]
                     )
             # ScriptCheck and any unknown check types are silently skipped
             # (loader gates against ScriptCheck; this is defensive).
+
+        # Persist all violations in one transaction + executemany rather than
+        # row-by-row (a full baseline can fire hundreds of rules).
+        if insert_rows:
+            self.twin.conn.execute("BEGIN TRANSACTION")
+            try:
+                self.twin.conn.executemany(
+                    """INSERT INTO violation
+                       (id, snapshot_id, baseline_id, rule_id, node_id,
+                        severity, evidence)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    insert_rows,
+                )
+                self.twin.conn.execute("COMMIT")
+            except Exception:
+                self.twin.conn.execute("ROLLBACK")
+                raise
         return violations

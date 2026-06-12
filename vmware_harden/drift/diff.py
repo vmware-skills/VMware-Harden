@@ -129,18 +129,21 @@ def _persist_events(twin: Twin, snap_b: str, events: list[ChangeEvent]) -> None:
         twin.conn.execute(
             "DELETE FROM change_event WHERE snapshot_id = ?", [snap_b]
         )
-        for e in events:
-            twin.conn.execute(
+        if events:
+            twin.conn.executemany(
                 """INSERT INTO change_event
                    (id, snapshot_id, node_id, field, old_value, new_value)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 [
-                    str(uuid.uuid4()),
-                    snap_b,
-                    e.node_id,
-                    e.field,
-                    e.old_value,
-                    e.new_value,
+                    [
+                        str(uuid.uuid4()),
+                        snap_b,
+                        e.node_id,
+                        e.field,
+                        e.old_value,
+                        e.new_value,
+                    ]
+                    for e in events
                 ],
             )
         twin.conn.execute("COMMIT")

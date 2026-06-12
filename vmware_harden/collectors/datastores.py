@@ -24,6 +24,8 @@ class DatastoreCollector(Collector):
         # DuckDB rejects CURRENT_TIMESTAMP in ON CONFLICT SET (BinderException);
         # bind `now` once and reference via excluded.* — see schema.py note.
         now = datetime.now(timezone.utc)
+        node_rows: list[list] = []
+        state_rows: list[tuple[str, dict]] = []
         for d in datastores:
             try:
                 moref = d["id"]
@@ -36,10 +38,15 @@ class DatastoreCollector(Collector):
             # Namespace by target so identical MoRefs from different vCenters
             # don't collide in a multi-target Twin.
             node_id = f"{target}:{moref}"
+            node_rows.append([node_id, target, node_name, json.dumps(d), now])
+            state_rows.append((node_id, d))
 
-            self.twin.conn.execute("BEGIN TRANSACTION")
-            try:
-                self.twin.conn.execute(
+        # One transaction + executemany for the whole batch: a large inventory
+        # used to issue one commit per node (thousands of fsyncs).
+        self.twin.conn.execute("BEGIN TRANSACTION")
+        try:
+            if node_rows:
+                self.twin.conn.executemany(
                     """INSERT INTO nodes (id, type, target, name, attrs, last_seen_at)
                        VALUES (?, 'datastore', ?, ?, ?, ?)
                        ON CONFLICT (id) DO UPDATE SET
@@ -47,11 +54,11 @@ class DatastoreCollector(Collector):
                            name = excluded.name,
                            attrs = excluded.attrs,
                            last_seen_at = excluded.last_seen_at""",
-                    [node_id, target, node_name, json.dumps(d), now],
+                    node_rows,
                 )
-                self.twin.write_node_state(snapshot_id, node_id, d)
-                self.twin.conn.execute("COMMIT")
-            except Exception:
-                self.twin.conn.execute("ROLLBACK")
-                raise
+            self.twin.write_node_states(snapshot_id, state_rows)
+            self.twin.conn.execute("COMMIT")
+        except Exception:
+            self.twin.conn.execute("ROLLBACK")
+            raise
         return len(datastores)

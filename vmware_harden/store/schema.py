@@ -12,19 +12,9 @@ DDL: list[str] = [
         type VARCHAR NOT NULL,
         target VARCHAR NOT NULL DEFAULT '_legacy',
         name VARCHAR,
-        parent_id VARCHAR,
         attrs JSON,
         first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS edges (
-        from_id VARCHAR NOT NULL,
-        to_id VARCHAR NOT NULL,
-        relation VARCHAR NOT NULL,
-        attrs JSON,
-        PRIMARY KEY (from_id, to_id, relation)
     )
     """,
     """
@@ -66,6 +56,11 @@ DDL: list[str] = [
         severity VARCHAR NOT NULL,
         evidence JSON,
         detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        -- RESERVED: `status` is intentionally unwired. Every violation is
+        -- written 'open' and never transitioned; there is no resolve/ack flow
+        -- yet (a scan re-derives the full violation set each run). The column
+        -- is kept as the schema anchor for a future resolve/acknowledge
+        -- workflow — it is NOT a missing-update bug.
         status VARCHAR DEFAULT 'open'
     )
     """,

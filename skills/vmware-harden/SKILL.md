@@ -3,7 +3,7 @@ name: vmware-harden
 description: >
   Use this skill whenever the user needs to perform VMware compliance auditing,
   baseline checking, or drift detection on vSphere/ESXi/NSX environments.
-  Directly handles: CIS / DISA STIG / vSphere SCG / 等保 2.0 三级 / PCI-DSS scans;
+  Directly handles: CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 scans;
   custom YAML baselines; LLM-driven remediation suggestions; web dashboard.
   Always use this skill for "scan compliance", "check baseline", "audit etcd",
   "check 等保", "drift detection", "compliance report" when the context is
@@ -25,7 +25,7 @@ metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-ha
 
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom. Source code is publicly auditable at [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden) under the MIT license.
 
-AI-native VMware compliance scanner — built-in CIS / DISA STIG / vSphere SCG / 等保 2.0 三级 / PCI-DSS baselines, drift detection, LLM-driven remediation advice, and a web dashboard.
+AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 baselines, drift detection, LLM-driven remediation advice, and a web dashboard.
 
 > **Companion skills**: [vmware-aiops](https://github.com/zw008/VMware-AIops) (inventory + collectors data source; host/VM remediation target), [vmware-monitor](https://github.com/zw008/VMware-Monitor) (read-only inspection), [vmware-storage](https://github.com/zw008/VMware-Storage) (datastore remediation target), [vmware-nsx](https://github.com/zw008/VMware-NSX) (segment/gateway evidence), [vmware-nsx-security](https://github.com/zw008/VMware-NSX-Security) (DFW evidence + remediation target), [vmware-aria](https://github.com/zw008/VMware-Aria) (metrics correlation), [vmware-avi](https://github.com/zw008/VMware-AVI) (load balancer evidence), [vmware-vks](https://github.com/zw008/VMware-VKS) (Tanzu Kubernetes evidence), [vmware-pilot](https://github.com/zw008/VMware-Pilot) (remediation execution with approval gates), [vmware-policy](https://github.com/zw008/VMware-Policy) (audit log). See [references/cross-skill-workflows.md](./references/cross-skill-workflows.md) for end-to-end remediation flows that span pilot + sibling skills.
 
@@ -53,7 +53,7 @@ For first-time use, ensure a vmware-aiops target is configured (harden uses aiop
 
 Use vmware-harden when the user needs to:
 
-- Run a **compliance scan** against CIS / DISA STIG / vSphere SCG / 等保 2.0 三级 / PCI-DSS
+- Run a **compliance scan** against CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2
 - **Author or import a custom YAML baseline** (e.g., internal corporate baseline)
 - Detect **drift** between two scans of the same target
 - Get **AI-suggested remediation steps** for a violation (advice only — does not execute)

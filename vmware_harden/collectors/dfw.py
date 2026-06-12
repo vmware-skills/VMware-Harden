@@ -24,6 +24,8 @@ class DFWCollector(Collector):
         rules = data.get("rules", [])
         now = datetime.now(timezone.utc)
 
+        node_rows: list[list] = []
+        state_rows: list[tuple[str, dict]] = []
         for sec in sections:
             try:
                 moref = sec["id"]
@@ -33,9 +35,11 @@ class DFWCollector(Collector):
                     f"DFWCollector: section record missing required field {e}; "
                     f"target={target}, record={sec!r}"
                 ) from e
-            self._upsert_node(
-                snapshot_id, target, moref, node_name, "dfw_section", sec, now
+            node_id = f"{target}:{moref}"
+            node_rows.append(
+                [node_id, "dfw_section", target, node_name, json.dumps(sec), now]
             )
+            state_rows.append((node_id, sec))
 
         for r in rules:
             try:
@@ -46,37 +50,31 @@ class DFWCollector(Collector):
                     f"DFWCollector: rule record missing required field {e}; "
                     f"target={target}, record={r!r}"
                 ) from e
-            self._upsert_node(
-                snapshot_id, target, moref, node_name, "dfw_rule", r, now
+            node_id = f"{target}:{moref}"
+            node_rows.append(
+                [node_id, "dfw_rule", target, node_name, json.dumps(r), now]
             )
+            state_rows.append((node_id, r))
 
-        return len(sections) + len(rules)
-
-    def _upsert_node(
-        self,
-        snapshot_id: str,
-        target: str,
-        moref: str,
-        name: str,
-        node_type: str,
-        attrs: dict,
-        now,
-    ) -> None:
-        node_id = f"{target}:{moref}"
+        # One transaction + executemany for sections + rules together: large
+        # DFW inventories used to issue one commit per section/rule.
         self.twin.conn.execute("BEGIN TRANSACTION")
         try:
-            self.twin.conn.execute(
-                """INSERT INTO nodes (id, type, target, name, attrs, last_seen_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
-                   ON CONFLICT (id) DO UPDATE SET
-                       target = excluded.target,
-                       name = excluded.name,
-                       attrs = excluded.attrs,
-                       last_seen_at = excluded.last_seen_at""",
-                [node_id, node_type, target, name, json.dumps(attrs), now],
-            )
-            self.twin.write_node_state(snapshot_id, node_id, attrs)
+            if node_rows:
+                self.twin.conn.executemany(
+                    """INSERT INTO nodes (id, type, target, name, attrs, last_seen_at)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT (id) DO UPDATE SET
+                           target = excluded.target,
+                           name = excluded.name,
+                           attrs = excluded.attrs,
+                           last_seen_at = excluded.last_seen_at""",
+                    node_rows,
+                )
+            self.twin.write_node_states(snapshot_id, state_rows)
             self.twin.conn.execute("COMMIT")
         except Exception:
             self.twin.conn.execute("ROLLBACK")
             raise
+
+        return len(sections) + len(rules)

@@ -78,7 +78,13 @@ def _diff_rule(old: Rule, new: Rule) -> dict[str, tuple[str, str]]:
 
 
 def posture_drift(old: Baseline, new: Baseline) -> PostureDelta:
-    """Compare two Baseline versions; return added/removed/modified rules."""
+    """Compare two Baseline versions; return added/removed/modified rules.
+
+    RESERVED: this is intentionally not wired to any CLI or MCP entry point
+    yet. It is the building block for a future "your baseline evolved since
+    last scan" surface; it is covered by unit tests and kept ready, not a
+    dead/forgotten function.
+    """
     old_by_id = {r.id: r for r in old.rules}
     new_by_id = {r.id: r for r in new.rules}
 
