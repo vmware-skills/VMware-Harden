@@ -1,3 +1,7 @@
+## v1.6.1 (2026-06-24) — version alignment
+
+No functional changes — version bumped to stay aligned with the VMware skill family release.
+
 ## v1.6.0 (2026-06-22) — family alignment + harness trust architecture
 
 No skill code changes. Aligns to the v1.6.0 family release and automatically picks up the
