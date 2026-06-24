@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.zw008/vmware-harden -->
+
 # vmware-harden
 
 <!-- mcp-name: io.github.zw008/vmware-harden -->
