@@ -1,0 +1,22 @@
+# VMware vSphere Security Configuration Guide v9 (subset) — provenance note
+# ---------------------------------------------------------------------------
+# This baseline `extends` vsphere-scg-v8-subset and inherits its rules verbatim.
+# The SCG host/VM hardening guidance it covers (TPM attestation, secure boot,
+# execInstalledOnly, VM device/console hardening, etc.) carries forward from the
+# vSphere 8 SCG to the vSphere 9 / VCF 9 SCG with the same advanced-setting keys,
+# so the inherited rules apply unchanged.
+#
+# Deliberately NOT done here: inventing vSphere-9-SCG-specific rule IDs or new
+# attribute checks from memory (would violate the no-fabrication rule and could
+# silently match nothing against the Twin). When Broadcom publishes the VCF 9
+# SCG line, add its new controls here as override/append rules.
+# ---------------------------------------------------------------------------
+id: vsphere-scg-v9-subset
+name: "VMware vSphere SCG v9 (subset — stable v8 controls validated for 9.x)"
+version: "1.0.0-subset"
+source: "https://github.com/vmware/vcf-security-and-compliance-guidelines"
+extends: vsphere-scg-v8-subset
+applies_to:
+  - host
+  - vm
+rules: []

@@ -1,0 +1,27 @@
+# CIS VMware ESXi 9.0 Benchmark (subset) — provenance note
+# ---------------------------------------------------------------------------
+# This baseline `extends` cis-vmware-esxi-8.0-subset and inherits its rules
+# verbatim. Every inherited control (NTP, lockdown, remote syslog, firewall,
+# SSH posture, promiscuous/forged-transmit reject, vSAN/vMotion encryption,
+# DCUI/shell timeouts, AD join) targets ESXi host advanced settings that are
+# stable across the 8.x → 9.x line, so they apply unchanged to vSphere 9.
+#
+# Deliberately NOT done here: inventing CIS-vSphere-9-specific rule numbers or
+# build thresholds from memory (would violate the no-fabrication rule). The
+# inherited build-currency rule (cis-esxi-2.2.1) checks the 8.0 security floor;
+# a 9.x host's build is far higher, so it produces NO false violation — it
+# simply does not yet enforce a 9.x-specific patch level. Operators wanting a
+# site-specific 9.x minimum build should copy this file to
+# ~/.vmware-harden/baselines/ and override cis-esxi-2.2.1 (user dir wins).
+#
+# When CIS publishes the official vSphere 9 benchmark, replace this subset with
+# the numbered rules from that source.
+# ---------------------------------------------------------------------------
+id: cis-vmware-esxi-9.0-subset
+name: "CIS VMware ESXi 9.0 Benchmark (subset — stable 8.x controls validated for 9.x)"
+version: "1.0.0-subset"
+source: "https://www.cisecurity.org/benchmark/vmware"
+extends: cis-vmware-esxi-8.0-subset
+applies_to:
+  - host
+rules: []

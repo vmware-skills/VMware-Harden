@@ -1,3 +1,14 @@
+## v1.7.0 (2026-06-27) — vSphere 9 baselines
+
+### Added
+- **Built-in vSphere 9 baselines:** `cis-vmware-esxi-9.0-subset` and
+  `vsphere-scg-v9-subset`. Each `extends` its v8 counterpart and inherits the
+  stable host/VM hardening controls (NTP, lockdown, syslog, firewall, SSH,
+  promiscuous/forged-transmit reject, vSAN/vMotion encryption, timeouts) that
+  carry forward unchanged to the 9.x line. No fabricated v9-specific rule IDs or
+  build thresholds — when CIS/Broadcom publish the official v9 numbering, the
+  subsets will be replaced with it.
+
 ## v1.6.1 (2026-06-24) — version alignment
 
 No functional changes — version bumped to stay aligned with the VMware skill family release.
