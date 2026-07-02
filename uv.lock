@@ -1689,7 +1689,7 @@ wheels = [
 
 [[package]]
 name = "vmware-harden"
-version = "1.6.1"
+version = "1.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
