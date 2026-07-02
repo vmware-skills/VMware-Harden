@@ -38,6 +38,16 @@ class CheckRunner:
         # Only drop a row when its node_id is a REAL node (exists in the
         # cumulative `nodes` table) belonging to a DIFFERENT snapshot.
         # Synthetic literals are absent from `nodes` and therefore survive.
+        #
+        # NOTE (growth): this materializes every node id ever scanned into a
+        # Python set, so it grows with estate history, not with the current
+        # scan. It is intentionally left as-is: correctness of the
+        # synthetic-vs-real distinction (and thus the decommission/estate-gap
+        # detection) depends on membership against the FULL cumulative `nodes`
+        # table. Do not narrow this to the current snapshot without preserving
+        # that distinction. If it ever becomes a memory concern, replace the
+        # set with a per-candidate `SELECT 1 FROM nodes WHERE id = ?` existence
+        # check (indexed PK) rather than dropping the full-table scope.
         real_node_ids: set[str] = {
             r[0] for r in self.twin.conn.execute("SELECT id FROM nodes").fetchall()
         }

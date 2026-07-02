@@ -41,6 +41,11 @@ def advise(
         False, "--all-critical",
         help="Generate suggestions for all critical violations in latest snapshot.",
     ),
+    limit: int = typer.Option(
+        25, "--limit",
+        help="Max violations to advise on with --all-critical (each is one LLM "
+             "call). Caps serial fan-out; raise it deliberately for big estates.",
+    ),
     db: str = typer.Option(
         "~/.vmware-harden/twin.duckdb", help="Twin DB path."
     ),
@@ -48,6 +53,9 @@ def advise(
     """Generate and persist LLM remediation suggestions."""
     if not violation_id and not all_critical:
         typer.echo("Specify --violation-id ID or --all-critical.", err=True)
+        raise typer.Exit(code=2)
+    if limit < 1:
+        typer.echo("--limit must be >= 1.", err=True)
         raise typer.Exit(code=2)
 
     p = Path(os.path.expanduser(db))
@@ -77,6 +85,18 @@ def advise(
             if not target_ids:
                 typer.echo("No critical violations in the latest snapshot.")
                 return
+            total_critical = len(target_ids)
+            if total_critical > limit:
+                target_ids = target_ids[:limit]
+                typer.echo(
+                    f"Advising on {limit} of {total_critical} critical "
+                    f"violations (capped by --limit). Re-run with a higher "
+                    f"--limit to process the rest."
+                )
+            else:
+                typer.echo(
+                    f"Advising on {total_critical} critical violation(s)."
+                )
 
         for vid in target_ids:
             try:

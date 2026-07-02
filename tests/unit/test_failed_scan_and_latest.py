@@ -129,7 +129,7 @@ def test_mcp_list_violations_orders_critical_first(tmp_path: Path):
         out = srv.list_violations()
     finally:
         srv._DB_PATH = old
-    got = [v["severity"] for v in out]
+    got = [v["severity"] for v in out["violations"]]
     assert got == ["critical", "high", "medium", "low", "info"]
 
 

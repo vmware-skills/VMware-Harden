@@ -14,8 +14,14 @@ def show(
         help="Path to Twin database file.",
     ),
     format: str = typer.Option("text", help="Report format: text or json."),
+    limit: int = typer.Option(
+        500, help="Max violations to print; a note reports the true total."
+    ),
 ) -> None:
     """Show the last scan's violations."""
     from vmware_harden.cli.runner import run_report
 
-    run_report(db=db, format=format)
+    if limit < 1:
+        typer.echo("--limit must be >= 1.", err=True)
+        raise typer.Exit(code=2)
+    run_report(db=db, format=format, limit=limit)

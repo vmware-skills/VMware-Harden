@@ -109,8 +109,12 @@ def run_scan(target: str, baseline: str, db: str) -> str:
         twin.close()
 
 
-def run_report(db: str, format: str = "text") -> None:
-    """Print a report of the most recent completed snapshot's violations."""
+def run_report(db: str, format: str = "text", limit: int = 500) -> None:
+    """Print a report of the most recent completed snapshot's violations.
+
+    At most `limit` rows are printed (default 500); a truncation note tells the
+    user the true total so a huge estate can't silently flood stdout/JSON.
+    """
     from vmware_harden.store.schema import SEVERITY_RANK_SQL
 
     # Do not silently create the DB file just to report on it (item: a
@@ -127,6 +131,10 @@ def run_report(db: str, format: str = "text") -> None:
             typer.echo("No completed scans yet. Run `vmware-harden scan --target <vc>` first.")
             return
 
+        total = twin.conn.execute(
+            "SELECT COUNT(*) FROM violation WHERE snapshot_id = ?",
+            [latest["id"]],
+        ).fetchone()[0]
         rows = twin.conn.execute(
             f"""
             SELECT v.rule_id, v.node_id, COALESCE(n.name, '[orphan]') AS name, v.severity, v.evidence
@@ -134,9 +142,11 @@ def run_report(db: str, format: str = "text") -> None:
             LEFT JOIN nodes n ON n.id = v.node_id
             WHERE v.snapshot_id = ?
             ORDER BY {SEVERITY_RANK_SQL.format(col="v.severity")}, v.rule_id
+            LIMIT ?
             """,  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
-            [latest["id"]],
+            [latest["id"], limit],
         ).fetchall()
+        truncated = total > len(rows)
 
         if format == "json":
             out = [
@@ -150,6 +160,12 @@ def run_report(db: str, format: str = "text") -> None:
                 for r in rows
             ]
             typer.echo(json.dumps(out, indent=2, ensure_ascii=False))
+            if truncated:
+                typer.echo(
+                    f"# Showing {len(rows)} of {total} violations "
+                    f"(limited by --limit {limit}).",
+                    err=True,
+                )
         else:
             if not rows:
                 typer.echo("No violations.")
@@ -158,6 +174,12 @@ def run_report(db: str, format: str = "text") -> None:
                     typer.echo(
                         f"  [{r[3].upper():8s}] {r[0]:30s} {r[1]} ({r[2]})"
                     )
-                typer.echo(f"\nTotal: {len(rows)} violations")
+                if truncated:
+                    typer.echo(
+                        f"\nShowing {len(rows)} of {total} violations "
+                        f"(limited by --limit {limit}). Raise --limit to see more."
+                    )
+                else:
+                    typer.echo(f"\nTotal: {len(rows)} violations")
     finally:
         twin.close()

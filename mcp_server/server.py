@@ -30,16 +30,22 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         return t.list_baselines()
 
     @server.tool(name="list_violations")
-    def _list_violations_impl(severity: Optional[str] = None) -> list[dict]:
+    def _list_violations_impl(
+        severity: Optional[str] = None, limit: int = 50, offset: int = 0
+    ) -> dict:
         """[READ] List compliance violations recorded by the most recent scan
         snapshot in the local twin DB (~/.vmware-harden/twin.duckdb). severity
         (optional string): filter to exactly one of 'critical', 'high', 'medium',
-        'low', 'info'; omit to return all severities. Returns every matching row
-        (no pagination), sorted severity-descending then rule_id, each as {id,
-        rule_id, node_id, severity, baseline_id, evidence}. Returns [] when no
-        scan exists — run scan_target first. Read-only local DB query, no network
-        calls. Pass a row's 'id' to get_remediation for a fix plan."""
-        return t.list_violations(severity)
+        'low', 'info'; omit to return all severities. limit (optional int, default
+        50): max rows returned; offset (optional int, default 0): rows to skip for
+        paging. Returns an envelope {violations: [...], total, limit, offset,
+        has_more}; each violation is {id, rule_id, node_id, severity, baseline_id,
+        evidence}, sorted severity-descending then rule_id. `total` is the full
+        matching count (unbounded by limit) so nothing is hidden — page by raising
+        offset while has_more is true. Empty envelope (total 0) when no scan exists
+        — run scan_target first. Read-only local DB query, no network calls. Pass a
+        row's 'id' to get_remediation for a fix plan."""
+        return t.list_violations(severity, limit=limit, offset=offset)
 
     @server.tool(name="get_remediation")
     def _get_remediation_impl(violation_id: str) -> Optional[dict]:

@@ -10,7 +10,8 @@
   </div>
 {% else %}
   <div class="text-sm text-slate-500 mb-3">
-    Showing {{ violations|length }} violations from latest snapshot.
+    Showing {{ violations|length }} of {{ total }} violations
+    (page {{ page }}) from latest snapshot.
   </div>
   <div class="bg-white rounded-lg shadow overflow-hidden">
     <table class="min-w-full text-sm">
@@ -63,5 +64,18 @@
       </tbody>
     </table>
   </div>
+  {% if has_prev or has_next %}
+  <div class="flex justify-between items-center mt-4 text-sm">
+    {% if has_prev %}
+      <a href="/violations?page={{ page - 1 }}"
+         class="text-blue-600 hover:underline">&larr; Previous</a>
+    {% else %}<span></span>{% endif %}
+    <span class="text-slate-500">Page {{ page }}</span>
+    {% if has_next %}
+      <a href="/violations?page={{ page + 1 }}"
+         class="text-blue-600 hover:underline">Next &rarr;</a>
+    {% else %}<span></span>{% endif %}
+  </div>
+  {% endif %}
 {% endif %}
 {% endblock %}

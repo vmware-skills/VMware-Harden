@@ -1,3 +1,14 @@
+## v1.7.2 (2026-07-02) — bounded output (no more unbounded dumps to the agent)
+
+### Changed
+- **`list_violations` MCP tool now returns a paginated envelope**
+  `{violations, total, limit, offset, has_more}` instead of a bare list, with
+  `limit` defaulting to 50. On a large estate it no longer serializes tens of
+  thousands of violations straight into agent context. The web dashboard's
+  violations/drift pages now paginate, `advise --all-critical` gained a `--limit`
+  cap (with a disclosed "advising on X of Y" message), and the `report` / `drift`
+  CLI commands gained `--limit`. DuckDB schema/indexes unchanged.
+
 ## v1.7.1 (2026-07-02) — family version alignment
 
 No code changes. Version bump to stay aligned with the v1.7.1 family release

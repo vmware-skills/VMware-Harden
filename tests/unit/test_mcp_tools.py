@@ -42,7 +42,11 @@ def test_list_violations(tmp_path: Path):
     from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     out = srv.list_violations()
-    assert any(v["id"] == vid and v["severity"] == "high" for v in out)
+    assert any(
+        v["id"] == vid and v["severity"] == "high" for v in out["violations"]
+    )
+    assert out["total"] == 1
+    assert out["has_more"] is False
 
 
 @pytest.mark.unit
@@ -51,9 +55,10 @@ def test_list_violations_severity_filter(tmp_path: Path):
     from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
     high_only = srv.list_violations(severity="high")
-    assert all(v["severity"] == "high" for v in high_only)
+    assert all(v["severity"] == "high" for v in high_only["violations"])
     crit_only = srv.list_violations(severity="critical")
-    assert crit_only == []
+    assert crit_only["violations"] == []
+    assert crit_only["total"] == 0
 
 
 @pytest.mark.unit

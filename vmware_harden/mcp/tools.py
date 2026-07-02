@@ -57,8 +57,16 @@ def list_baselines() -> list[dict]:
 
 
 @vmware_tool(risk_level="low")
-def list_violations(severity: str | None = None) -> list[dict]:
-    """[READ] Latest completed snapshot's violations, optionally filtered by severity."""
+def list_violations(
+    severity: str | None = None, limit: int = 50, offset: int = 0
+) -> dict:
+    """[READ] Latest completed snapshot's violations, optionally filtered by severity.
+
+    Bounded output: at most `limit` rows are serialized (default 50) starting at
+    `offset`, so a large estate can't flood the LLM/MCP context. Returns an
+    envelope: {violations: [...], total, limit, offset, has_more} where `total`
+    is the full matching count so nothing is silently hidden — page with `offset`.
+    """
     from typing import get_args
 
     from vmware_harden.baselines.model import Severity
@@ -72,22 +80,41 @@ def list_violations(severity: str | None = None) -> list[dict]:
             f"{', '.join(sorted(valid_severities))}. "
             "Omit the parameter to list violations of all severities."
         )
+    if limit < 1:
+        raise ValueError("limit must be >= 1.")
+    if offset < 0:
+        raise ValueError("offset must be >= 0.")
 
+    empty: dict = {
+        "violations": [],
+        "total": 0,
+        "limit": limit,
+        "offset": offset,
+        "has_more": False,
+    }
     twin = Twin(_resolve_db())
     try:
         latest = twin.latest_snapshot()
         if latest is None:
-            return []
-        params: list = [latest["id"]]
+            return empty
+        where = "WHERE snapshot_id = ?"
+        where_params: list = [latest["id"]]
+        if severity:
+            where += " AND severity = ?"
+            where_params.append(severity)
+
+        total = twin.conn.execute(
+            f"SELECT COUNT(*) FROM violation {where}",  # nosec B608 - where is fixed clauses with bound '?' params
+            where_params,
+        ).fetchone()[0]
+
         sql = (
             "SELECT id, rule_id, node_id, severity, baseline_id, evidence "
-            "FROM violation WHERE snapshot_id = ?"
+            f"FROM violation {where} "  # nosec B608 - where is fixed clauses with bound '?' params
+            f"ORDER BY {SEVERITY_RANK_SQL.format(col='severity')}, rule_id "  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
+            "LIMIT ? OFFSET ?"
         )
-        if severity:
-            sql += " AND severity = ?"
-            params.append(severity)
-        sql += f" ORDER BY {SEVERITY_RANK_SQL.format(col='severity')}, rule_id"
-        rows = twin.conn.execute(sql, params).fetchall()
+        rows = twin.conn.execute(sql, [*where_params, limit, offset]).fetchall()
         out: list[dict] = []
         for r in rows:
             try:
@@ -104,7 +131,13 @@ def list_violations(severity: str | None = None) -> list[dict]:
                     "evidence": ev,
                 }
             )
-        return out
+        return {
+            "violations": out,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(out) < total,
+        }
     finally:
         twin.close()
 

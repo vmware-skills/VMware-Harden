@@ -1,6 +1,5 @@
 """FastAPI dashboard."""
 import contextlib
-from collections import Counter
 from pathlib import Path
 
 import duckdb
@@ -13,6 +12,10 @@ from vmware_harden.store.twin import Twin
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# One rendered HTML page must never materialize an unbounded estate. Table
+# routes page at this size so tens of thousands of rows can't land in one DOM.
+PAGE_SIZE = 100
 
 
 class DatabaseBusyError(Exception):
@@ -50,22 +53,25 @@ def _fetch_summary(db_path: Path) -> dict:
         target = latest_snap["target"]
         finished_at = latest_snap["scan_finished_at"]
 
-        rows = twin.conn.execute(
-            "SELECT severity, evidence FROM violation WHERE snapshot_id = ?",
+        # Aggregate in SQL (GROUP BY) rather than materializing every violation
+        # row in Python — the summary is bounded output regardless of estate size.
+        sev_counts = {
+            sev: n
+            for sev, n in twin.conn.execute(
+                "SELECT severity, COUNT(*) FROM violation "
+                "WHERE snapshot_id = ? GROUP BY severity",
+                [snap_id],
+            ).fetchall()
+        }
+        # Category lives inside the evidence JSON; extract + group in SQL, guarding
+        # against non-JSON/empty evidence so a bad row can't abort the whole query.
+        cat_rows = twin.conn.execute(
+            "SELECT COALESCE(CASE WHEN json_valid(evidence) "
+            "THEN NULLIF(json_extract_string(evidence, '$.category'), '') END, "
+            "'uncategorized') AS category, COUNT(*) "
+            "FROM violation WHERE snapshot_id = ? GROUP BY category",
             [snap_id],
         ).fetchall()
-
-        sev_counts: Counter[str] = Counter()
-        cat_counts: Counter[str] = Counter()
-        import json as _json
-        for sev, evidence_json in rows:
-            sev_counts[sev] += 1
-            try:
-                ev = _json.loads(evidence_json) if evidence_json else {}
-                cat = ev.get("category") or "uncategorized"
-            except Exception:
-                cat = "uncategorized"
-            cat_counts[cat] += 1
 
         # Order severities canonically
         ordered = ["critical", "high", "medium", "low", "info"]
@@ -73,7 +79,7 @@ def _fetch_summary(db_path: Path) -> dict:
             {"name": s, "count": sev_counts.get(s, 0)} for s in ordered
         ]
         categories = [
-            {"name": c, "count": n} for c, n in sorted(cat_counts.items())
+            {"name": c, "count": n} for c, n in sorted(cat_rows)
         ]
         return {
             "has_data": True,
@@ -86,14 +92,36 @@ def _fetch_summary(db_path: Path) -> dict:
         }
 
 
-def _fetch_violations(db_path: Path) -> dict:
+def _page_bounds(page: int, page_size: int) -> tuple[int, int, int]:
+    """Normalize a 1-based page into (page, limit, offset)."""
+    page = max(1, page)
+    return page, page_size, (page - 1) * page_size
+
+
+def _fetch_violations(
+    db_path: Path, page: int = 1, page_size: int = PAGE_SIZE
+) -> dict:
+    empty = {
+        "has_data": False,
+        "violations": [],
+        "page": 1,
+        "page_size": page_size,
+        "total": 0,
+        "has_prev": False,
+        "has_next": False,
+    }
     if not db_path.exists():
-        return {"has_data": False, "violations": []}
+        return empty
     with _open_ro(db_path) as twin:
         latest = twin.latest_snapshot()
         if latest is None:
-            return {"has_data": False, "violations": []}
+            return empty
         snap_id = latest["id"]
+        page, limit, offset = _page_bounds(page, page_size)
+        total = twin.conn.execute(
+            "SELECT COUNT(*) FROM violation WHERE snapshot_id = ?",
+            [snap_id],
+        ).fetchone()[0]
         rows = twin.conn.execute(
             f"""
                SELECT v.id, v.rule_id, v.node_id, COALESCE(n.name, ''),
@@ -101,8 +129,9 @@ def _fetch_violations(db_path: Path) -> dict:
                FROM violation v LEFT JOIN nodes n ON n.id = v.node_id
                WHERE v.snapshot_id = ?
                ORDER BY {SEVERITY_RANK_SQL.format(col="v.severity")},
-                 v.rule_id""",  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
-            [snap_id],
+                 v.rule_id
+               LIMIT ? OFFSET ?""",  # nosec B608 - SEVERITY_RANK_SQL is a hardcoded constant, no user input
+            [snap_id, limit, offset],
         ).fetchall()
         violations = [
             {
@@ -115,7 +144,15 @@ def _fetch_violations(db_path: Path) -> dict:
             }
             for r in rows
         ]
-        return {"has_data": True, "violations": violations}
+        return {
+            "has_data": True,
+            "violations": violations,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "has_prev": page > 1,
+            "has_next": offset + len(violations) < total,
+        }
 
 
 def _fetch_evidence(db_path: Path, violation_id: str) -> str | None:
@@ -142,8 +179,10 @@ def _fetch_remediation(db_path: Path, violation_id: str):
         return suggestion, pilot_task_id
 
 
-def _fetch_drift(db_path: Path) -> dict:
-    """Last 5 snapshots' event counts + latest snapshot's events."""
+def _fetch_drift(
+    db_path: Path, page: int = 1, page_size: int = PAGE_SIZE
+) -> dict:
+    """Last 5 snapshots' event counts + a page of the latest snapshot's events."""
     if not db_path.exists():
         return {"has_data": False}
     with _open_ro(db_path) as twin:
@@ -175,25 +214,36 @@ def _fetch_drift(db_path: Path) -> dict:
         ]
 
         latest_id = snaps[0][0]
+        page, limit, offset = _page_bounds(page, page_size)
+        total = twin.conn.execute(
+            "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
+            [latest_id],
+        ).fetchone()[0]
         events = twin.conn.execute(
             "SELECT node_id, field, old_value, new_value, detected_at "
             "FROM change_event WHERE snapshot_id = ? "
-            "ORDER BY node_id, field",
-            [latest_id],
+            "ORDER BY node_id, field LIMIT ? OFFSET ?",
+            [latest_id, limit, offset],
         ).fetchall()
+        event_dicts = [
+            {
+                "node_id": e[0],
+                "field": e[1],
+                "old_value": e[2],
+                "new_value": e[3],
+                "detected_at": str(e[4]) if e[4] else None,
+            }
+            for e in events
+        ]
         return {
             "has_data": True,
             "timeline": timeline,
-            "events": [
-                {
-                    "node_id": e[0],
-                    "field": e[1],
-                    "old_value": e[2],
-                    "new_value": e[3],
-                    "detected_at": str(e[4]) if e[4] else None,
-                }
-                for e in events
-            ],
+            "events": event_dicts,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "has_prev": page > 1,
+            "has_next": offset + len(event_dicts) < total,
         }
 
 
@@ -223,14 +273,14 @@ def build_app(db_path: Path) -> FastAPI:
     async def index(request: Request) -> HTMLResponse:
         summary = _fetch_summary(db_path)
         return templates.TemplateResponse(
-            request, "index.html", {"page": "summary", "summary": summary}
+            request, "index.html", {"nav": "summary", "summary": summary}
         )
 
     @app.get("/violations", response_class=HTMLResponse)
-    async def violations(request: Request) -> HTMLResponse:
-        data = _fetch_violations(db_path)
+    async def violations(request: Request, page: int = 1) -> HTMLResponse:
+        data = _fetch_violations(db_path, page=page)
         return templates.TemplateResponse(
-            request, "violations.html", {"page": "violations", **data}
+            request, "violations.html", {"nav": "violations", **data}
         )
 
     @app.get("/violations/{violation_id}/evidence", response_class=HTMLResponse)
@@ -256,10 +306,10 @@ def build_app(db_path: Path) -> FastAPI:
         )
 
     @app.get("/drift", response_class=HTMLResponse)
-    async def drift_page(request: Request) -> HTMLResponse:
-        data = _fetch_drift(db_path)
+    async def drift_page(request: Request, page: int = 1) -> HTMLResponse:
+        data = _fetch_drift(db_path, page=page)
         return templates.TemplateResponse(
-            request, "drift.html", {"page": "drift", **data}
+            request, "drift.html", {"nav": "drift", **data}
         )
 
     return app
