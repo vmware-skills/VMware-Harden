@@ -1,6 +1,6 @@
 [project]
 name = "vmware-harden"
-version = "1.7.3"
+version = "1.7.4"
 description = "AI-native VMware compliance and baseline enforcement"
 readme = "README.md"
 license = "MIT"
