@@ -31,7 +31,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 If `uvx` fails with `invalid peer certificate: UnknownIssuer` behind a corporate
 TLS-intercepting proxy, prefer `uv tool install vmware-harden` and use the entry
-point directly (`vmware-harden-mcp`). The installed binary does not hit the
+point directly (`vmware-harden` with `args: ["mcp"]`). The installed binary does not hit the
 network at launch. If you must use `uvx`, set `UV_NATIVE_TLS=true` so uv reads
 the system CA store — see [uvx-fallback.json](uvx-fallback.json) and
 references/setup-guide.md.

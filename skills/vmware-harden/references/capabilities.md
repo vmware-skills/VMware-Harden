@@ -28,7 +28,7 @@ writes a snapshot to local DuckDB. It does **not** modify the target.
 ### Signature
 
 ```python
-list_baselines() -> list[dict]
+list_baselines() -> dict   # family list envelope
 ```
 
 ### When to use
@@ -43,18 +43,25 @@ None.
 
 ### Returns
 
-A list of baseline summaries:
+The family list envelope, whose `items` are baseline summaries:
 
 ```json
-[
-  {
-    "id": "cis-vmware-esxi-8.0-subset",
-    "name": "CIS VMware ESXi 8.0 (subset)",
-    "version": "1.0",
-    "applies_to": ["host"],
-    "rule_count": 12
-  }
-]
+{
+  "items": [
+    {
+      "id": "cis-vmware-esxi-8.0-subset",
+      "name": "CIS VMware ESXi 8.0 (subset)",
+      "version": "1.0",
+      "applies_to": ["host"],
+      "rule_count": 12
+    }
+  ],
+  "returned": 6,
+  "limit": null,
+  "total": 6,
+  "truncated": false,
+  "hint": null
+}
 ```
 
 If a baseline file fails to load, its entry contains `{"id": "...", "error": "failed to load: ..."}`
@@ -63,6 +70,8 @@ instead of the metadata fields.
 ### Gotchas
 
 - Includes both built-ins and user imports under `~/.vmware-harden/baselines/`.
+- Every discovered baseline is listed, so `truncated` is always `false` and
+  `total` is exact — this is the complete set, never a page of it.
 - The `applies_to` field tells the agent which collectors must run during
   a scan; if the user has only `vmware-aiops` configured (no NSX), pick a
   baseline whose `applies_to` is a subset of the available collectors.
@@ -180,7 +189,7 @@ A `Suggestion` dict (Pydantic `model_dump(mode="json")`) or `None`:
 ### Signature
 
 ```python
-list_drift_events(limit: int = 50) -> list[dict]
+list_drift_events(limit: int = 50) -> dict   # family list envelope
 ```
 
 ### When to use
@@ -198,15 +207,22 @@ when a sudden compliance drop appears.
 ### Returns
 
 ```json
-[
-  {
-    "node_id": "host-esxi-01",
-    "field": "ntp.servers",
-    "old_value": "pool.ntp.org",
-    "new_value": null,
-    "detected_at": "2026-05-03 12:34:56"
-  }
-]
+{
+  "items": [
+    {
+      "node_id": "host-esxi-01",
+      "field": "ntp.servers",
+      "old_value": "pool.ntp.org",
+      "new_value": null,
+      "detected_at": "2026-05-03 12:34:56"
+    }
+  ],
+  "returned": 1,
+  "limit": 50,
+  "total": 1,
+  "truncated": false,
+  "hint": null
+}
 ```
 
 ### Gotchas
@@ -215,7 +231,12 @@ when a sudden compliance drop appears.
   that snapshot from its predecessor.
 - `old_value` and `new_value` are stringified — JSON-typed values may
   appear as their string form.
-- Returns `[]` if no snapshots exist or no changes were detected.
+- Returns an empty envelope (`total: 0`) if no snapshots exist or no changes
+  were detected — a complete answer of zero rows, not a maybe.
+- `total` is the snapshot's exact change-event count (a `COUNT(*)` over the
+  same predicate, served by `idx_change_event_snapshot`), so `truncated`
+  answers definitively whether rows were left behind. Raise `limit` when it
+  is `true`.
 
 ### Typical response tokens
 
@@ -228,7 +249,7 @@ when a sudden compliance drop appears.
 ### Signature
 
 ```python
-get_baseline_rules(baseline_id: str) -> list[dict]
+get_baseline_rules(baseline_id: str) -> dict   # family list envelope
 ```
 
 ### When to use
@@ -246,18 +267,27 @@ category.
 ### Returns
 
 ```json
-[
-  {
-    "id": "cis-1.1.1",
-    "title": "Configure NTP",
-    "severity": "high",
-    "category": "network"
-  }
-]
+{
+  "items": [
+    {
+      "id": "cis-1.1.1",
+      "title": "Configure NTP",
+      "severity": "high",
+      "category": "network"
+    }
+  ],
+  "returned": 20,
+  "limit": null,
+  "total": 20,
+  "truncated": false,
+  "hint": null
+}
 ```
 
 ### Gotchas
 
+- The whole baseline is returned, so `truncated` is always `false` and
+  `total` is the exact rule count.
 - Raises (and the MCP layer surfaces a tool error) if the
   `baseline_id` is not a built-in. User imports are loaded via the same
   loader, so imported ids work too.

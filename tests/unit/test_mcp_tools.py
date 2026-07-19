@@ -103,14 +103,14 @@ def test_list_drift_events(tmp_path: Path):
     db, _ = _seed_db(tmp_path)
     from vmware_harden.mcp import tools as srv
     srv._DB_PATH = db
-    events = srv.list_drift_events()
-    assert any(e["field"] == "ntp_enabled" for e in events)
+    result = srv.list_drift_events()
+    assert any(e["field"] == "ntp_enabled" for e in result["items"])
 
 
 @pytest.mark.unit
 def test_get_baseline_rules():
     from vmware_harden.mcp import tools as srv
-    rules = srv.get_baseline_rules("cis-vmware-esxi-8.0-subset")
+    rules = srv.get_baseline_rules("cis-vmware-esxi-8.0-subset")["items"]
     assert len(rules) == 20
     assert all("id" in r and "title" in r and "severity" in r for r in rules)
 

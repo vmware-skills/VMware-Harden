@@ -19,8 +19,8 @@ def test_list_baselines_via_fastmcp_dispatch(tmp_path: Path):
     assert callable(fn), f"tool entry not callable: {tool!r}"
 
     result = fn()
-    assert isinstance(result, list)
-    ids = {b.get("id") for b in result}
+    assert isinstance(result, dict)
+    ids = {b.get("id") for b in result["items"]}
     assert "cis-vmware-esxi-8.0-subset" in ids
 
 
@@ -28,8 +28,8 @@ def test_list_baselines_via_fastmcp_dispatch(tmp_path: Path):
 def test_get_baseline_rules_via_fastmcp_dispatch(tmp_path: Path):
     server = srv.build_server(db_path=tmp_path / "twin.duckdb")
     tool = server._tool_manager._tools["get_baseline_rules"]
-    rules = tool.fn(baseline_id="cis-vmware-esxi-8.0-subset")
-    assert len(rules) == 20
+    result = tool.fn(baseline_id="cis-vmware-esxi-8.0-subset")
+    assert len(result["items"]) == 20
 
 
 @pytest.mark.integration

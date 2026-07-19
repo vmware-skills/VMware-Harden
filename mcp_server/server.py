@@ -8,8 +8,68 @@ from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+from vmware_policy import apply_read_only_gate, set_environment_resolver
 
 from vmware_harden.mcp import tools as t
+
+#: Names withheld by the most recent :func:`build_server` call. The gate runs
+#: inside the factory (this server has no module-level instance), so the result
+#: is recorded here for startup logging and tests.
+WITHHELD_WRITE_TOOLS: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Environment declaration
+# ---------------------------------------------------------------------------
+
+#: What this skill reports as the environment of everything it touches.
+#:
+#: Policy rules scope by environment, and the baseline treats a target that
+#: declares none as unknown — today that warns on state-changing operations,
+#: and the next major release refuses them. Every other skill answers this from
+#: its own config, where an operator labels each target ``production`` /
+#: ``staging`` / ``lab``.
+#:
+#: vmware-harden has no such config, and cannot grow one honestly: it is backed
+#: by a local DuckDB twin, not by a connection to a managed estate. Requiring a
+#: declaration it has no place to make would leave it permanently warning and
+#: eventually permanently blocked.
+#:
+#: A constant is correct here rather than a workaround, because the claim it
+#: makes is true: the only thing this skill writes is its own local store.
+#: ``scan_target`` is the sole state-changing tool, and its state change is the
+#: snapshot it records in the twin DB — its vCenter interaction is read-only
+#: collection. No tool in this skill mutates a remote VMware estate, so there
+#: is no production change for an environment-scoped rule to protect.
+LOCAL_ENVIRONMENT = "local"
+
+#: Client-facing behaviour hints, matching the rest of the family. Every tool
+#: here is [READ]: nothing mutates a remote VMware estate, and repeating any of
+#: them yields the same answer. These drive MCP client UI (e.g. whether a call
+#: needs a confirmation prompt); the read-only gate classifies independently,
+#: from the [READ]/[WRITE] docstring marker.
+#:
+#: ``openWorldHint`` is set per tool rather than copied family-wide: five of
+#: these six read local baseline YAML or the local twin DB and touch no network
+#: at all, which is a closed world. Only scan_target reaches a vCenter.
+_READ_LOCAL = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+_READ_REMOTE = {**_READ_LOCAL, "openWorldHint": True}
+
+
+def _environment_for(target: Optional[str]) -> str:
+    """Report the environment for policy scoping. Always ``local`` — see above."""
+    return LOCAL_ENVIRONMENT
+
+
+# Registered at import time rather than inside build_server(): the resolver is
+# process-global state in vmware_policy, not per-server-instance, and every
+# build_server() call would otherwise re-register the same constant.
+set_environment_resolver(_environment_for)
 
 
 def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMCP:
@@ -17,19 +77,22 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     t._DB_PATH = Path(os.path.expanduser(str(db_path)))
     server = FastMCP("vmware-harden")
 
-    @server.tool(name="list_baselines")
-    def _list_baselines_impl() -> list[dict]:
+    @server.tool(name="list_baselines", annotations=_READ_LOCAL)
+    def _list_baselines_impl() -> dict:
         """[READ] List all available compliance baselines: built-in (CIS ESXi 8.0,
         vSphere SCG v8, PCI-DSS 4.0, DengBao 2.0 L3, EU NIS2, BSI ITGS) plus any
         user-imported YAML baselines from ~/.vmware-harden/baselines/. Takes no
-        parameters. Returns one entry per baseline: {id, name, version, applies_to
-        (node types covered), rule_count}; entries that fail to load carry an
-        'error' field instead. Read-only — parses local baseline YAML only, no
-        database or network access. Start here to discover valid baseline ids for
-        get_baseline_rules and scan_target."""
+        parameters. Returns the family list envelope {items, returned, limit,
+        total, truncated, hint}; each item is {id, name, version, applies_to
+        (node types covered), rule_count}, and entries that fail to load carry an
+        'error' field instead. Every baseline is listed, so truncated is always
+        false and total is exact — this is the complete set, not a page of it.
+        Read-only — parses local baseline YAML only, no database or network
+        access. Start here to discover valid baseline ids for get_baseline_rules
+        and scan_target."""
         return t.list_baselines()
 
-    @server.tool(name="list_violations")
+    @server.tool(name="list_violations", annotations=_READ_LOCAL)
     def _list_violations_impl(
         severity: Optional[str] = None, limit: int = 50, offset: int = 0
     ) -> dict:
@@ -47,7 +110,7 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         row's 'id' to get_remediation for a fix plan."""
         return t.list_violations(severity, limit=limit, offset=offset)
 
-    @server.tool(name="get_remediation")
+    @server.tool(name="get_remediation", annotations=_READ_LOCAL)
     def _get_remediation_impl(violation_id: str) -> Optional[dict]:
         """[READ] Fetch the persisted LLM-generated remediation Suggestion for one
         violation. violation_id (required string): the 'id' field of a row
@@ -60,32 +123,37 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         — suggestions are advisory only."""
         return t.get_remediation(violation_id)
 
-    @server.tool(name="list_drift_events")
-    def _list_drift_events_impl(limit: int = 50) -> list[dict]:
+    @server.tool(name="list_drift_events", annotations=_READ_LOCAL)
+    def _list_drift_events_impl(limit: int = 50) -> dict:
         """[READ] List configuration drift events from the most recent scan
         snapshot — fields whose values changed since the prior scan of the same
         target. limit (optional int, default 50): maximum rows returned, ordered
-        by node_id then field; no offset/cursor. Each event is {node_id, field,
-        old_value, new_value, detected_at}. Returns [] when no snapshot exists or
-        there was no prior snapshot to diff against (a target must be scanned at
-        least twice). Read-only query of the local twin DB
-        (~/.vmware-harden/twin.duckdb); no network calls. Use for change
-        tracking; use list_violations for compliance failures."""
+        by node_id then field; no offset/cursor. Returns the family list envelope
+        {items, returned, limit, total, truncated, hint}; each item is {node_id,
+        field, old_value, new_value, detected_at}. total is the snapshot's exact
+        change-event count, so truncated tells you definitively whether rows were
+        left behind — raise limit when it is true. Returns an empty envelope
+        (total 0) when no snapshot exists or there was no prior snapshot to diff
+        against (a target must be scanned at least twice). Read-only query of the
+        local twin DB (~/.vmware-harden/twin.duckdb); no network calls. Use for
+        change tracking; use list_violations for compliance failures."""
         return t.list_drift_events(limit)
 
-    @server.tool(name="get_baseline_rules")
-    def _get_baseline_rules_impl(baseline_id: str) -> list[dict]:
+    @server.tool(name="get_baseline_rules", annotations=_READ_LOCAL)
+    def _get_baseline_rules_impl(baseline_id: str) -> dict:
         """[READ] Return every rule in one compliance baseline. baseline_id
         (required string): a baseline id exactly as returned by list_baselines,
         e.g. 'cis-vmware-esxi-8.0-subset'; unknown ids raise a not-found error.
-        Returns a list of {id, title, severity, category} per rule, where
-        severity is one of 'critical', 'high', 'medium', 'low', 'info'.
-        Read-only — parses local baseline YAML only, no database or network
-        access. Use after list_baselines to preview what scan_target will check;
-        use list_violations for actual scan findings."""
+        Returns the family list envelope {items, returned, limit, total,
+        truncated, hint}; each item is {id, title, severity, category}, where
+        severity is one of 'critical', 'high', 'medium', 'low', 'info'. The whole
+        baseline is returned, so truncated is always false and total is the exact
+        rule count. Read-only — parses local baseline YAML only, no database or
+        network access. Use after list_baselines to preview what scan_target will
+        check; use list_violations for actual scan findings."""
         return t.get_baseline_rules(baseline_id)
 
-    @server.tool(name="scan_target")
+    @server.tool(name="scan_target", annotations=_READ_REMOTE)
     def _scan_target_impl(
         target: str, baseline: str = "cis-vmware-esxi-8.0-subset"
     ) -> dict:
@@ -100,6 +168,18 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         target, baseline, hosts, violations}; inspect details via list_violations
         and list_drift_events. May take minutes on large inventories."""
         return t.scan_target(target, baseline)
+
+    # Applied after every tool above has registered and before the server is
+    # handed out. The [READ]/[WRITE] docstring marker is what the gate reads
+    # first, so the readOnlyHint annotations above inform client UI without
+    # changing this classification; all six tools are [READ] and nothing is
+    # withheld. scan_target survives deliberately: it makes only
+    # read-only vCenter calls and writes to the local twin DB, which the gate's
+    # contract treats as a cache of observations, not managed infrastructure.
+    global WITHHELD_WRITE_TOOLS  # noqa: PLW0603 — factory has no module instance
+    WITHHELD_WRITE_TOOLS = apply_read_only_gate(
+        server, "vmware-harden", config_flag=None
+    )
 
     return server
 

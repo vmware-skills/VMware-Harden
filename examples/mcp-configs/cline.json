@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "vmware-harden": {
-      "command": "vmware-harden-mcp",
-      "args": [],
+      "command": "vmware-harden",
+      "args": ["mcp"],
       "env": {
         "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb"
       },

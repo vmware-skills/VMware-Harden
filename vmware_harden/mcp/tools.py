@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 
-from vmware_policy import vmware_tool
+from vmware_policy import paginated, vmware_tool
 
 # Module-level state — set by build_server() so tools can read it
 _DB_PATH: Path | None = None
@@ -31,10 +31,12 @@ def _resolve_db(must_exist: bool = True) -> Path:
 
 
 @vmware_tool(risk_level="low")
-def list_baselines() -> list[dict]:
+def list_baselines() -> dict:
     """List built-in and user-imported baselines.
 
-    Returns: list of {id, name, version, applies_to, rule_count}.
+    Returns: the family list envelope; `items` is a list of
+    {id, name, version, applies_to, rule_count}. Every discovered baseline is
+    loaded, so `total` is the real count and `truncated` is always False.
     """
     from vmware_harden.baselines.loader import list_builtins, load_builtin
 
@@ -53,7 +55,7 @@ def list_baselines() -> list[dict]:
             )
         except Exception as e:
             out.append({"id": name, "error": f"failed to load: {e}"})
-    return out
+    return paginated(out, total=len(out))
 
 
 @vmware_tool(risk_level="low")
@@ -158,22 +160,32 @@ def get_remediation(violation_id: str) -> dict | None:
 
 
 @vmware_tool(risk_level="low")
-def list_drift_events(limit: int = 50) -> list[dict]:
-    """[READ] Latest completed snapshot's change events."""
+def list_drift_events(limit: int = 50) -> dict:
+    """[READ] Latest completed snapshot's change events.
+
+    Returns the family list envelope. `total` is the real count of the
+    snapshot's change events, from a COUNT(*) over the same predicate — it hits
+    idx_change_event_snapshot, so it costs one index probe and lets a page that
+    happens to fill `limit` be reported as complete instead of possibly-more.
+    """
     from vmware_harden.store.twin import Twin
 
     twin = Twin(_resolve_db())
     try:
         latest = twin.latest_snapshot()
         if latest is None:
-            return []
+            return paginated([], limit=limit, total=0)
+        total = twin.conn.execute(
+            "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
+            [latest["id"]],
+        ).fetchone()[0]
         rows = twin.conn.execute(
             "SELECT node_id, field, old_value, new_value, detected_at "
             "FROM change_event WHERE snapshot_id = ? "
             "ORDER BY node_id, field LIMIT ?",
             [latest["id"], limit],
         ).fetchall()
-        return [
+        events = [
             {
                 "node_id": r[0],
                 "field": r[1],
@@ -183,17 +195,22 @@ def list_drift_events(limit: int = 50) -> list[dict]:
             }
             for r in rows
         ]
+        return paginated(events, limit=limit, total=total)
     finally:
         twin.close()
 
 
 @vmware_tool(risk_level="low")
-def get_baseline_rules(baseline_id: str) -> list[dict]:
-    """[READ] Return all rules of a given baseline."""
+def get_baseline_rules(baseline_id: str) -> dict:
+    """[READ] Return all rules of a given baseline.
+
+    Returns the family list envelope. The whole baseline is loaded either way,
+    so `total` is the real rule count and `truncated` is always False.
+    """
     from vmware_harden.baselines.loader import load_builtin
 
     b = load_builtin(baseline_id)
-    return [
+    rules = [
         {
             "id": r.id,
             "title": r.title,
@@ -202,6 +219,7 @@ def get_baseline_rules(baseline_id: str) -> list[dict]:
         }
         for r in b.rules
     ]
+    return paginated(rules, total=len(rules))
 
 
 @vmware_tool(risk_level="medium")

@@ -9,7 +9,7 @@ startCommand:
     required: []
   commandFunction: |
     (config) => ({
-      command: "python",
-      args: ["-m", "mcp_server"],
+      command: "vmware-harden",
+      args: ["mcp"],
       env: config.db_path ? { VMWARE_HARDEN_DB: config.db_path } : {}
     })

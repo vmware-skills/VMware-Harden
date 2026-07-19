@@ -8,6 +8,8 @@
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
+- **Read-only against vSphere — and provable** (v1.8.0): all 6 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). With `VMWARE_READ_ONLY=true` the family read-only gate verifies that at startup instead of taking the docs' word for it, and the same variable strips write tools from every write-capable sibling. See [Read-only mode](#read-only-mode).
+
 ## GA family member (since v1.5.18)
 
 Production-ready compliance platform with **6 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**), **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
@@ -37,6 +39,37 @@ vmware-harden advise --all-critical
 # Web dashboard
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
+
+## Read-Only Mode
+
+vmware-harden is read-only by design — all 6 MCP tools carry the `[READ]` marker, and
+`scan_target` writes only to the local twin DB (a cache of observations, not managed
+infrastructure). Since v1.8.0 that is **provable rather than merely documented**: set
+`VMWARE_READ_ONLY=true` and the family read-only gate enumerates the registry at
+startup and verifies that zero write tools are exposed — structural, not a prompt
+instruction. **Off by default.** Fail-closed: if the mode is requested but cannot be
+guaranteed, the server refuses to start rather than running open.
+
+The same variable is family-wide: one env var also strips every write tool from the
+write-capable siblings (aiops, storage, vks, nsx, ...), so a whole-estate audit posture
+is a single setting.
+
+```json
+{
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "vmware-harden",
+      "args": ["mcp"],
+      "env": {
+        "VMWARE_READ_ONLY": "true"
+      }
+    }
+  }
+}
+```
+
+- **Per-skill override**: `VMWARE_HARDEN_READ_ONLY` beats the family-wide `VMWARE_READ_ONLY`. vmware-harden has no config.yaml, so the env vars are the only switch. Precedence: per-skill env → family env → off.
+- **Startup log**: nothing is logged as withheld because nothing is — the gate's empty result *is* the assertion (write-capable siblings log `Read-only mode active ... withheld N write tool(s)` instead).
 
 ## Built-in baselines
 
@@ -72,7 +105,7 @@ YAML supports `extends:` for inheriting from a built-in baseline. See `skills/vm
 ## MCP server
 
 ```bash
-vmware-harden-mcp  # stdio MCP server
+vmware-harden mcp  # stdio MCP server (legacy alias: vmware-harden-mcp)
 ```
 
 Configure your MCP client with one of `examples/mcp-configs/*.json`. 6 read-only tools: `list_baselines`, `list_violations`, `get_remediation`, `list_drift_events`, `get_baseline_rules`, `scan_target`.

@@ -1,8 +1,8 @@
 {
   "name": "vmware-harden",
   "description": "AI-native VMware compliance and baseline enforcement with LLM Remediation Advisor",
-  "command": "vmware-harden-mcp",
-  "args": [],
+  "command": "vmware-harden",
+  "args": ["mcp"],
   "env": {
     "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb"
   }

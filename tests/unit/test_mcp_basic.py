@@ -21,10 +21,10 @@ def test_list_baselines_tool_exposed():
 
 @pytest.mark.unit
 def test_list_baselines_returns_built_ins():
-    """list_baselines returns a list with our 4 known built-ins."""
+    """list_baselines envelopes a list holding our 4 known built-ins."""
     from vmware_harden.mcp.tools import list_baselines
 
-    out = list_baselines()
+    out = list_baselines()["items"]
     names = {b["id"] for b in out}
     assert "cis-vmware-esxi-8.0-subset" in names
     assert "dengbao-2.0-level3-vmware" in names

@@ -18,7 +18,7 @@ allowed-tools:
   - Bash
   - Read
   - Write
-metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-harden"],"config":["~/.vmware-harden/twin.duckdb"]},"primaryEnv":"VMWARE_HARDEN_DB"}}
+metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-harden"],"config":["~/.vmware-harden/twin.duckdb"]},"optional":{"env":["VMWARE_READ_ONLY","VMWARE_HARDEN_READ_ONLY","VMWARE_AUDIT_APPROVED_BY","VMWARE_AUDIT_RATIONALE","ANTHROPIC_API_KEY"],"bins":["vmware-policy"]},"primaryEnv":"VMWARE_HARDEN_DB","homepage":"https://github.com/zw008/VMware-Harden","os":["macos","linux"]}}
 ---
 
 # VMware Harden (Compliance & Baseline)
@@ -132,6 +132,8 @@ Use vmware-harden when the user needs to:
 
 All 6 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Actual remediation execution is intentionally **deferred to vmware-pilot** (approval-gated).
 
+**List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
+
 ## CLI Quick Reference
 
 ```bash
@@ -161,12 +163,12 @@ Don't use `uvx` for the MCP server in this environment. Use the entry point inst
 
 ```json
 {
-  "command": "vmware-harden-mcp",
-  "args": []
+  "command": "vmware-harden",
+  "args": ["mcp"]
 }
 ```
 
-This avoids `uvx` re-resolving PyPI through the corporate MitM proxy. As a workaround, `UV_NATIVE_TLS=true` lets uv use the system CA store. See CLAUDE.md 踩坑 #25.
+This avoids `uvx` re-resolving PyPI through the corporate MitM proxy. The legacy `vmware-harden-mcp` console script still works and is equivalent. As a workaround, `UV_NATIVE_TLS=true` lets uv use the system CA store. See CLAUDE.md 踩坑 #25.
 
 ### "Twin DB not found" on first MCP call
 Run at least one scan first: `vmware-harden scan --baseline cis-vmware-esxi-8.0-subset --target <t>`. The DuckDB file is created on first scan at `~/.vmware-harden/twin.duckdb` (override with `VMWARE_HARDEN_DB`).
@@ -187,6 +189,8 @@ Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in
 6. **Least privilege**: all 6 MCP tools are read-only. Remediation execution is intentionally not exposed — agents that need to apply a fix must invoke **vmware-pilot**, which provides approval gates and audit logging.
 
 All MCP operations are audited via the `@vmware_tool` decorator (vmware-policy dependency) to `~/.vmware/audit.db`. View with `vmware-audit log --last 20`.
+
+**Environment scoping**: policy rules apply per environment, and skills that connect to a VMware estate declare `environment:` per target in their `config.yaml`. Harden has no such config — it reads through vmware-aiops and writes only its local Twin DB — so it reports a constant `local`. `scan_target` is its only state-changing tool, and the state it changes is the snapshot in that local DB; its vCenter interaction is read-only collection. No harden tool mutates a remote VMware estate, so there is no production change for an environment-scoped rule to protect.
 
 > Full setup / security / AI platform compatibility: see [references/setup-guide.md](./references/setup-guide.md)
 

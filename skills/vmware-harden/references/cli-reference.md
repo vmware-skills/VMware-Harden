@@ -282,11 +282,13 @@ Use `doctor` as a non-zero gate in CI before running `scan` in pipelines.
 
 ## MCP server entry point
 
-Registered as a separate console script:
+Started as a CLI subcommand (a standalone console script is also registered
+for backward compatibility):
 
 ```bash
-vmware-harden-mcp        # FastMCP stdio server (used by MCP clients)
+vmware-harden mcp        # FastMCP stdio server (used by MCP clients)
+vmware-harden-mcp        # legacy alias — equivalent
 ```
 
-Configure your MCP client to spawn `vmware-harden-mcp` directly. See
+Configure your MCP client to spawn `vmware-harden` with `args: ["mcp"]`. See
 `references/setup-guide.md` for full client configurations.

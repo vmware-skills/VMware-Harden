@@ -32,11 +32,13 @@ How to install, configure, and wire `vmware-harden` into your AI agent.
 ```bash
 uv tool install vmware-harden
 vmware-harden --help
-vmware-harden-mcp --help   # MCP server entry point (separate console script)
+vmware-harden mcp --help   # MCP server (CLI subcommand — recommended)
 ```
 
-This installs both `vmware-harden` (CLI) and `vmware-harden-mcp` (MCP
-stdio server) into a single isolated venv that `uv tool` manages.
+This installs `vmware-harden` into a single isolated venv that `uv tool`
+manages. The MCP stdio server is the `vmware-harden mcp` subcommand; the
+standalone `vmware-harden-mcp` console script is also installed and remains
+supported for backward compatibility.
 
 ### Source install (development)
 
@@ -122,9 +124,11 @@ When the variable is unset, the advisor uses `MockProvider` and prints
 
 ## MCP client setup
 
-The MCP server is a single console script: `vmware-harden-mcp`.
-Spawning the entry point directly (rather than `uvx --from ...`) avoids
-re-resolving PyPI on every launch and is **strongly recommended in
+The MCP server is started with the CLI subcommand `vmware-harden mcp`
+(the standalone `vmware-harden-mcp` console script remains available and
+is equivalent — it is kept for backward compatibility).
+Spawning the installed entry point directly (rather than `uvx --from ...`)
+avoids re-resolving PyPI on every launch and is **strongly recommended in
 corporate environments with TLS proxies** — see the workaround section
 below.
 
@@ -140,8 +144,8 @@ Claude Desktop config:
 {
   "mcpServers": {
     "vmware-harden": {
-      "command": "vmware-harden-mcp",
-      "args": [],
+      "command": "vmware-harden",
+      "args": ["mcp"],
       "env": {
         "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb"
       }
@@ -158,7 +162,8 @@ Claude Desktop config:
 {
   "mcpServers": {
     "vmware-harden": {
-      "command": "vmware-harden-mcp",
+      "command": "vmware-harden",
+      "args": ["mcp"],
       "env": { "VMWARE_HARDEN_DB": "~/.vmware-harden/twin.duckdb" }
     }
   }
@@ -167,8 +172,8 @@ Claude Desktop config:
 
 ### Cline / Continue / Goose / VS Code Copilot
 
-Use the same `command: vmware-harden-mcp` shape; consult the agent's
-own MCP docs for the precise key names. Ready-made templates are in
+Use the same `command: vmware-harden` + `args: ["mcp"]` shape; consult the
+agent's own MCP docs for the precise key names. Ready-made templates are in
 `examples/mcp-configs/`.
 
 ## Multi-target Twin
@@ -287,3 +292,12 @@ Python 3.10+ (e.g. `uv python install 3.12`) and re-install
 - **Audit log**: every MCP tool call is recorded by the `@vmware_tool`
   decorator into `~/.vmware/audit.db` (SQLite WAL via `vmware-policy`).
   View with `vmware-audit log --last 20`.
+- **Environment scoping**: policy rules scope by environment, and skills that
+  connect to a VMware estate declare `environment:` (`production` / `staging` /
+  `lab`) per target in their own `config.yaml`; a target that declares none is
+  treated as unknown, and state-changing operations against it currently log a
+  warning — **the next major release will refuse them**. Harden has no such
+  config and needs no declaration: it reports a constant `local`. That is
+  accurate rather than an exemption — `scan_target` is its only state-changing
+  tool and the state it changes is the snapshot in the local Twin DB, its
+  vCenter interaction being read-only collection.
