@@ -23,6 +23,12 @@ vSphere/NSX resource is ever modified by this skill.
 because it triggers heavy upstream I/O (vSphere/NSX collectors) and
 writes a snapshot to local DuckDB. It does **not** modify the target.
 
+> **Read-only mode**: `VMWARE_READ_ONLY=true` removes every `[WRITE]` tool from
+> `list_tools()`. This skill has none, so all 6 tools above stay available —
+> including `scan_target`, whose writes go to the local twin DB rather than to
+> managed infrastructure. Classification comes from each tool's `[READ]`/
+> `[WRITE]` docstring marker, not from this table — see the README.
+
 ## Tool 1: `list_baselines`
 
 ### Signature

@@ -134,6 +134,10 @@ All 6 tools are **read-only** with respect to vSphere/NSX. Writes to the local T
 
 **List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
 
+## Read-Only Mode
+
+All 6 tools here are reads, so read-only mode withholds nothing — but `VMWARE_READ_ONLY=true` (or `VMWARE_HARDEN_READ_ONLY`; this skill has no config.yaml, so the env vars are the only switch) still applies, and the gate verifies at start-up that zero write tools are exposed rather than taking this document's word for it. `scan_target` survives deliberately: it is read-only *against vSphere/NSX*, and the rows it writes go only to the local twin DB, which the gate's contract treats as a cache of its own observations rather than managed infrastructure. The same variable withholds write tools across every companion skill, so a whole-estate audit posture is one setting.
+
 ## CLI Quick Reference
 
 ```bash

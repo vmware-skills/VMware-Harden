@@ -78,6 +78,46 @@ def _check_anthropic_key() -> DiagnosticResult:
     )
 
 
+def _check_read_only() -> DiagnosticResult:
+    """Report the resolved read-only state and where it came from.
+
+    Never an error — read-only being on is a posture, not a fault. It is here
+    because an operator who set the switch had no way to confirm it took: the
+    only signal was a line in the MCP server's start-up log, and this skill
+    does not even log that (it has nothing to withhold, so the gate's empty
+    result is silent).
+
+    ``config_flag`` is ``None`` because vmware-harden has no config loader —
+    the environment variables are the only switch. That matches the
+    ``apply_read_only_gate(server, "vmware-harden", config_flag=None)`` call in
+    ``mcp_server/server.py``; a doctor that disagrees with the gate it reports
+    on is worse than no doctor.
+    """
+    from vmware_policy.readonly import read_only_status
+
+    status = read_only_status("vmware-harden", None)
+    if not status.recognised:
+        return DiagnosticResult(
+            "Read-only mode",
+            "warn",
+            f"{status.source}={status.raw!r} is not a recognised value. It resolves "
+            f"to ON (fail-closed) — probably not what was intended. "
+            f"Use true or false.",
+        )
+    if status.enabled:
+        return DiagnosticResult(
+            "Read-only mode",
+            "ok",
+            f"ON (from {status.source}) — no write tools exist here; "
+            f"the gate verifies that at start-up",
+        )
+    return DiagnosticResult(
+        "Read-only mode",
+        "ok",
+        f"off (from {status.source}) — nothing to withhold; all 6 tools are reads",
+    )
+
+
 def _check_audit_db_writable() -> DiagnosticResult:
     path = Path(os.path.expanduser("~/.vmware/audit.db")).parent
     if path.exists() and os.access(path, os.W_OK):
@@ -125,4 +165,5 @@ def run_diagnostics() -> list[DiagnosticResult]:
             absent_hint="optional — `vmware-harden apply --pilot real` requires it",
         ),
         _check_audit_db_writable(),
+        _check_read_only(),
     ]

@@ -1,6 +1,6 @@
 [project]
 name = "vmware-harden"
-version = "1.8.0"
+version = "1.8.1"
 description = "AI-native VMware compliance and baseline enforcement"
 readme = "README.md"
 license = "MIT"
@@ -12,7 +12,7 @@ dependencies = [
     "duckdb>=0.10,<2.0",
     "pyyaml>=6.0,<7.0",
     # Reserved for v1.1 MCP integration (@vmware_tool decorator + audit logging).
-    "vmware-policy>=1.8.0,<2.0",
+    "vmware-policy>=1.8.1,<2.0",
     "fastapi>=0.110,<1.0",
     "uvicorn[standard]>=0.27,<1.0",
     "jinja2>=3.1,<4.0",

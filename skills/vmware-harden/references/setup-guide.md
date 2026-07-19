@@ -261,6 +261,61 @@ The `mcp_cmd()` guard exits 1 when run on Python 3.9 or earlier. Install
 Python 3.10+ (e.g. `uv python install 3.12`) and re-install
 `vmware-harden` against that interpreter.
 
+## Read-Only Mode
+
+All 6 of this skill's tools are already read-only with respect to vSphere and
+NSX, so read-only mode withholds nothing here. Turning it on is still
+meaningful: the family gate enumerates the registry at start-up and *verifies*
+that zero write tools are exposed, rather than trusting the documentation. It is
+**off by default**. Two ways to turn it on, highest precedence first:
+
+| Priority | Switch | Scope |
+|:-:|---|---|
+| 1 | `VMWARE_HARDEN_READ_ONLY=true` | this skill only |
+| 2 | `VMWARE_READ_ONLY=true` | every installed VMware skill |
+| 3 | *(nothing set)* | off |
+
+**vmware-harden has no `config.yaml`, so the environment variables are the only
+switch** — there is no `read_only:` config key to set, and a file created to
+hold one would never be read. A per-skill variable beats the family-wide one.
+Setting the family variable once puts the whole estate into an audit posture,
+including the write-capable siblings this skill collects from:
+
+```json
+{
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "vmware-harden",
+      "args": ["mcp"],
+      "env": { "VMWARE_READ_ONLY": "true" }
+    }
+  }
+}
+```
+
+**Fail-closed.** If the mode is requested but cannot be *proven* — the tool
+registry cannot be enumerated, or a removal does not take effect — the server
+refuses to start rather than serving write tools it promised to withhold. One
+deliberate exception: an unrecognised value (`VMWARE_READ_ONLY=ture`) does not
+abort. It resolves to **on** with a warning, so a typo locks the deployment
+down instead of leaving it open.
+
+**Verifying it took effect:**
+
+- `vmware-harden doctor` reports the resolved state *and which switch it came
+  from* — including a distinct warning when the value was a typo that fell
+  through to on.
+- Nothing is logged as withheld at start-up, because nothing is: the gate's
+  empty result *is* the assertion. Write-capable siblings log
+  `Read-only mode active ... withheld N write tool(s)` instead.
+- A blank value (`"VMWARE_READ_ONLY": ""`) counts as *unset*, not as an
+  explicit off.
+
+Note that `scan_target` remains exposed in read-only mode. It reaches vCenter
+and NSX for collection only, and the rows it writes land in the local Twin
+DuckDB — a cache of its own observations, which the gate's contract explicitly
+distinguishes from managed infrastructure.
+
 ## Security
 
 > **Disclaimer**: This is a community-maintained open-source project and
