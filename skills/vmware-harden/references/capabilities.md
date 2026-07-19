@@ -1,7 +1,7 @@
 # Capabilities
 
 Detailed reference for every MCP tool exposed by `vmware-harden-mcp`.
-Source of truth: `mcp_server/server.py`.
+Source of truth: `vmware_harden/mcp_server/server.py`.
 
 ## Automation Level Reference
 

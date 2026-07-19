@@ -55,7 +55,7 @@ For platforms that prefer containerized MCP servers (e.g., Smithery registry, Ku
 
 #### Docker
 
-Build and run the MCP server in a container. The image uses `python:3.12-slim` with `uv` for dependency installation and runs `python -m mcp_server` on stdio (no port exposed — MCP uses stdin/stdout).
+Build and run the MCP server in a container. The image uses `python:3.12-slim` with `uv` for dependency installation and runs `python -m vmware_harden.mcp_server` on stdio (no port exposed — MCP uses stdin/stdout).
 
 ```bash
 git clone https://github.com/zw008/VMware-Harden.git
@@ -71,7 +71,7 @@ docker run -i --rm \
   vmware-harden-mcp
 ```
 
-The container's `CMD` is `python -m mcp_server`, which is wired through `mcp_server/__main__.py` to the same FastMCP entry point as the installed `vmware-harden-mcp` console script. All 6 read-only tools are available.
+The container's `CMD` is `python -m vmware_harden.mcp_server`, which is wired through `vmware_harden/mcp_server/__main__.py` to the same FastMCP entry point as the installed `vmware-harden-mcp` console script. All 6 read-only tools are available.
 
 Note: `scan_target` relies on the upstream `vmware-aiops` collectors. To
 run scans from inside the container, mount the upstream skill's config
@@ -86,7 +86,7 @@ was scanned on the host.
 
 - `startCommand.type: stdio` — Smithery launches the server over stdio
 - `configSchema.properties.db_path` — optional override for the Twin DuckDB file location
-- `commandFunction` — invokes `python -m mcp_server` with `VMWARE_HARDEN_DB` set from the user's Smithery config
+- `commandFunction` — invokes `vmware-harden mcp` with `VMWARE_HARDEN_DB` set from the user's Smithery config
 
 Users can install via the Smithery UI or CLI without managing Python environments locally. Smithery handles the container build and stdio bridge automatically.
 

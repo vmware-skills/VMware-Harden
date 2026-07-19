@@ -6,13 +6,15 @@
 
 > **Disclaimer**: Community-maintained open-source project. **Not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware", "vSphere", "ESXi", and "NSX" are trademarks of Broadcom. Source code is publicly auditable at [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden) under the MIT license.
 
+English | [中文](README-CN.md)
+
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
 - **Read-only against vSphere — and provable** (v1.8.0): all 6 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). With `VMWARE_READ_ONLY=true` the family read-only gate verifies that at startup instead of taking the docs' word for it, and the same variable strips write tools from every write-capable sibling. See [Read-only mode](#read-only-mode).
 
 ## GA family member (since v1.5.18)
 
-Production-ready compliance platform with **6 built-in baselines** (CIS ESXi, vSphere SCG v8, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**), **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
+Production-ready compliance platform with **8 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
 
 ## Quickstart
 
@@ -81,10 +83,15 @@ is a single setting.
 | `pci-dss-4.0-vmware` | 10 | host, dfw_rule | PCI-DSS v4.0 |
 | `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 Directive (Articles 21/23, Annex I) |
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz (OPS.1.1.4 + SYS.1.1) |
+| `cis-vmware-esxi-9.0-subset` | 20 | host | Inherits `cis-vmware-esxi-8.0-subset` via `extends:` |
+| `vsphere-scg-v9-subset` | 15 | host, vm | Inherits `vsphere-scg-v8-subset` via `extends:` |
+
+`baseline list` returns 8 IDs: the 6 rule-bearing baselines above (87 rules total) plus the
+two v9 aliases, which carry no rules of their own and resolve to their v8 parent's.
 
 ### VCF 9.0 / 9.1 Compatibility
 
-The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0` and `vsphere-scg-v9` baselines are planned for a future release.
+The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0-subset` and `vsphere-scg-v9-subset` ship today as `extends:` aliases of their v8 parents — same rules, a v9-named ID to scan and report under. Rules specific to 9.x will be added to them as Broadcom publishes the v9 guides.
 
 #### Official Broadcom References
 
@@ -143,15 +150,13 @@ pytest tests/eval/regression -v -m lab
 - All 6 MCP tools audited
 - SKILL.md ≤ 3000 words, family-convention compliant
 - SECURITY.md with 6 elements + Broadcom disclaimer
-- 6 built-in baselines (87 rules)
+- 8 built-in baselines (87 rules across 6 rule-bearing sets + 2 v9 aliases)
 - `vmware-harden doctor` for environment diagnostics
 - GA member of vmware-* family (version-aligned at 1.5.28)
 
 ## References
 
-- Design: parent monorepo `docs/plans/2026-05-03-vmware-harden-design.md`
-- M1/M2/M3 plans: `docs/plans/2026-05-04-vmware-harden-{m1,m2,m3}-plan.md`
-- Family CLAUDE.md: `/Users/zw/testany/myskills/CLAUDE.md`
+- Family CLAUDE.md: `CLAUDE.md` at the monorepo root
 
 ## License
 

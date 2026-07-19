@@ -33,7 +33,7 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 
 | Category | Tools | Count | Read or Write |
 |----------|-------|-------|---------------|
-| Baseline Management | 6 built-in baselines (CIS ESXi 8.0, vSphere SCG v8, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 6+N | Read |
+| Baseline Management | 8 built-in baselines (CIS ESXi 8.0/9.0, vSphere SCG v8/v9, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 8+N | Read |
 | Scanning | Multi-collector (vCenter, ESXi, NSX, vSAN, K8s) → typed Twin store | 1 pipeline | Read (no target writes) |
 | Drift Detection | Snapshot-to-snapshot configuration diff (per-node added/removed/changed fields) | 1 type | Read |
 | Remediation Advisor | LLM-driven (Anthropic) suggestions per violation; mock fallback when no key | 1 advisor | Read |
@@ -136,7 +136,7 @@ All 6 tools are **read-only** with respect to vSphere/NSX. Writes to the local T
 
 ## Read-Only Mode
 
-All 6 tools here are reads, so read-only mode withholds nothing — but `VMWARE_READ_ONLY=true` (or `VMWARE_HARDEN_READ_ONLY`; this skill has no config.yaml, so the env vars are the only switch) still applies, and the gate verifies at start-up that zero write tools are exposed rather than taking this document's word for it. `scan_target` survives deliberately: it is read-only *against vSphere/NSX*, and the rows it writes go only to the local twin DB, which the gate's contract treats as a cache of its own observations rather than managed infrastructure. The same variable withholds write tools across every companion skill, so a whole-estate audit posture is one setting.
+All 6 tools here are reads, so read-only mode withholds nothing — but `VMWARE_READ_ONLY=true` (or `VMWARE_HARDEN_READ_ONLY`; this skill has no config.yaml, so the env vars are the only switch) still applies, and the gate verifies at start-up that zero write tools are exposed rather than taking this document's word for it. `scan_target` survives deliberately: it is read-only *against vSphere/NSX*, and the rows it writes go only to the local twin DB, which the gate's contract treats as a cache of its own observations rather than managed infrastructure. The same variable withholds write tools across every companion skill, so a whole-estate audit posture is one setting. Running with local or small models? See [`references/agent-guardrails.md`](references/agent-guardrails.md).
 
 ## CLI Quick Reference
 

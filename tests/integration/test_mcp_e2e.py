@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_server import server as srv
+from vmware_harden.mcp_server import server as srv
 
 
 @pytest.mark.integration

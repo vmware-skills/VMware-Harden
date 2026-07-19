@@ -90,7 +90,7 @@ def _check_read_only() -> DiagnosticResult:
     ``config_flag`` is ``None`` because vmware-harden has no config loader —
     the environment variables are the only switch. That matches the
     ``apply_read_only_gate(server, "vmware-harden", config_flag=None)`` call in
-    ``mcp_server/server.py``; a doctor that disagrees with the gate it reports
+    ``vmware_harden/mcp_server/server.py``; a doctor that disagrees with the gate it reports
     on is worse than no doctor.
     """
     from vmware_policy.readonly import read_only_status

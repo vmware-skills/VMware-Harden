@@ -1,7 +1,7 @@
 """MCP server scaffold + first tool tests."""
 import pytest
 
-from mcp_server.server import build_server
+from vmware_harden.mcp_server.server import build_server
 
 
 @pytest.mark.unit
@@ -35,6 +35,6 @@ def test_list_baselines_returns_built_ins():
 @pytest.mark.unit
 def test_main_function_exists():
     """The `main` entry point function exists (踩坑 #17 defense)."""
-    from mcp_server.server import main
+    from vmware_harden.mcp_server.server import main
 
     assert callable(main)

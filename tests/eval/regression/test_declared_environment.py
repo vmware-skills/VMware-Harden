@@ -30,7 +30,7 @@ from unittest.mock import patch
 import pytest
 
 import vmware_policy.environment as env_mod
-from mcp_server import server
+from vmware_harden.mcp_server import server
 from vmware_policy.environment import resolve_environment, set_environment_resolver
 from vmware_policy.policy import get_policy_engine, reset_policy_engine
 
@@ -71,7 +71,7 @@ class TestConstantResolverIsRegistered:
         importlib.reload(server)
 
         assert env_mod._resolver is not None, (
-            "mcp_server.server must call set_environment_resolver() at import. "
+            "vmware_harden.mcp_server.server must call set_environment_resolver() at import. "
             "Without it every harden scan reads as undeclared — invisible under "
             "today's warn setting, and a total block once enforcement lands."
         )
