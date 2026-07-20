@@ -5,6 +5,7 @@ This module wires them into a FastMCP server and provides the stdio entry point.
 """
 import logging
 import os
+import ssl
 from pathlib import Path
 from typing import Optional
 
@@ -100,8 +101,20 @@ _HINT_SCAN = (
 #:
 #: ``RuntimeError`` is deliberately absent. It is Python's generic catch-all, so
 #: allowing it through would pass any library's raw text as if this package had
-#: written it. ``cli/runner.py`` does raise one with an authored message; that
-#: site wants a domain exception of its own rather than a hole here.
+#: written it. ``cli/runner.py`` used to raise one with an authored message,
+#: which the mask then swallowed; that site now raises
+#: ``CollectorDependencyError`` — a domain exception of its own, listed below,
+#: rather than a hole here.
+#:
+#: Bare ``OSError`` is absent too, and must stay absent. The family briefly
+#: allowed it so one missing-credential message could pass; the tuple is
+#: type-based, so that also passed ``ssl.SSLCertVerificationError`` (certificate
+#: subject and hostname), ``socket.gaierror`` (the name that failed to resolve)
+#: and every ``ConnectionError`` subclass carrying a full URL — none of it
+#: authored here. This skill raises no ``OSError`` of its own, so there is
+#: nothing for such an entry to let through except other libraries' text. The
+#: narrower ``FileNotFoundError`` / ``PermissionError`` entries below predate
+#: that and stay: both are raised here with authored messages.
 _TEACHING_ERRORS = (
     FileNotFoundError,
     ValueError,
@@ -126,16 +139,33 @@ def _domain_errors() -> tuple[type[Exception], ...]:
     withhold.
     """
     from vmware_harden.advisor.advisor import AdvisorError
-    from vmware_harden.collectors.base import CollectorError
+    from vmware_harden.collectors.base import CollectorDependencyError, CollectorError
     from vmware_harden.pilot.client import PilotSubmissionError
 
-    return (AdvisorError, CollectorError, PilotSubmissionError)
+    return (AdvisorError, CollectorDependencyError, CollectorError, PilotSubmissionError)
+
+
+#: Types that satisfy the allowlist by inheritance without this package having
+#: authored a word of their message. Checked first, so inheritance cannot vote
+#: them back in.
+#:
+#: ``ssl.SSLCertVerificationError`` is the one that matters:
+#: CPython declares it ``SSLCertVerificationError(SSLError, ValueError)``, so it
+#: is an ``OSError`` *and* a ``ValueError``. Dropping bare ``OSError`` from an
+#: allowlist therefore does not stop it — any allowlist naming ``ValueError``
+#: still passes the certificate subject and the server hostname through
+#: verbatim. A self-signed vCenter certificate is this family's most common
+#: connection failure, and ``scan_target`` reaches a vCenter, so this is a live
+#: path here rather than a hypothetical one.
+_NEVER_TEACHING = (ssl.SSLError,)
 
 
 def _safe_error(exc: Exception, tool: str) -> str:
     """Return an agent-safe error string; log full detail server-side only."""
     logger.error("Tool %s failed", tool, exc_info=True)
 
+    if isinstance(exc, _NEVER_TEACHING):
+        return f"{type(exc).__name__}: operation failed."
     if isinstance(exc, (*_TEACHING_ERRORS, *_domain_errors())):
         # 500, not the 300 used elsewhere in the family: these messages
         # interpolate two absolute baseline paths before reaching the remedy,

@@ -8,7 +8,7 @@ import typer
 from vmware_harden.baselines.loader import load_builtin
 from vmware_harden.baselines.model import Baseline
 from vmware_harden.checks.runner import CheckRunner
-from vmware_harden.collectors.base import Collector
+from vmware_harden.collectors.base import Collector, CollectorDependencyError
 from vmware_harden.collectors.datastores import DatastoreCollector
 from vmware_harden.collectors.dfw import DFWCollector
 from vmware_harden.collectors.hosts import HostCollector
@@ -89,7 +89,11 @@ def run_scan(target: str, baseline: str, db: str) -> str:
         except ModuleNotFoundError as e:
             twin.finish_snapshot(snap_id, status="failed")
             pkg = (e.name or "dependency").replace("_", "-")
-            raise RuntimeError(
+            # Not RuntimeError: this message is authored, but RuntimeError is
+            # Python's generic catch-all and is deliberately off the MCP
+            # allowlist, so raising one here reduced the whole instruction to
+            # "RuntimeError: operation failed." on the scan_target surface.
+            raise CollectorDependencyError(
                 f"{pkg} not installed — install it with `uv tool install {pkg}` "
                 f"(collector dependency for baseline {baseline!r}). "
                 f"Snapshot {snap_id} was marked 'failed' and is excluded from "

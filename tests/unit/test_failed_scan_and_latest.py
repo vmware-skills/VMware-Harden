@@ -68,15 +68,22 @@ def test_failed_scan_marks_snapshot_failed(tmp_path: Path):
 
 @pytest.mark.unit
 def test_scan_missing_dependency_teaching_error(tmp_path: Path):
-    """#8 — ImportError of a collector dependency yields an actionable message."""
+    """#8 — ImportError of a collector dependency yields an actionable message.
+
+    The type matters as much as the text. This used to raise ``RuntimeError``,
+    which ``_safe_error`` deliberately refuses to pass through, so the whole
+    instruction arrived at the agent as ``RuntimeError: operation failed.`` —
+    see ``test_safe_error_passthrough`` for the wrapper half of this.
+    """
     from vmware_harden.cli.runner import run_scan
+    from vmware_harden.collectors.base import CollectorDependencyError
 
     db = str(tmp_path / "t.duckdb")
     with patch(
         "vmware_harden.collectors.hosts._fetch_hosts",
         side_effect=ModuleNotFoundError("No module named 'vmware_aiops'", name="vmware_aiops"),
     ):
-        with pytest.raises(RuntimeError) as exc:
+        with pytest.raises(CollectorDependencyError) as exc:
             run_scan(target="lab", baseline="cis-vmware-esxi-8.0-subset", db=db)
     msg = str(exc.value)
     assert "vmware-aiops" in msg
