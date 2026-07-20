@@ -1,0 +1,243 @@
+{
+  "_comment": "Capability eval scores. Regenerate with: pytest -m capability. These are tracked trends, not pass/fail gates \u2014 see _scoring.py.",
+  "scores": {
+    "entity_reachability_full": {
+      "detail": {
+        "broken_chains": [],
+        "entry_points": [
+          "list_baselines",
+          "list_violations",
+          "list_drift_events",
+          "scan_target"
+        ],
+        "reachable_on_surface": 2,
+        "reachable_only_via_description": 0,
+        "required_entity_params": 2,
+        "required_params_classified": "2/3",
+        "tool_count": 6
+      },
+      "maximum": 2,
+      "pct": 100.0,
+      "unit": "required entity params",
+      "value": 2
+    },
+    "entity_reachability_read_only": {
+      "detail": {
+        "broken_chains": [],
+        "entry_points": [
+          "list_baselines",
+          "list_violations",
+          "list_drift_events",
+          "scan_target"
+        ],
+        "reachable_on_surface": 2,
+        "reachable_only_via_description": 0,
+        "required_entity_params": 2,
+        "required_params_classified": "2/3",
+        "tool_count": 6
+      },
+      "maximum": 2,
+      "pct": 100.0,
+      "unit": "required entity params",
+      "value": 2
+    },
+    "entry_point_availability": {
+      "detail": {
+        "full_entry_points": 4,
+        "read_only_entry_points": 4
+      },
+      "maximum": 6,
+      "pct": 66.7,
+      "unit": "entry points",
+      "value": 4
+    },
+    "error_actionability": {
+      "detail": {
+        "dead_end_count": 9,
+        "dead_end_errors": [
+          {
+            "message": "violation not found: {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "advisor.py:59"
+          },
+          {
+            "message": "failed to parse LLM JSON: {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "advisor.py:68"
+          },
+          {
+            "message": "LLM output failed schema: {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "advisor.py:72"
+          },
+          {
+            "message": "Baseline {} not found in {} or {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "loader.py:83"
+          },
+          {
+            "message": "{}: {} record missing required field {}; target={}, record={}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "base.py:47"
+          },
+          {
+            "message": "Invalid severity {}. Valid values: {}. Omit the parameter to list violations of all severities.",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "tools.py:80"
+          },
+          {
+            "message": "MockPilotClient configured to raise",
+            "missing": [
+              "names_artifact",
+              "names_input",
+              "states_remedy"
+            ],
+            "where": "client.py:40"
+          },
+          {
+            "message": "pilot.executor failed: {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "client.py:156"
+          },
+          {
+            "message": "pilot.store failed: {}",
+            "missing": [
+              "names_artifact",
+              "states_remedy"
+            ],
+            "where": "client.py:149"
+          }
+        ],
+        "per_dimension_pct": {
+          "names_artifact": 12.5,
+          "names_input": 87.5,
+          "states_remedy": 43.8
+        },
+        "raise_sites": 16
+      },
+      "maximum": 48,
+      "pct": 47.9,
+      "unit": "points",
+      "value": 23
+    },
+    "manifest_context_headroom": {
+      "detail": {
+        "heaviest_tools": {
+          "get_baseline_rules": 163,
+          "list_baselines": 147,
+          "list_drift_events": 176,
+          "list_violations": 249,
+          "scan_target": 182
+        },
+        "manifest_tokens": 1054,
+        "mean_tokens_per_tool": 175.7,
+        "reference_context": 16384,
+        "tool_count": 6
+      },
+      "maximum": 16384,
+      "pct": 93.6,
+      "unit": "tokens",
+      "value": 15330
+    },
+    "parameter_documentation_coverage": {
+      "detail": {
+        "undocumented_by_tool": {}
+      },
+      "maximum": 8,
+      "pct": 100.0,
+      "unit": "parameters",
+      "value": 8
+    },
+    "per_tool_token_discipline": {
+      "detail": {
+        "ceiling": 350,
+        "over_ceiling": {}
+      },
+      "maximum": 6,
+      "pct": 100.0,
+      "unit": "tools",
+      "value": 6
+    },
+    "read_only_manifest_saving": {
+      "detail": {
+        "full_manifest_tokens": 1054,
+        "full_tool_count": 6,
+        "gated_manifest_tokens": 1054,
+        "gated_tool_count": 6,
+        "withheld_tools": []
+      },
+      "maximum": 1054,
+      "pct": 0.0,
+      "unit": "tokens",
+      "value": 0
+    },
+    "read_write_marker_coverage": {
+      "detail": {
+        "unmarked": []
+      },
+      "maximum": 6,
+      "pct": 100.0,
+      "unit": "points",
+      "value": 6
+    },
+    "teaching_error_rate": {
+      "detail": {},
+      "maximum": 16,
+      "pct": 12.5,
+      "unit": "messages",
+      "value": 2
+    },
+    "tool_description_quality": {
+      "detail": {
+        "per_dimension_pct": {
+          "args": 100.0,
+          "gotcha": 100.0,
+          "marker": 100.0,
+          "next_hop": 100.0,
+          "what": 100.0,
+          "when": 50.0
+        },
+        "tools_graded": 6,
+        "weakest_tools": {
+          "get_baseline_rules": [
+            "when"
+          ],
+          "get_remediation": [
+            "when"
+          ],
+          "list_baselines": [],
+          "list_drift_events": [],
+          "list_violations": [],
+          "scan_target": [
+            "when"
+          ]
+        }
+      },
+      "maximum": 36,
+      "pct": 91.7,
+      "unit": "points",
+      "value": 33
+    }
+  }
+}

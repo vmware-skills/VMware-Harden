@@ -52,4 +52,6 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests with mocked external systems",
     "lab: Tests requiring real VMware lab environment",
+    "capability: Capability evals — scored trends, not pass/fail gates. Excluded from the default run (they measure quality, so <100% is expected and must not read as a broken build). Run them with: pytest -m capability",
 ]
+addopts = "-m 'not capability'"
