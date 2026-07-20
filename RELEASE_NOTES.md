@@ -1,3 +1,9 @@
+## v1.8.3 (2026-07-20) — credentials resolve as a pair; documented env vars now exist
+
+### Changed — version alignment
+
+No functional change in this skill. The family release adds an env-var override for the per-target username in the credential-bearing skills; this package has no per-target credentials.
+
 ## v1.8.2 (2026-07-20) — the MCP server moves into the package namespace
 
 ### Fixed — co-installing two skills broke all but the last one
