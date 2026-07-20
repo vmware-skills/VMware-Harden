@@ -3,14 +3,17 @@
 Tools are defined in vmware_harden.mcp.tools (so audit logs see skill=harden).
 This module wires them into a FastMCP server and provides the stdio entry point.
 """
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from vmware_policy import apply_read_only_gate, set_environment_resolver
+from vmware_policy import apply_read_only_gate, sanitize, set_environment_resolver
 
 from vmware_harden.mcp import tools as t
+
+logger = logging.getLogger("mcp_server")
 
 #: Names withheld by the most recent :func:`build_server` call. The gate runs
 #: inside the factory (this server has no module-level instance), so the result
@@ -61,6 +64,87 @@ _READ_LOCAL = {
 _READ_REMOTE = {**_READ_LOCAL, "openWorldHint": True}
 
 
+#: Per-tool recovery hints returned alongside a caught error. Each names
+#: something the caller can actually run — a tool on this surface, or this
+#: skill's CLI — because the underlying exception text alone leaves a weak model
+#: with a diagnosis and no next step.
+_HINT_BASELINES = (
+    "Baselines are parsed from local YAML only. Check that "
+    "~/.vmware-harden/baselines/ is readable with `vmware-harden doctor`."
+)
+_HINT_VIOLATIONS = (
+    "Run scan_target first if no scan has been recorded; otherwise check the "
+    "twin DB at ~/.vmware-harden/twin.duckdb with `vmware-harden doctor`."
+)
+_HINT_REMEDIATION = (
+    "Pass an exact 'id' from list_violations. If no suggestion exists yet, "
+    "generate one with `vmware-harden advise --violation-id <id>`."
+)
+_HINT_DRIFT = (
+    "Drift needs two scans of the same target — run scan_target again, then "
+    "retry. Check the twin DB with `vmware-harden doctor`."
+)
+_HINT_BASELINE_RULES = (
+    "Run list_baselines (or `vmware-harden baseline list`) and copy an exact "
+    "baseline id."
+)
+_HINT_SCAN = (
+    "Verify the target name and vCenter credentials with `vmware-harden "
+    "doctor`, and copy a valid baseline id from list_baselines."
+)
+
+#: Builtin exception types this package raises on purpose, whose messages it
+#: authors and therefore trusts to reach the agent verbatim. Anything else is
+#: masked: raw vCenter response bodies and filesystem paths must not leak into
+#: the model's context.
+#:
+#: ``RuntimeError`` is deliberately absent. It is Python's generic catch-all, so
+#: allowing it through would pass any library's raw text as if this package had
+#: written it. ``cli/runner.py`` does raise one with an authored message; that
+#: site wants a domain exception of its own rather than a hole here.
+_TEACHING_ERRORS = (
+    FileNotFoundError,
+    ValueError,
+    KeyError,
+    NotImplementedError,
+    PermissionError,
+    ConnectionError,
+)
+
+
+def _domain_errors() -> tuple[type[Exception], ...]:
+    """Exception types this package defines to carry a corrected next step.
+
+    Imported at call time, not module scope: a failing tool is the only moment
+    these are needed, and the advisor pulls in pydantic while the pilot client
+    reaches for vmware-pilot — neither belongs on the server's import path.
+
+    ``web.app.DatabaseBusyError`` is absent on purpose. It is unreachable from
+    this surface (no tool imports the dashboard, which would drag FastAPI and
+    Jinja2 in with it), and its message is ``str(duckdb_error)`` — upstream text
+    rather than authored text, which is the category this allowlist exists to
+    withhold.
+    """
+    from vmware_harden.advisor.advisor import AdvisorError
+    from vmware_harden.collectors.base import CollectorError
+    from vmware_harden.pilot.client import PilotSubmissionError
+
+    return (AdvisorError, CollectorError, PilotSubmissionError)
+
+
+def _safe_error(exc: Exception, tool: str) -> str:
+    """Return an agent-safe error string; log full detail server-side only."""
+    logger.error("Tool %s failed", tool, exc_info=True)
+
+    if isinstance(exc, (*_TEACHING_ERRORS, *_domain_errors())):
+        # 500, not the 300 used elsewhere in the family: these messages
+        # interpolate two absolute baseline paths before reaching the remedy,
+        # and truncating at 300 cut the remedy off mid-word — the one part of
+        # the message the model actually needs.
+        return sanitize(str(exc), 500)
+    return f"{type(exc).__name__}: operation failed."
+
+
 def _environment_for(target: Optional[str]) -> str:
     """Report the environment for policy scoping. Always ``local`` — see above."""
     return LOCAL_ENVIRONMENT
@@ -90,7 +174,10 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         Read-only — parses local baseline YAML only, no database or network
         access. Start here to discover valid baseline ids for get_baseline_rules
         and scan_target."""
-        return t.list_baselines()
+        try:
+            return t.list_baselines()
+        except Exception as e:
+            return {"error": _safe_error(e, "list_baselines"), "hint": _HINT_BASELINES}
 
     @server.tool(name="list_violations", annotations=_READ_LOCAL)
     def _list_violations_impl(
@@ -108,7 +195,10 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         offset while has_more is true. Empty envelope (total 0) when no scan exists
         — run scan_target first. Read-only local DB query, no network calls. Pass a
         row's 'id' to get_remediation for a fix plan."""
-        return t.list_violations(severity, limit=limit, offset=offset)
+        try:
+            return t.list_violations(severity, limit=limit, offset=offset)
+        except Exception as e:
+            return {"error": _safe_error(e, "list_violations"), "hint": _HINT_VIOLATIONS}
 
     @server.tool(name="get_remediation", annotations=_READ_LOCAL)
     def _get_remediation_impl(violation_id: str) -> Optional[dict]:
@@ -121,7 +211,10 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         the vmware-harden CLI advisor). Read-only lookup in the local twin DB
         (~/.vmware-harden/twin.duckdb); no network calls and nothing is executed
         — suggestions are advisory only."""
-        return t.get_remediation(violation_id)
+        try:
+            return t.get_remediation(violation_id)
+        except Exception as e:
+            return {"error": _safe_error(e, "get_remediation"), "hint": _HINT_REMEDIATION}
 
     @server.tool(name="list_drift_events", annotations=_READ_LOCAL)
     def _list_drift_events_impl(limit: int = 50) -> dict:
@@ -137,7 +230,10 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         against (a target must be scanned at least twice). Read-only query of the
         local twin DB (~/.vmware-harden/twin.duckdb); no network calls. Use for
         change tracking; use list_violations for compliance failures."""
-        return t.list_drift_events(limit)
+        try:
+            return t.list_drift_events(limit)
+        except Exception as e:
+            return {"error": _safe_error(e, "list_drift_events"), "hint": _HINT_DRIFT}
 
     @server.tool(name="get_baseline_rules", annotations=_READ_LOCAL)
     def _get_baseline_rules_impl(baseline_id: str) -> dict:
@@ -151,7 +247,13 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         rule count. Read-only — parses local baseline YAML only, no database or
         network access. Use after list_baselines to preview what scan_target will
         check; use list_violations for actual scan findings."""
-        return t.get_baseline_rules(baseline_id)
+        try:
+            return t.get_baseline_rules(baseline_id)
+        except Exception as e:
+            return {
+                "error": _safe_error(e, "get_baseline_rules"),
+                "hint": _HINT_BASELINE_RULES,
+            }
 
     @server.tool(name="scan_target", annotations=_READ_REMOTE)
     def _scan_target_impl(
@@ -167,7 +269,10 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         (~/.vmware-harden/twin.duckdb). Returns summary counts {snapshot_id,
         target, baseline, hosts, violations}; inspect details via list_violations
         and list_drift_events. May take minutes on large inventories."""
-        return t.scan_target(target, baseline)
+        try:
+            return t.scan_target(target, baseline)
+        except Exception as e:
+            return {"error": _safe_error(e, "scan_target"), "hint": _HINT_SCAN}
 
     # Applied after every tool above has registered and before the server is
     # handed out. The [READ]/[WRITE] docstring marker is what the gate reads

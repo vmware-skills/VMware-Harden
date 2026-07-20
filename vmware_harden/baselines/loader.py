@@ -51,7 +51,9 @@ def load_baseline(path: Path | str) -> Baseline:
             raise NotImplementedError(
                 f"{path}: rule {rule.id!r} uses script check; "
                 "script checks reserved for v2 (see RELEASE_NOTES.md "
-                "'Known limitations' for rationale and tracking)"
+                "'Known limitations' for rationale and tracking). Remove that "
+                "rule or convert its check to a declarative SQL check, then "
+                f"verify with `vmware-harden baseline validate {path}`."
             )
     return baseline
 
@@ -68,7 +70,9 @@ def _resolve_baseline_path(name: str) -> Path:
     if not name or "/" in name or "\\" in name or name.startswith(".") or "\x00" in name:
         raise FileNotFoundError(
             f"Invalid baseline name {name!r}: must be a plain identifier "
-            "(no path separators, leading dots, or null bytes)"
+            "(no path separators, leading dots, or null bytes). Run "
+            "list_baselines (or `vmware-harden baseline list`) and copy an "
+            "exact id."
         )
 
     for base in (USER_DIR, BUILTIN_DIR):
@@ -81,7 +85,10 @@ def _resolve_baseline_path(name: str) -> Path:
         if candidate.exists():
             return candidate
     raise FileNotFoundError(
-        f"Baseline {name!r} not found in {USER_DIR} or {BUILTIN_DIR}"
+        f"Baseline {name!r} not found in {USER_DIR} or {BUILTIN_DIR}. Run "
+        "list_baselines (or `vmware-harden baseline list`) and copy an exact "
+        f"id, or add {name}.yaml to the user directory with "
+        "`vmware-harden baseline import <file>`."
     )
 
 

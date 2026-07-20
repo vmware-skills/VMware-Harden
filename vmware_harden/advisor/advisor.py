@@ -56,7 +56,12 @@ class Advisor:
     def advise(self, violation_id: str, twin: Twin) -> Suggestion:
         ctx = self._build_context(violation_id, twin)
         if ctx is None:
-            raise AdvisorError(f"violation not found: {violation_id}")
+            raise AdvisorError(
+                f"violation not found: {violation_id!r}. Run list_violations "
+                "(or `vmware-harden report --format json`) and copy an exact "
+                "value from a row's 'id' field. If every list is empty, no scan "
+                "has been recorded yet — run scan_target first."
+            )
 
         response = self.provider.complete(
             system=SYSTEM_PROMPT,
@@ -65,11 +70,23 @@ class Advisor:
         try:
             payload = json.loads(response)
         except json.JSONDecodeError as e:
-            raise AdvisorError(f"failed to parse LLM JSON: {e}") from e
+            raise AdvisorError(
+                f"failed to parse LLM JSON: {e}. The advisor provider returned "
+                "text that is not a JSON object — models that wrap output in "
+                "markdown fences or add prose fail here every time. Check which "
+                "provider `vmware-harden advise` is configured with, then retry."
+            ) from e
         try:
             return Suggestion(**payload)
         except ValidationError as e:
-            raise AdvisorError(f"LLM output failed schema: {e}") from e
+            raise AdvisorError(
+                f"LLM output failed schema: {e}. The advisor provider returned "
+                "JSON that does not match the Suggestion schema (summary, "
+                "execution_plan.steps, impact_prediction, confidence, "
+                "human_review_required). Retry `vmware-harden advise "
+                "--violation-id <id>`; if it keeps failing, configure a stronger "
+                "model for the advisor provider."
+            ) from e
 
     def _build_context(self, violation_id: str, twin: Twin) -> str | None:
         row = twin.conn.execute(

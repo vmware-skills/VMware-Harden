@@ -80,12 +80,20 @@ def list_violations(
         raise ValueError(
             f"Invalid severity {severity!r}. Valid values: "
             f"{', '.join(sorted(valid_severities))}. "
-            "Omit the parameter to list violations of all severities."
+            "Re-run list_violations with one of those exact strings, or omit "
+            "the parameter to list violations of all severities."
         )
     if limit < 1:
-        raise ValueError("limit must be >= 1.")
+        raise ValueError(
+            f"limit must be >= 1 (got {limit}). Re-run list_violations with "
+            "limit=50 (the default) or a larger page size."
+        )
     if offset < 0:
-        raise ValueError("offset must be >= 0.")
+        raise ValueError(
+            f"offset must be >= 0 (got {offset}). Re-run list_violations with "
+            "offset=0 for the first page, then raise offset by limit while the "
+            "envelope's has_more is true."
+        )
 
     empty: dict = {
         "violations": [],

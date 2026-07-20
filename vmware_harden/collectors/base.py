@@ -46,7 +46,13 @@ class Collector:
                 except KeyError as e:
                     raise CollectorError(
                         f"{type(self).__name__}: {label} record missing required "
-                        f"field {e}; target={target}, record={rec!r}"
+                        f"field {e}; target={target}, record={rec!r}. Every "
+                        "collected record must carry both 'id' and 'name' — a "
+                        "record without them usually means the vCenter API "
+                        "returned a partial object. Check the target's "
+                        "connectivity and permissions with `vmware-harden "
+                        f"doctor`, then re-run `vmware-harden scan --target "
+                        f"{target}`."
                     ) from e
                 # Namespace by target so identical MoRefs from different vCenters
                 # don't collide in a multi-target Twin.

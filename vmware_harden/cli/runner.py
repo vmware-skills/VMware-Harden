@@ -92,7 +92,10 @@ def run_scan(target: str, baseline: str, db: str) -> str:
             raise RuntimeError(
                 f"{pkg} not installed — install it with `uv tool install {pkg}` "
                 f"(collector dependency for baseline {baseline!r}). "
-                f"Snapshot {snap_id} was marked 'failed' and is excluded from reports."
+                f"Snapshot {snap_id} was marked 'failed' and is excluded from "
+                f"reports. After installing, re-run `vmware-harden scan "
+                f"--target {target}`; run `vmware-harden doctor` to see which "
+                "collector dependencies are present."
             ) from e
         except Exception as e:
             twin.finish_snapshot(snap_id, status="failed")

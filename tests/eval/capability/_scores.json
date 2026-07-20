@@ -53,56 +53,9 @@
     },
     "error_actionability": {
       "detail": {
-        "dead_end_count": 9,
+        "composed_hint_sites": [],
+        "dead_end_count": 1,
         "dead_end_errors": [
-          {
-            "message": "violation not found: {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "advisor.py:59"
-          },
-          {
-            "message": "failed to parse LLM JSON: {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "advisor.py:68"
-          },
-          {
-            "message": "LLM output failed schema: {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "advisor.py:72"
-          },
-          {
-            "message": "Baseline {} not found in {} or {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "loader.py:83"
-          },
-          {
-            "message": "{}: {} record missing required field {}; target={}, record={}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "base.py:47"
-          },
-          {
-            "message": "Invalid severity {}. Valid values: {}. Omit the parameter to list violations of all severities.",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "tools.py:80"
-          },
           {
             "message": "MockPilotClient configured to raise",
             "missing": [
@@ -111,35 +64,19 @@
               "states_remedy"
             ],
             "where": "client.py:40"
-          },
-          {
-            "message": "pilot.executor failed: {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "client.py:156"
-          },
-          {
-            "message": "pilot.store failed: {}",
-            "missing": [
-              "names_artifact",
-              "states_remedy"
-            ],
-            "where": "client.py:149"
           }
         ],
         "per_dimension_pct": {
-          "names_artifact": 12.5,
+          "names_artifact": 87.5,
           "names_input": 87.5,
-          "states_remedy": 43.8
+          "states_remedy": 93.8
         },
         "raise_sites": 16
       },
       "maximum": 48,
-      "pct": 47.9,
+      "pct": 89.6,
       "unit": "points",
-      "value": 23
+      "value": 43
     },
     "manifest_context_headroom": {
       "detail": {
@@ -201,12 +138,34 @@
       "unit": "points",
       "value": 6
     },
+    "remedy_survives_truncation": {
+      "detail": {
+        "budget_chars": 500,
+        "over_budget": [],
+        "remedy_after_interpolation": [
+          "advisor.py:59",
+          "advisor.py:73",
+          "advisor.py:82",
+          "loader.py:71",
+          "runner.py:92",
+          "tools.py:26",
+          "tools.py:80",
+          "tools.py:87",
+          "tools.py:92",
+          "client.py:162"
+        ]
+      },
+      "maximum": 15,
+      "pct": 100.0,
+      "unit": "messages",
+      "value": 15
+    },
     "teaching_error_rate": {
       "detail": {},
       "maximum": 16,
-      "pct": 12.5,
+      "pct": 87.5,
       "unit": "messages",
-      "value": 2
+      "value": 14
     },
     "tool_description_quality": {
       "detail": {
@@ -238,6 +197,19 @@
       "pct": 91.7,
       "unit": "points",
       "value": 33
+    },
+    "tool_failure_payload_quality": {
+      "detail": {
+        "bare_string_error_lines": [],
+        "carries_hint": 6,
+        "dict_shaped": 6,
+        "error_return_sites": 6,
+        "hint_names_artifact": 5
+      },
+      "maximum": 18,
+      "pct": 94.4,
+      "unit": "checks",
+      "value": 17
     }
   }
 }

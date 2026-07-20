@@ -146,14 +146,26 @@ class RealPilotClient:
             try:
                 store.save(workflow)
             except Exception as e:
-                raise PilotSubmissionError(f"pilot.store failed: {e}") from e
+                raise PilotSubmissionError(
+                    f"pilot.store failed: {e}. The workflow was not persisted, "
+                    "so nothing was submitted and no remediation is pending. "
+                    "Check that vmware-pilot's workflow store "
+                    "(~/.vmware/workflows.db) exists and is writable, then "
+                    "retry `vmware-harden apply --violation-id <id>`."
+                ) from e
             return workflow.id
 
         executor = WorkflowExecutor(store=store, dispatch=self._dispatch)
         try:
             executor.run_until_checkpoint(workflow)
         except Exception as e:
-            raise PilotSubmissionError(f"pilot.executor failed: {e}") from e
+            raise PilotSubmissionError(
+                f"pilot.executor failed: {e}. Workflow {workflow.id} was "
+                "persisted but stopped part-way, so some steps may already have "
+                "run — do not resubmit blindly. Check its state with "
+                "vmware-pilot's get_workflow_status tool, then either resume it "
+                "with run_workflow or cancel it with cancel_workflow."
+            ) from e
         return workflow.id
 
 

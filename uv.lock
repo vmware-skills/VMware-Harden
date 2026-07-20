@@ -1695,7 +1695,7 @@ wheels = [
 
 [[package]]
 name = "vmware-harden"
-version = "1.7.5"
+version = "1.8.3"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -1730,7 +1730,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
     { name = "typer", specifier = ">=0.12,<1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27,<1.0" },
-    { name = "vmware-policy", specifier = ">=1.0.0,<2.0" },
+    { name = "vmware-policy", specifier = ">=1.8.1,<2.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -1742,14 +1742,16 @@ dev = [
 
 [[package]]
 name = "vmware-policy"
-version = "1.5.18"
+version = "1.8.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/20/c5695a03959b862b3366933bd02c81452e5dfedecbc64e148d04bf299e91/vmware_policy-1.8.3.tar.gz", hash = "sha256:9ce81039fdb8f614f60eae3ee2cc8a532f4b5a92a7de22fe9fec77f926a17070", size = 137308, upload-time = "2026-07-20T03:34:58.783Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/da/00/cba5ddb52fc810acb4fe86fba031fbf912cb8bbe0debd6f74382dbe3f080/vmware_policy-1.5.18-py3-none-any.whl", hash = "sha256:61c18627fe95a90ab7fc53d0dcba4a93c04ab0345cdf3d333d8c79e31b70e9ba", size = 18340, upload-time = "2026-05-02T12:10:36.582Z" },
+    { url = "https://files.pythonhosted.org/packages/be/86/290e8c7078639695469ee1688cbcb6d74d8d53aeb856837f352911e86ff7/vmware_policy-1.8.3-py3-none-any.whl", hash = "sha256:9e941c6faee534f716b435aefe7743493cfa88c9e94756cb12999e7812af06c6", size = 51593, upload-time = "2026-07-20T03:34:57.043Z" },
 ]
 
 [[package]]
