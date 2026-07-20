@@ -67,16 +67,16 @@
           }
         ],
         "per_dimension_pct": {
-          "names_artifact": 87.5,
-          "names_input": 87.5,
+          "names_artifact": 93.8,
+          "names_input": 93.8,
           "states_remedy": 93.8
         },
         "raise_sites": 16
       },
       "maximum": 48,
-      "pct": 89.6,
+      "pct": 93.8,
       "unit": "points",
-      "value": 43
+      "value": 45
     },
     "manifest_context_headroom": {
       "detail": {
@@ -144,15 +144,15 @@
         "over_budget": [],
         "remedy_after_interpolation": [
           "advisor.py:59",
-          "advisor.py:73",
-          "advisor.py:82",
+          "advisor.py:85",
           "loader.py:71",
           "runner.py:92",
           "tools.py:26",
           "tools.py:80",
           "tools.py:87",
           "tools.py:92",
-          "client.py:162"
+          "client.py:165",
+          "client.py:152"
         ]
       },
       "maximum": 15,
@@ -163,9 +163,9 @@
     "teaching_error_rate": {
       "detail": {},
       "maximum": 16,
-      "pct": 87.5,
+      "pct": 93.8,
       "unit": "messages",
-      "value": 14
+      "value": 15
     },
     "tool_description_quality": {
       "detail": {
@@ -175,13 +175,11 @@
           "marker": 100.0,
           "next_hop": 100.0,
           "what": 100.0,
-          "when": 50.0
+          "when": 66.7
         },
         "tools_graded": 6,
         "weakest_tools": {
-          "get_baseline_rules": [
-            "when"
-          ],
+          "get_baseline_rules": [],
           "get_remediation": [
             "when"
           ],
@@ -194,9 +192,9 @@
         }
       },
       "maximum": 36,
-      "pct": 91.7,
+      "pct": 94.4,
       "unit": "points",
-      "value": 33
+      "value": 34
     },
     "tool_failure_payload_quality": {
       "detail": {
@@ -204,12 +202,12 @@
         "carries_hint": 6,
         "dict_shaped": 6,
         "error_return_sites": 6,
-        "hint_names_artifact": 5
+        "hint_names_artifact": 6
       },
       "maximum": 18,
-      "pct": 94.4,
+      "pct": 100.0,
       "unit": "checks",
-      "value": 17
+      "value": 18
     }
   }
 }

@@ -71,10 +71,13 @@ class Advisor:
             payload = json.loads(response)
         except json.JSONDecodeError as e:
             raise AdvisorError(
-                f"failed to parse LLM JSON: {e}. The advisor provider returned "
-                "text that is not a JSON object — models that wrap output in "
-                "markdown fences or add prose fail here every time. Check which "
-                "provider `vmware-harden advise` is configured with, then retry."
+                "failed to parse LLM JSON — the advisor provider returned text "
+                "that is not a JSON object (models that wrap output in markdown "
+                "fences or add prose fail here every time). Check whether "
+                "ANTHROPIC_API_KEY is set: while it is unset the advisor falls "
+                "back to MockProvider, which emits stub suggestions. Set it, "
+                "then retry `vmware-harden advise --violation-id "
+                f"{violation_id}`. Parser said: {e}"
             ) from e
         try:
             return Suggestion(**payload)

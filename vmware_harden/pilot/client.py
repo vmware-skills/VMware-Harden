@@ -87,9 +87,12 @@ class RealPilotClient:
             )
         except ImportError as e:
             raise PilotSubmissionError(
-                "vmware-pilot is not installed. Install it with "
-                "`uv tool install vmware-pilot` and retry, or use "
-                "MockPilotClient for testing."
+                "vmware-harden delegates every write to vmware-pilot, which is "
+                "not importable. Install it with `uv tool install vmware-pilot` "
+                "and retry, or pass MockPilotClient for offline testing. If "
+                "pilot is already installed, the import names a symbol a newer "
+                "version moved — upgrade with `uv tool upgrade vmware-pilot`. "
+                f"Import error: {e}"
             ) from e
 
         # Translate Suggestion → Workflow.
