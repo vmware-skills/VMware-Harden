@@ -10,7 +10,7 @@ English | [中文](README-CN.md)
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
-- **Read-only against vSphere — and provable** (v1.8.0): all 6 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). With `VMWARE_READ_ONLY=true` the family read-only gate verifies that at startup instead of taking the docs' word for it, and the same variable strips write tools from every write-capable sibling. See [Read-only mode](#read-only-mode).
+- **Read-only against vSphere**: all 6 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). See [Read-only by design](#read-only-by-design).
 
 ## GA family member (since v1.5.18)
 
@@ -42,36 +42,41 @@ vmware-harden advise --all-critical
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
 
-## Read-Only Mode
+### Offline / Air-Gapped Install (from source)
 
-vmware-harden is read-only by design — all 6 MCP tools carry the `[READ]` marker, and
-`scan_target` writes only to the local twin DB (a cache of observations, not managed
-infrastructure). Since v1.8.0 that is **provable rather than merely documented**: set
-`VMWARE_READ_ONLY=true` and the family read-only gate enumerates the registry at
-startup and verifies that zero write tools are exposed — structural, not a prompt
-instruction. **Off by default.** Fail-closed: if the mode is requested but cannot be
-guaranteed, the server refuses to start rather than running open.
+This project uses the modern PEP 517 build system (hatchling), so there is **no
+`setup.py`** by design — that is expected, not a missing file. If you cloned the
+source and hit `ERROR: File "setup.py" or "setup.cfg" not found ... editable mode
+currently requires a setuptools-based build`, your `pip` is older than 21.3 and
+cannot do an *editable* (`-e`) install with a non-setuptools backend. Editable
+mode is a developer convenience, not needed to run the tool — do one of:
 
-The same variable is family-wide: one env var also strips every write tool from the
-write-capable siblings (aiops, storage, vks, nsx, ...), so a whole-estate audit posture
-is a single setting.
+```bash
+# From the source tree — a normal (non-editable) install builds a wheel:
+pip install .              # NOT  pip install -e .
 
-```json
-{
-  "mcpServers": {
-    "vmware-harden": {
-      "command": "vmware-harden",
-      "args": ["mcp"],
-      "env": {
-        "VMWARE_READ_ONLY": "true"
-      }
-    }
-  }
-}
+# ...or upgrade pip first, and editable works too:
+pip install --upgrade pip && pip install -e .
 ```
 
-- **Per-skill override**: `VMWARE_HARDEN_READ_ONLY` beats the family-wide `VMWARE_READ_ONLY`. vmware-harden has no config.yaml, so the env vars are the only switch. Precedence: per-skill env → family env → off.
-- **Startup log**: nothing is logged as withheld because nothing is — the gate's empty result *is* the assertion (write-capable siblings log `Read-only mode active ... withheld N write tool(s)` instead).
+For a **truly air-gapped host**, build the wheels on a connected machine and copy
+them over — the target then needs no network:
+
+```bash
+# On a connected machine, collect this package + its dependencies as wheels:
+pip wheel . -w dist        # → dist/*.whl   (or: uv build, for just this package)
+
+# Copy dist/ to the air-gapped host, then install offline:
+pip install --no-index --find-links dist vmware-harden
+```
+
+## Read-Only by Design
+
+vmware-harden is read-only against vSphere and NSX — all 6 MCP tools carry the `[READ]`
+marker, and none mutate managed VMware infrastructure. `scan_target` writes only to the
+local twin DB (`~/.vmware-harden/twin.duckdb`), a cache of its own observations rather than
+managed infrastructure. Remediation is never applied by this skill; it is deferred to
+vmware-pilot, which provides approval gating and audit trails for write operations.
 
 ## Built-in baselines
 

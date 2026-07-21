@@ -61,6 +61,18 @@ wheels = [
 ]
 
 [[package]]
+name = "apscheduler"
+version = "3.11.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzlocal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/6b/eeff360196bb20b312c9e762a820fd1b2c6d809466c755ef57863478e454/apscheduler-3.11.3.tar.gz", hash = "sha256:cd2fcc9330039a81a5893472ad49facf23a6d5604cbe1d918c835c6de7834d5a", size = 110312, upload-time = "2026-06-28T19:39:22.493Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/42/c9/8638db32514dbb9157b3d82680c6faea89283523edf9ed2415ea3884f2ae/apscheduler-3.11.3-py3-none-any.whl", hash = "sha256:bbeb2ec02d23d3c06a6c07ed7f0f3939ada6680eb121fae809a69bb42c537a30", size = 66024, upload-time = "2026-06-28T19:39:20.982Z" },
+]
+
+[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -823,6 +835,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/5e/d118fce19f87a2e7d8101c35c8ae0ec289098a4df0ff244cec23e415aca0/mcp-1.28.1-py3-none-any.whl", hash = "sha256:2726bca5e7193f61c5dde8b12500a6de2d9acf6d1a1c0be9e8c2e706437991df", size = 222620, upload-time = "2026-06-26T12:57:27.218Z" },
 ]
 
+[package.optional-dependencies]
+cli = [
+    { name = "python-dotenv" },
+    { name = "typer" },
+]
+
 [[package]]
 name = "mdurl"
 version = "0.1.2"
@@ -848,6 +866,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pyaml"
+version = "26.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/6a/acfdf17de0d6947b419da8696e02b781b18de2cf49e0472298b50e1f0711/pyaml-26.7.0.tar.gz", hash = "sha256:11cda3a796efc6dbce0d56836be56cfd26289dad07bcd78e9904086729929c93", size = 30669, upload-time = "2026-07-04T00:34:38.532Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/26/3f05f9e3692853dff663913d5d62fb8df3f5640c8d70b06588c0b51ed953/pyaml-26.7.0-py3-none-any.whl", hash = "sha256:cfa382780c43ae660669b87d394d550a41856ef175f5749f51f753e12d7077ac", size = 27226, upload-time = "2026-07-04T00:34:37.198Z" },
 ]
 
 [[package]]
@@ -1078,6 +1108,14 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
+]
+
+[[package]]
+name = "pyvmomi"
+version = "9.1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/5c/044debed55cf2ea6f7bdd7da7bb4c0b5feeb06158380dfd0b450b3b55611/pyvmomi-9.1.0.0-py3-none-any.whl", hash = "sha256:f4b024baa7e5179d14f350dd006b788365e4aaadf15850e36024945a114db92b", size = 552669, upload-time = "2026-05-12T10:23:45.268Z" },
 ]
 
 [[package]]
@@ -1625,6 +1663,27 @@ wheels = [
 ]
 
 [[package]]
+name = "tzdata"
+version = "2026.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/ff/5a28bdfd8c3ebec42564ac7d0e54ca3db65044a9314a97f9564fa7a1e926/tzdata-2026.3.tar.gz", hash = "sha256:4a1518b8993086a7982523e071643f3c0e5f213e75b21318e78bcabfff9d1415", size = 198674, upload-time = "2026-07-10T08:50:37.887Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/6d/b53b99a9f2766d095985947a5782f1702cabb129a34f7a802d7197af832f/tzdata-2026.3-py2.py3-none-any.whl", hash = "sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931", size = 348168, upload-time = "2026-07-10T08:50:36.46Z" },
+]
+
+[[package]]
+name = "tzlocal"
+version = "5.4.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/5b/879b2f932adfa7a053c360d50bc896c977fa6426109185f7c12ebdd0cb9d/tzlocal-5.4.4.tar.gz", hash = "sha256:8dbb8660838688a7b6ba4fed31d18dedf842afb4d47ca050d6d891c2c15f3be4", size = 31170, upload-time = "2026-06-29T08:03:40.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/a4/017a7a6cbe387d961a688ec31364ae60a5c4e22c96ae9921b79a947c855d/tzlocal-5.4.4-py3-none-any.whl", hash = "sha256:aae09f0126a8a86fa736be266eb4a471380d26a0de3bc14844e7821fee3e2a15", size = 18115, upload-time = "2026-06-29T08:03:38.666Z" },
+]
+
+[[package]]
 name = "uvicorn"
 version = "0.49.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1694,8 +1753,29 @@ wheels = [
 ]
 
 [[package]]
+name = "vmware-aiops"
+version = "1.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "apscheduler" },
+    { name = "httpx" },
+    { name = "mcp", extra = ["cli"] },
+    { name = "pyaml" },
+    { name = "python-dotenv" },
+    { name = "pyvmomi" },
+    { name = "rich" },
+    { name = "typer" },
+    { name = "vmware-monitor" },
+    { name = "vmware-policy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/8d/47ffb5f6eec6bffc8a2533df7bfa605413519e7604c9b017cd6be26fcfc6/vmware_aiops-1.8.7.tar.gz", hash = "sha256:499ca3155a51fe0fd2ccec6ee6c83c3d4a4dae48cd9cb4ad9ea65ce9853d765d", size = 365613, upload-time = "2026-07-21T11:38:26.813Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/3b/eccb9b6dc052dee27b7cf21448bc82196cf24cdb46a0a8a07aad3bf1c2ff/vmware_aiops-1.8.7-py3-none-any.whl", hash = "sha256:11850e0e7ac3fbbdc2d5ead7a5364daaabd728d670f48bc709c69634e702d1b9", size = 139902, upload-time = "2026-07-21T11:38:24.894Z" },
+]
+
+[[package]]
 name = "vmware-harden"
-version = "1.8.5"
+version = "1.8.7"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -1709,6 +1789,16 @@ dependencies = [
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "vmware-policy" },
+]
+
+[package.optional-dependencies]
+collectors = [
+    { name = "vmware-aiops" },
+    { name = "vmware-nsx-security" },
+    { name = "vmware-storage" },
+]
+remediation = [
+    { name = "vmware-pilot" },
 ]
 
 [package.dev-dependencies]
@@ -1730,14 +1820,72 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
     { name = "typer", specifier = ">=0.12,<1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27,<1.0" },
+    { name = "vmware-aiops", marker = "extra == 'collectors'", specifier = ">=1.8.7,<2.0" },
+    { name = "vmware-nsx-security", marker = "extra == 'collectors'", specifier = ">=1.8.7,<2.0" },
+    { name = "vmware-pilot", marker = "extra == 'remediation'", specifier = ">=1.8.7,<2.0" },
     { name = "vmware-policy", specifier = ">=1.8.5,<2.0" },
+    { name = "vmware-storage", marker = "extra == 'collectors'", specifier = ">=1.8.7,<2.0" },
 ]
+provides-extras = ["collectors", "remediation"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.0,<10.0" },
     { name = "pytest-cov", specifier = ">=5.0,<8.0" },
     { name = "ruff", specifier = ">=0.5,<1.0" },
+]
+
+[[package]]
+name = "vmware-monitor"
+version = "1.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "apscheduler" },
+    { name = "httpx" },
+    { name = "mcp", extra = ["cli"] },
+    { name = "pyaml" },
+    { name = "python-dotenv" },
+    { name = "pyvmomi" },
+    { name = "rich" },
+    { name = "typer" },
+    { name = "vmware-policy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/09/96/7e6f11335e51321dc76cd6f6c1c52c3292a0fda86208901ce1ca3b853231/vmware_monitor-1.8.7.tar.gz", hash = "sha256:6fa9344a49c557f1ab01958c145fd753173c0058bc30285cdfdd97a6ded88e9f", size = 338577, upload-time = "2026-07-21T11:37:28.898Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/83/679b8fb854d69bf1754ff3ec6bef5a9499dbd4f6ffb9be74ca2c6a3fbc41/vmware_monitor-1.8.7-py3-none-any.whl", hash = "sha256:37dd38e422dfc2e9d12aac23c8ab62a72eade6e25c24343d7b0a9467251f760a", size = 119937, upload-time = "2026-07-21T11:37:26.925Z" },
+]
+
+[[package]]
+name = "vmware-nsx-security"
+version = "1.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "mcp", extra = ["cli"] },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "typer" },
+    { name = "vmware-policy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c3/0d/0409bf2e57d62a769b7a72c566a2d5d93092b56b343809f0affc2f35c128/vmware_nsx_security-1.8.7.tar.gz", hash = "sha256:27b4b5844552831adb9605d2910b4ac1cbcfc55bdaa5f1c87590d42110874e13", size = 235920, upload-time = "2026-07-21T11:40:55.436Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/d1/65bcc1a85d1ab65406be44f313825cab20f666dbf10d39b00a183ad3d384/vmware_nsx_security-1.8.7-py3-none-any.whl", hash = "sha256:a75bf200c27649272bbc712b3dc4a71ad04501fa29c88731471a48e9c344060b", size = 67866, upload-time = "2026-07-21T11:40:53.516Z" },
+]
+
+[[package]]
+name = "vmware-pilot"
+version = "1.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mcp", extra = ["cli"] },
+    { name = "pyyaml" },
+    { name = "typer" },
+    { name = "vmware-policy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/f4/4de8eb4310bcc0c69a4b4a9ac55196517061b1c8cbce6c2dce241d928f86/vmware_pilot-1.8.7.tar.gz", hash = "sha256:5a92078d2b7f0b5c1376960f12905604c5b6a6592f7479edbbba4844995fa3f9", size = 214364, upload-time = "2026-07-21T11:43:06.162Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/be/080549f67dbb14bc95a09e3b7e92f429a07938ad816dfa433bc40031fe7b/vmware_pilot-1.8.7-py3-none-any.whl", hash = "sha256:a9305baec90609426226250013f100210351650cde8a2dcc6c36e40c260d998a", size = 50179, upload-time = "2026-07-21T11:43:07.644Z" },
 ]
 
 [[package]]
@@ -1752,6 +1900,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ab/b0/5b85b282a8a761a8c600504e9ce33873e42060dccc2f8421d42240720c15/vmware_policy-1.8.5.tar.gz", hash = "sha256:4a495a9dc79ebe3e8e611fea71e7eb5bc5933824796ee0f4507012aadfaa1669", size = 145426, upload-time = "2026-07-20T12:59:30.765Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/52/10a2ec839d34626a4ed6c2753b288c05e5690522074296867ea344ffe2bf/vmware_policy-1.8.5-py3-none-any.whl", hash = "sha256:ae2c82bc8e915e1c9380649d8cda88e1b4e61b248c75126e1a4474fb38e8c9b9", size = 53996, upload-time = "2026-07-20T12:59:32.134Z" },
+]
+
+[[package]]
+name = "vmware-storage"
+version = "1.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mcp", extra = ["cli"] },
+    { name = "pyaml" },
+    { name = "python-dotenv" },
+    { name = "pyvmomi" },
+    { name = "rich" },
+    { name = "typer" },
+    { name = "vmware-policy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/1c/13b079aed2945e088540498a4827277150daed519c3c287f9fcb65c4a49a/vmware_storage-1.8.7.tar.gz", hash = "sha256:b2dd75d20437aa977e955b4df16a3ee77aacf158404e78fa575172f6694600b4", size = 215539, upload-time = "2026-07-21T11:38:55.284Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/83/568cc3c49a01925e6117837e43a101dedb4a6cbd66624e125976076cc532/vmware_storage-1.8.7-py3-none-any.whl", hash = "sha256:169c5019cd117173dbd0f130d8a7b82b6de63d770dded3fca888a22086698d6d", size = 41643, upload-time = "2026-07-21T11:38:53.485Z" },
 ]
 
 [[package]]

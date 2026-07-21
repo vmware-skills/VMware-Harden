@@ -10,16 +10,11 @@ from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from vmware_policy import apply_read_only_gate, sanitize, set_environment_resolver
+from vmware_policy import sanitize, set_environment_resolver
 
 from vmware_harden.mcp import tools as t
 
 logger = logging.getLogger("mcp_server")
-
-#: Names withheld by the most recent :func:`build_server` call. The gate runs
-#: inside the factory (this server has no module-level instance), so the result
-#: is recorded here for startup logging and tests.
-WITHHELD_WRITE_TOOLS: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +45,7 @@ LOCAL_ENVIRONMENT = "local"
 #: Client-facing behaviour hints, matching the rest of the family. Every tool
 #: here is [READ]: nothing mutates a remote VMware estate, and repeating any of
 #: them yields the same answer. These drive MCP client UI (e.g. whether a call
-#: needs a confirmation prompt); the read-only gate classifies independently,
-#: from the [READ]/[WRITE] docstring marker.
+#: needs a confirmation prompt).
 #:
 #: ``openWorldHint`` is set per tool rather than copied family-wide: five of
 #: these six read local baseline YAML or the local twin DB and touch no network
@@ -303,18 +297,6 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
             return t.scan_target(target, baseline)
         except Exception as e:
             return {"error": _safe_error(e, "scan_target"), "hint": _HINT_SCAN}
-
-    # Applied after every tool above has registered and before the server is
-    # handed out. The [READ]/[WRITE] docstring marker is what the gate reads
-    # first, so the readOnlyHint annotations above inform client UI without
-    # changing this classification; all six tools are [READ] and nothing is
-    # withheld. scan_target survives deliberately: it makes only
-    # read-only vCenter calls and writes to the local twin DB, which the gate's
-    # contract treats as a cache of observations, not managed infrastructure.
-    global WITHHELD_WRITE_TOOLS  # noqa: PLW0603 — factory has no module instance
-    WITHHELD_WRITE_TOOLS = apply_read_only_gate(
-        server, "vmware-harden", config_flag=None
-    )
 
     return server
 

@@ -10,10 +10,8 @@
 
 AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员。
 
-- **对 vSphere 只读 —— 且可证明**（v1.8.0）：全部 6 个 MCP 工具均带 `[READ]` 标记，没有任何一个会修改
-  受管的 VMware 基础设施；`scan_target` 只写本地 twin DB（它自己观测结果的缓存）。设置
-  `VMWARE_READ_ONLY=true` 后，家族只读闸门会在启动时**实际验证**这一点，而不是让你只信文档的一句声明；
-  同一个变量还会剥离所有有写能力的兄弟 skill 的写工具。详见[只读模式](#只读模式)。
+- **对 vSphere 只读**：全部 6 个 MCP 工具均带 `[READ]` 标记，没有任何一个会修改受管的 VMware
+  基础设施；`scan_target` 只写本地 twin DB（它自己观测结果的缓存）。详见[只读设计](#只读设计)。
 
 ## GA 家族成员（自 v1.5.18 起）
 
@@ -48,35 +46,11 @@ vmware-harden advise --all-critical
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
 
-## 只读模式
+## 只读设计
 
-vmware-harden 在设计上就是只读的 —— 6 个 MCP 工具全部带 `[READ]` 标记，`scan_target` 也只写本地
-twin DB（观测结果的缓存，不是受管基础设施）。自 v1.8.0 起，这一点从「文档承诺」变成了**可证明的事实**：
-设置 `VMWARE_READ_ONLY=true`，家族只读闸门会在启动时枚举工具注册表并验证暴露的写工具数为零 ——
-这是结构性保证，而非模型可以无视的提示词约束。**默认关闭**；且为 fail-closed 设计：请求了只读模式
-但无法保证时，服务器直接拒绝启动，而不是敞开运行。
-
-同一个变量是家族级的：一个环境变量同时会剥离有写能力的兄弟 skill（aiops、storage、vks、nsx 等）的
-全部写工具，因此「整个环境切只读审计姿态」只需一处设置。
-
-```json
-{
-  "mcpServers": {
-    "vmware-harden": {
-      "command": "vmware-harden",
-      "args": ["mcp"],
-      "env": {
-        "VMWARE_READ_ONLY": "true"
-      }
-    }
-  }
-}
-```
-
-- **按 skill 覆盖**：`VMWARE_HARDEN_READ_ONLY` 优先于家族级 `VMWARE_READ_ONLY`。vmware-harden
-  **没有 `config.yaml`，环境变量是唯一的开关**。优先级：按 skill 环境变量 → 家族环境变量 → 默认关闭。
-- **启动日志**：不会打印任何「被移除」的工具，因为确实一个都没有 —— 闸门返回空结果本身就是这个断言
-  （有写能力的兄弟 skill 则会打印 `Read-only mode active ... withheld N write tool(s)`）。
+vmware-harden 在设计上就是只读的 —— 6 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
+VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/twin.duckdb`，观测结果的缓存，
+不是受管基础设施）。本 skill 从不执行修复，修复一律交由 vmware-pilot。
 
 ## 内置基线
 

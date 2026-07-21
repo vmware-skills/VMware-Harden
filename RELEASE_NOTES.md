@@ -1,3 +1,53 @@
+## v1.8.7 (2026-07-21) — the live-scan collectors actually work now; read-only switch removed
+
+Harden rejoins the family at v1.8.7 (there was no 1.8.6). The headline is a real
+bug fix: every scan collector has been importing a module that does not exist.
+
+### Fixed — collectors repaired: each imported a module path that never existed
+
+`vmware-harden scan` collects host / VM / datastore / DFW posture into the Twin
+through four collectors. Each imported a **fabricated** module path — e.g.
+`vmware_aiops.ops.host_inventory` (the real module is `vmware_aiops.ops.inventory`)
+and `vmware_nsx_security.ops.dfw_inventory.list_dfw` (no such symbol at all). The
+collectors have been dead since they were first committed: every unit test patched
+the fetch seam, so the broken import never ran under test and three layers of
+checking all reported green over it.
+
+This release repoints all four to the real inventory functions and makes them
+actually collect:
+
+- **hosts / VMs / datastores** connect through the sibling skill's own
+  `ConnectionManager` (reusing its `~/.vmware-<skill>/config.yaml`), call the real
+  inventory function, and stamp each record with the stable `id` the Twin needs
+  (VM `config.uuid`; host / datastore name, unique per vCenter). VM collection
+  defeats aiops' auto-compaction so `uuid` is never dropped.
+- **DFW** assembles sections + rules from `list_dfw_policies` / `list_dfw_rules`,
+  paging past the default 50-item cap so a compliance scan is not silently truncated.
+
+The sibling skills are declared as an optional `collectors` extra — install
+`vmware-harden[collectors]` on a host that will scan a live estate (scan reports a
+teaching error naming the missing package otherwise). A guard test
+(`test_collector_imports_resolve`) now executes the real import path so a
+fabricated module can never ship silently again; reshape unit tests pin the
+`id`/`name` contract offline.
+
+> **Verification note.** The pure reshape/pagination logic is unit-tested offline.
+> The live connect-and-scan path runs only against a real vCenter/NSX
+> (`test_lab_scan.py`, skipped without `VMWARE_HARDEN_LAB_TARGET`) — validate it
+> against your estate on first use.
+
+### Removed — the skill-level read-only switch and approval tiers
+
+Harden joins the family v1.8.7 change: the `read_only` switch (and
+`VMWARE_HARDEN_READ_ONLY`) plus the approval-tier / declared-environment gates are
+removed. Harden's scan/report/suggest path is read-only by design regardless; to
+run any skill read-only, give it a read-only vCenter/NSX service account (RBAC).
+The `environment` field survives only as an optional label a `deny` rule may match.
+
+### Added — offline / air-gapped install docs
+
+The README now covers installing from source and building wheels for an air-gapped host.
+
 ## v1.8.5 (2026-07-20) — the two fixes v1.8.4 announced now actually work
 
 Four adversarial reviews of v1.8.4 found that both of its headline fixes were

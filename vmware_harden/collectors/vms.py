@@ -1,16 +1,37 @@
-"""VM inventory collector. Pulls VM data via vmware_aiops."""
+"""VM inventory collector. Pulls VM data via vmware-aiops."""
 from vmware_harden.collectors.base import Collector
 
 
 def _fetch_vms(target: str) -> list[dict]:
-    """Fetch VM inventory from vCenter. Patched in tests.
+    """Fetch VM inventory for ``target``. Patched in tests.
 
-    Production wrapper around vmware_aiops; lazy-imports to avoid hard
-    dependency at test time.
+    ``list_vms`` auto-compacts a large estate and drops ``uuid`` in that mode —
+    but ``uuid`` is the stable id the Twin persists by, so the compaction is
+    defeated with a very high ``compact_threshold`` to keep every field. Lazy-
+    imported so vmware-aiops stays an optional collector dependency.
     """
-    from vmware_aiops.ops.vm_inventory import list_vms
+    from vmware_aiops.connection import ConnectionManager
+    from vmware_aiops.ops.inventory import list_vms
 
-    return list_vms(target)
+    mgr = ConnectionManager.from_config()
+    try:
+        si = mgr.connect(target)
+        envelope = list_vms(si, compact_threshold=10**9)
+    finally:
+        mgr.disconnect_all()
+    return [_shape_vm(vm) for vm in envelope.get("vms", [])]
+
+
+def _shape_vm(vm: dict) -> dict:
+    """Stamp a VM record with a stable ``id``.
+
+    ``config.uuid`` is the stable identity; a VM that reports none ("N/A")
+    falls back to its name so the record still satisfies the Twin's id contract.
+    The full sibling record is preserved for the baselines.
+    """
+    uuid = vm.get("uuid")
+    vm_id = uuid if uuid and uuid != "N/A" else vm.get("name", "")
+    return {**vm, "id": vm_id}
 
 
 class VMCollector(Collector):

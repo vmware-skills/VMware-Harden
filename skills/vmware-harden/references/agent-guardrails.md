@@ -33,48 +33,12 @@ These are structural, so it cannot.
 
 | Guardrail you would otherwise prompt for | Now enforced by |
 |---|---|
-| "Work exclusively in read-only mode and never modify anything" | **The tool surface, and the gate that proves it.** All 6 tools are reads, so read-only mode withholds nothing here — but setting it makes the guarantee checkable: the gate verifies at start-up that zero write tools are exposed rather than taking this document's word for it. |
+| "Only ever read — never modify the estate" | **The tool surface.** All 6 tools carry the `[READ]` marker and none modify vSphere or NSX — there is no write tool here to withhold in the first place. |
 | "Never remediate anything you find — only report it" | **Structural.** This skill has no remediation tool. `get_remediation` returns a *suggestion*; execution is deferred to vmware-pilot behind an approval gate. A model cannot apply a fix from here even if asked to. |
-| "Do not modify the systems you are auditing" | **`scan_target` is read-only against vSphere and NSX.** The rows it writes go only to the local DuckDB twin, which the gate's contract treats as a cache of its own observations rather than managed infrastructure — which is why it survives read-only mode. |
+| "Do not modify the systems you are auditing" | **`scan_target` is read-only against vSphere and NSX.** The rows it writes go only to the local DuckDB twin — a cache of its own observations, not managed infrastructure. |
 | "Use explicit limits for queries that may return large amounts of data" | **The list envelope.** `list_baselines`, `get_baseline_rules` and `list_drift_events` return `{items, returned, limit, total, truncated, hint}`. Because the twin is local, `total` is a real count: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee. |
 | "If a listing came back empty, say so rather than claiming the call failed" | Same envelope. Empty `items` with `truncated: false` means checked-and-none — a stated result, not a silence the model has to interpret. In a compliance context that distinction is the whole answer. |
 | "Log everything you looked at" | **The `@vmware_tool` decorator.** Every call is recorded to `~/.vmware/audit.db`, reads included. |
-
-### Turning read-only mode on
-
-One variable covers every skill in the family:
-
-```json
-{
-  "mcpServers": {
-    "vmware-harden": {
-      "command": "vmware-harden",
-      "args": ["mcp"],
-      "env": { "VMWARE_READ_ONLY": "true" }
-    }
-  }
-}
-```
-
-Per-skill override:
-
-```bash
-VMWARE_READ_ONLY=true           # whole family read-only
-VMWARE_HARDEN_READ_ONLY=false   # …except this skill
-```
-
-**This skill has no `config.yaml`**, so the two environment variables are the
-only switch — there is no `read_only:` configuration setting to fall back on.
-Precedence is per-skill env → family env → off. An unparseable value
-(`VMWARE_READ_ONLY=ture`) enables read-only mode rather than silently ignoring
-the typo.
-
-Setting it here is still worth doing. It costs nothing, it makes the read-only
-guarantee provable rather than merely documented, and the same variable
-withholds write tools across every companion skill — so a whole-estate audit
-posture is one setting. When you hand a finding to vmware-pilot or
-vmware-aiops and the tool is missing from *their* `list_tools()`, that is the
-lockdown working, not a fault: name the blocked operation rather than retrying.
 
 ---
 

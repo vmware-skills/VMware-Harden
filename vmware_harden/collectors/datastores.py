@@ -1,16 +1,35 @@
-"""Datastore inventory collector. Pulls datastore data via vmware_storage."""
+"""Datastore inventory collector. Pulls datastore data via vmware-storage."""
 from vmware_harden.collectors.base import Collector
 
 
 def _fetch_datastores(target: str) -> list[dict]:
-    """Fetch datastore inventory from vCenter. Patched in tests.
+    """Fetch datastore inventory for ``target``. Patched in tests.
 
-    Production wrapper around vmware_storage; lazy-imports to avoid hard
-    dependency at test time.
+    Connects with vmware-storage's own ``ConnectionManager`` and reads the
+    family list envelope (every datastore, un-truncated), stamping each record
+    with the ``id``/``name`` the Twin requires. Lazy-imported so vmware-storage
+    stays an optional collector dependency.
     """
-    from vmware_storage.ops.datastore_inventory import list_datastores
+    from vmware_storage.connection import ConnectionManager
+    from vmware_storage.ops.inventory import list_datastores
 
-    return list_datastores(target)
+    mgr = ConnectionManager.from_config()
+    try:
+        si = mgr.connect(target)
+        envelope = list_datastores(si)
+    finally:
+        mgr.disconnect_all()
+    return [_shape_datastore(ds) for ds in envelope.get("items", [])]
+
+
+def _shape_datastore(datastore: dict) -> dict:
+    """Stamp a datastore record with a stable ``id``.
+
+    A datastore's name is unique within a vCenter, so it doubles as the stable
+    identity the Twin namespaces per target. The full sibling record (capacity,
+    type, usage, …) is preserved for the baselines.
+    """
+    return {**datastore, "id": datastore.get("name", "")}
 
 
 class DatastoreCollector(Collector):

@@ -1,15 +1,76 @@
 """DFW (Distributed Firewall) inventory collector via vmware-nsx-security."""
 from vmware_harden.collectors.base import Collector
 
+#: Page size when draining every DFW policy/rule. The sibling list functions
+#: default to 50 to protect agent context; a compliance scan needs them all, so
+#: it pages explicitly rather than accept a silent 50-item cap.
+_PAGE = 200
+
 
 def _fetch_dfw(target: str) -> dict:
-    """Fetch DFW sections + rules from NSX. Patched in tests.
+    """Fetch every DFW policy (section) + rule for ``target``. Patched in tests.
 
-    Returns: {"sections": [...], "rules": [...]}
+    Connects with vmware-nsx-security's own ``ConnectionManager``, drains all
+    policies, then all rules under each policy, and returns
+    ``{"sections": [...], "rules": [...]}`` with each record carrying the
+    ``id``/``name`` the Twin requires. Lazy-imported so vmware-nsx-security
+    stays an optional collector dependency.
     """
-    from vmware_nsx_security.ops.dfw_inventory import list_dfw
+    from vmware_nsx_security.connection import ConnectionManager
+    from vmware_nsx_security.ops.dfw_policy import list_dfw_policies, list_dfw_rules
 
-    return list_dfw(target)
+    mgr = ConnectionManager.from_config()
+    try:
+        client = mgr.connect(target)
+        policies = _drain(
+            lambda offset: list_dfw_policies(client, limit=_PAGE, offset=offset)
+        )
+        rules: list[dict] = []
+        for policy in policies:
+            pid = policy["id"]
+            rules.extend(
+                _drain(
+                    lambda offset, pid=pid: list_dfw_rules(
+                        client, pid, limit=_PAGE, offset=offset
+                    )
+                )
+            )
+    finally:
+        mgr.disconnect_all()
+    return {
+        "sections": [_shape_dfw(p) for p in policies],
+        "rules": [_shape_dfw(r) for r in rules],
+    }
+
+
+def _drain(fetch) -> list[dict]:
+    """Collect every ``items`` element across offset pages.
+
+    ``fetch(offset)`` returns one page of the family list envelope. A compliance
+    scan must not stop at the API's default page size, so this keeps paging until
+    a short (or empty) page signals the end.
+    """
+    items: list[dict] = []
+    offset = 0
+    while True:
+        page = fetch(offset).get("items", [])
+        if not page:
+            break
+        items.extend(page)
+        if len(page) < _PAGE:
+            break
+        offset += len(page)
+    return items
+
+
+def _shape_dfw(item: dict) -> dict:
+    """Stamp a DFW policy/rule with ``name``.
+
+    Policies and rules already carry a stable ``id`` from NSX; they name it
+    ``display_name``, which is mapped to the ``name`` the Twin requires. The
+    full sibling record (action, sources, destinations, …) is preserved.
+    """
+    return {**item, "name": item.get("display_name", item.get("id", ""))}
 
 
 class DFWCollector(Collector):
