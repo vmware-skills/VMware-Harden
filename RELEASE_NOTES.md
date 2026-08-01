@@ -1,3 +1,9 @@
+## v1.8.8 — moved to vmware-skills org + MCP Registry namespace io.github.vmware-skills/vmware-harden
+
+Repo transferred from github.com/zw008 to github.com/vmware-skills (redirects preserve old links).
+MCP Registry server renamed to `io.github.vmware-skills/*`; the old `io.github.zw008/*` entry is deprecated.
+All in-repo links updated. No functional code change on this line beyond the org move.
+
 ## v1.8.7 (2026-07-21) — the live-scan collectors actually work now; read-only switch removed
 
 Harden rejoins the family at v1.8.7 (there was no 1.8.6). The headline is a real
