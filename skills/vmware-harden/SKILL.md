@@ -18,16 +18,16 @@ allowed-tools:
   - Bash
   - Read
   - Write
-metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-harden"],"config":["~/.vmware-harden/twin.duckdb"]},"optional":{"env":["VMWARE_AUDIT_APPROVED_BY","VMWARE_AUDIT_RATIONALE","ANTHROPIC_API_KEY"],"bins":["vmware-policy"]},"primaryEnv":"VMWARE_HARDEN_DB","homepage":"https://github.com/zw008/VMware-Harden","os":["macos","linux"]}}
+metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-harden"],"config":["~/.vmware-harden/twin.duckdb"]},"optional":{"env":["VMWARE_AUDIT_APPROVED_BY","VMWARE_AUDIT_RATIONALE","ANTHROPIC_API_KEY"],"bins":["vmware-policy"]},"primaryEnv":"VMWARE_HARDEN_DB","homepage":"https://github.com/vmware-skills/VMware-Harden","os":["macos","linux"]}}
 ---
 
 # VMware Harden (Compliance & Baseline)
 
-> **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom. Source code is publicly auditable at [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden) under the MIT license.
+> **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom. Source code is publicly auditable at [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) under the MIT license.
 
 AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 baselines, drift detection, LLM-driven remediation advice, and a web dashboard.
 
-> **Companion skills**: [vmware-aiops](https://github.com/zw008/VMware-AIops) (inventory + collectors data source; host/VM remediation target), [vmware-monitor](https://github.com/zw008/VMware-Monitor) (read-only inspection), [vmware-storage](https://github.com/zw008/VMware-Storage) (datastore remediation target), [vmware-nsx](https://github.com/zw008/VMware-NSX) (segment/gateway evidence), [vmware-nsx-security](https://github.com/zw008/VMware-NSX-Security) (DFW evidence + remediation target), [vmware-aria](https://github.com/zw008/VMware-Aria) (metrics correlation), [vmware-avi](https://github.com/zw008/VMware-AVI) (load balancer evidence), [vmware-vks](https://github.com/zw008/VMware-VKS) (Tanzu Kubernetes evidence), [vmware-pilot](https://github.com/zw008/VMware-Pilot) (remediation execution with approval gates), [vmware-policy](https://github.com/zw008/VMware-Policy) (audit log). See [references/cross-skill-workflows.md](./references/cross-skill-workflows.md) for end-to-end remediation flows that span pilot + sibling skills.
+> **Companion skills**: [vmware-aiops](https://github.com/vmware-skills/VMware-AIops) (inventory + collectors data source; host/VM remediation target), [vmware-monitor](https://github.com/vmware-skills/VMware-Monitor) (read-only inspection), [vmware-storage](https://github.com/vmware-skills/VMware-Storage) (datastore remediation target), [vmware-nsx](https://github.com/vmware-skills/VMware-NSX) (segment/gateway evidence), [vmware-nsx-security](https://github.com/vmware-skills/VMware-NSX-Security) (DFW evidence + remediation target), [vmware-aria](https://github.com/vmware-skills/VMware-Aria) (metrics correlation), [vmware-avi](https://github.com/vmware-skills/VMware-AVI) (load balancer evidence), [vmware-vks](https://github.com/vmware-skills/VMware-VKS) (Tanzu Kubernetes evidence), [vmware-pilot](https://github.com/vmware-skills/VMware-Pilot) (remediation execution with approval gates), [vmware-policy](https://github.com/vmware-skills/VMware-Policy) (audit log). See [references/cross-skill-workflows.md](./references/cross-skill-workflows.md) for end-to-end remediation flows that span pilot + sibling skills.
 
 ## What This Skill Does
 
@@ -181,7 +181,7 @@ Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in
 
 ## Audit & Safety
 
-1. **Source code**: [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden) — MIT license, publicly auditable.
+1. **Source code**: [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) — MIT license, publicly auditable.
 2. **Config / state files**: custom baselines in `~/.vmware-harden/baselines/*.yaml`; Twin DuckDB at `~/.vmware-harden/twin.duckdb`. No passwords are stored — all credentials live in the upstream skill (`~/.vmware-aiops/.env`).
 3. **Webhook data scope**: none. Harden makes **no outbound network calls** other than (a) optional Anthropic API requests when `ANTHROPIC_API_KEY` is set for advisor suggestions, and (b) the local web dashboard bound to `127.0.0.1` by default.
 4. **TLS verification**: harden does not connect to vCenter/NSX directly — TLS handling is delegated to vmware-aiops. The advisor's HTTPS calls to `api.anthropic.com` use system TLS verification (no opt-out).
@@ -196,4 +196,4 @@ All MCP operations are audited via the `@vmware_tool` decorator (vmware-policy d
 
 ## License
 
-MIT — [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden)
+MIT — [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden)

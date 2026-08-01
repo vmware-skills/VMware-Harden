@@ -4,7 +4,7 @@
   "title": "VMware Harden",
   "description": "VMware compliance scanning (CIS, vSphere SCG, GB/T 22239, PCI-DSS) with drift detection.",
   "repository": {
-    "url": "https://github.com/zw008/VMware-Harden",
+    "url": "https://github.com/vmware-skills/VMware-Harden",
     "source": "github"
   },
   "version": "1.8.7",

@@ -4,7 +4,7 @@
 
 > **声明**：本项目为社区维护的开源项目，**与 VMware, Inc. 或 Broadcom Inc. 无任何隶属、
 > 背书或赞助关系。** "VMware"、"vSphere"、"ESXi"、"NSX" 为 Broadcom 商标。源码以 MIT 许可证
-> 公开可审计，见 [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden)。
+> 公开可审计，见 [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden)。
 
 [English](README.md) | 中文
 

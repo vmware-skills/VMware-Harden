@@ -43,7 +43,7 @@ supported for backward compatibility.
 ### Source install (development)
 
 ```bash
-git clone https://github.com/zw008/VMware-Harden.git
+git clone https://github.com/vmware-skills/VMware-Harden.git
 cd VMware-Harden
 uv venv && source .venv/bin/activate
 uv pip install -e .
@@ -58,7 +58,7 @@ For platforms that prefer containerized MCP servers (e.g., Smithery registry, Ku
 Build and run the MCP server in a container. The image uses `python:3.12-slim` with `uv` for dependency installation and runs `python -m vmware_harden.mcp_server` on stdio (no port exposed — MCP uses stdin/stdout).
 
 ```bash
-git clone https://github.com/zw008/VMware-Harden.git
+git clone https://github.com/vmware-skills/VMware-Harden.git
 cd VMware-Harden
 
 # Build
@@ -267,7 +267,7 @@ Python 3.10+ (e.g. `uv python install 3.12`) and re-install
 > is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or
 > Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom.
 > Source code is publicly auditable at
-> [github.com/zw008/VMware-Harden](https://github.com/zw008/VMware-Harden)
+> [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden)
 > under the MIT license.
 
 - **No credentials of its own.** All vSphere / NSX authentication lives
