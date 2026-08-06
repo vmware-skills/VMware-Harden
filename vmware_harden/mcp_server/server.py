@@ -12,6 +12,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from vmware_policy import sanitize, set_environment_resolver
 
+from vmware_harden.mcp import stig as t_stig
 from vmware_harden.mcp import tools as t
 
 logger = logging.getLogger("mcp_server")
@@ -86,6 +87,11 @@ _HINT_BASELINE_RULES = (
 _HINT_SCAN = (
     "Verify the target name and vCenter credentials with `vmware-harden "
     "doctor`, and copy a valid baseline id from list_baselines."
+)
+_HINT_STIG = (
+    "STIG controls are parsed from the local vsphere-stig-v9-subset baseline "
+    "YAML. Check that ~/.vmware-harden/baselines/ is readable with "
+    "`vmware-harden doctor`."
 )
 
 #: Builtin exception types this package raises on purpose, whose messages it
@@ -297,6 +303,46 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
             return t.scan_target(target, baseline)
         except Exception as e:
             return {"error": _safe_error(e, "scan_target"), "hint": _HINT_SCAN}
+
+    @server.tool(name="list_stig_controls", annotations=_READ_LOCAL)
+    def _list_stig_controls_impl(limit: int = 50, offset: int = 0) -> dict:
+        """[READ] List the built-in vSphere 9 / VCF 9 STIG-aligned host baseline's
+        controls (baseline id 'vsphere-stig-v9-subset'). limit (optional int,
+        default 50): max rows returned; offset (optional int, default 0): rows to
+        skip for paging. Returns the family list envelope {items, returned, limit,
+        total, truncated, hint}; each item is {id, title, severity (one of
+        critical/high/medium/low/info), category, advanced_setting} where
+        advanced_setting names the ESXi advanced setting the control governs
+        (e.g. 'Security.AccountLockFailures'). total is the exact catalog size, so
+        truncated tells you definitively whether to raise offset. Read-only —
+        parses local baseline YAML only, no database, network, or compliance API
+        (VCF Operations ACC/SPM has none). Use scan_target with baseline
+        'vsphere-stig-v9-subset' to evaluate these controls against a target; use
+        describe_stig_content_sync for how this catalog is kept in sync."""
+        try:
+            return t_stig.list_stig_controls(limit=limit, offset=offset)
+        except Exception as e:
+            return {"error": _safe_error(e, "list_stig_controls"), "hint": _HINT_STIG}
+
+    @server.tool(name="describe_stig_content_sync", annotations=_READ_LOCAL)
+    def _describe_stig_content_sync_impl() -> dict:
+        """[READ] Explain harden's vSphere STIG integration and route continuous
+        enforcement. Takes no parameters. Returns {compliance_api_available (always
+        false — VCF Operations ACC/SPM exposes no public compliance REST API),
+        why_no_api, content_sources (the open-source MITRE InSpec/Cinc STIG repos
+        harden syncs against), mechanism (how upstream controls become harden
+        rules), routing_note (use VCF Operations SPM/ACC UI for fleet-wide
+        continuous enforcement; harden is the API-scriptable point-in-time
+        scanner), importer_status}. Read-only, local static content — no database,
+        network, or API call. Call this before assuming a compliance endpoint
+        exists; use list_stig_controls to see the actual controls."""
+        try:
+            return t_stig.describe_stig_content_sync()
+        except Exception as e:
+            return {
+                "error": _safe_error(e, "describe_stig_content_sync"),
+                "hint": _HINT_STIG,
+            }
 
     return server
 

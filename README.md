@@ -10,11 +10,11 @@ English | [中文](README-CN.md)
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
-- **Read-only against vSphere**: all 6 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). See [Read-only by design](#read-only-by-design).
+- **Read-only against vSphere**: all 8 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). See [Read-only by design](#read-only-by-design).
 
 ## GA family member (since v1.5.18)
 
-Production-ready compliance platform with **8 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **87 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 6 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
+Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
 
 ## Quickstart
 
@@ -72,7 +72,7 @@ pip install --no-index --find-links dist vmware-harden
 
 ## Read-Only by Design
 
-vmware-harden is read-only against vSphere and NSX — all 6 MCP tools carry the `[READ]`
+vmware-harden is read-only against vSphere and NSX — all 8 MCP tools carry the `[READ]`
 marker, and none mutate managed VMware infrastructure. `scan_target` writes only to the
 local twin DB (`~/.vmware-harden/twin.duckdb`), a cache of its own observations rather than
 managed infrastructure. Remediation is never applied by this skill; it is deferred to
@@ -90,13 +90,16 @@ vmware-pilot, which provides approval gating and audit trails for write operatio
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz (OPS.1.1.4 + SYS.1.1) |
 | `cis-vmware-esxi-9.0-subset` | 20 | host | Inherits `cis-vmware-esxi-8.0-subset` via `extends:` |
 | `vsphere-scg-v9-subset` | 15 | host, vm | Inherits `vsphere-scg-v8-subset` via `extends:` |
+| `vsphere-stig-v9-subset` ⚠️ *experimental* | 12 | host | vSphere 9 STIG-aligned host advanced settings ([DoD/DISA STIG content](https://github.com/vmware/dod-compliance-and-automation)) — collector pending real-hardware verification |
 
-`baseline list` returns 8 IDs: the 6 rule-bearing baselines above (87 rules total) plus the
+`baseline list` returns 9 IDs: the 7 rule-bearing baselines above (99 rules total) plus the
 two v9 aliases, which carry no rules of their own and resolve to their v8 parent's.
 
 ### VCF 9.0 / 9.1 Compatibility
 
 The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0-subset` and `vsphere-scg-v9-subset` ship today as `extends:` aliases of their v8 parents — same rules, a v9-named ID to scan and report under. Rules specific to 9.x will be added to them as Broadcom publishes the v9 guides.
+
+`vsphere-stig-v9-subset` is a rule-bearing STIG-aligned baseline: 12 host advanced-setting controls (account lockout, password policy, DCUI access, shell/DCUI timeouts, MOB, guest BPDU, remote syslog) mapped to the official open-source vSphere STIG content (MITRE InSpec / Cinc Auditor). **Status: experimental — collector pending real-hardware verification.** Its checks read ESXi host advanced settings the host collector fetches via a `config.option` PropertyCollector pass, a path not yet verified end-to-end against a live vCenter/ESXi. Until it is, treat results as **non-authoritative**: an uncollected setting makes a rule match zero rows, so a host can report *compliant* on a data gap rather than a real pass. The baseline's `status` field is surfaced by `list_baselines` and `describe_stig_content_sync` so a scan self-declares this caveat. It is a **content sync**, not an API wrapper — VCF Operations 9.1 Automated Configuration Compliance (ACC) / Security Posture Management (SPM) is UI- and schedule-driven and exposes **no public compliance REST API**. For continuous, fleet-wide enforcement and automated remediation, use **VCF Operations SPM/ACC (UI)**; vmware-harden is the API-scriptable, DuckDB-persisted, cross-target point-in-time scanner. See [references/stig-content-sync.md](skills/vmware-harden/references/stig-content-sync.md) and inspect the catalog with `vmware-harden stig controls`.
 
 #### Official Broadcom References
 
@@ -120,7 +123,7 @@ YAML supports `extends:` for inheriting from a built-in baseline. See `skills/vm
 vmware-harden mcp  # stdio MCP server (legacy alias: vmware-harden-mcp)
 ```
 
-Configure your MCP client with one of `examples/mcp-configs/*.json`. 6 read-only tools: `list_baselines`, `list_violations`, `get_remediation`, `list_drift_events`, `get_baseline_rules`, `scan_target`.
+Configure your MCP client with one of `examples/mcp-configs/*.json`. 8 read-only tools: `list_baselines`, `get_baseline_rules`, `list_stig_controls`, `describe_stig_content_sync`, `list_violations`, `get_remediation`, `list_drift_events`, `scan_target`.
 
 ## Architecture
 
@@ -152,10 +155,10 @@ pytest tests/eval/regression -v -m lab
 
 - 221 tests passing
 - Bandit: 0 issues at any severity
-- All 6 MCP tools audited
+- All 8 MCP tools audited
 - SKILL.md ≤ 3000 words, family-convention compliant
 - SECURITY.md with 6 elements + Broadcom disclaimer
-- 8 built-in baselines (87 rules across 6 rule-bearing sets + 2 v9 aliases)
+- 9 built-in baselines (99 rules across 7 rule-bearing sets + 2 v9 aliases)
 - `vmware-harden doctor` for environment diagnostics
 - GA member of vmware-* family (version-aligned at 1.5.28)
 

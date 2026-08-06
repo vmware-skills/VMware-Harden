@@ -285,7 +285,7 @@ Python 3.10+ (e.g. `uv python install 3.12`) and re-install
   exclusively from typed Twin queries (rule id, severity, structured
   evidence). Any free-text fields are passed through `_sanitize()` —
   truncation to 500 chars and stripping C0/C1 control characters.
-- **Least privilege**: all 6 MCP tools are read-only with respect to
+- **Least privilege**: all 8 MCP tools are read-only with respect to
   managed VMware resources. Remediation execution is intentionally not
   exposed; agents that need to apply a fix must invoke **vmware-pilot**,
   which adds approval gates and audit logging.

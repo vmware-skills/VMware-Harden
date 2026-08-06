@@ -89,6 +89,12 @@ class Baseline(BaseModel):
     name: str
     version: str
     source: str | None = None
+    #: Maturity marker. ``None`` means production-ready. A non-None value (e.g.
+    #: "experimental-collector-pending") warns that some rules read nodes.attrs
+    #: keys the collector cannot yet reliably populate, so a "compliant" result
+    #: is NOT authoritative — absent keys make a rule match zero rows. Surfaced
+    #: through list_baselines / describe_stig_content_sync so scans self-declare.
+    status: str | None = None
     extends: str | None = None
     applies_to: list[NodeType]
     rules: list[Rule]

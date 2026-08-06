@@ -14,7 +14,7 @@ vmware-monitor and vmware-aria against a production vSphere estate with Llama
 cross-skill rules are identical across this family; the parts below marked
 vmware-harden are specific to this skill.
 
-vmware-harden exposes 6 MCP tools and every one of them is a read. The risk
+vmware-harden exposes 8 MCP tools and every one of them is a read. The risk
 here is not a destructive call — there is none to make. It is that compliance
 output is exactly the shape of text a small model likes to embellish, and an
 invented violation, or an invented clean bill of health, is a costly answer.

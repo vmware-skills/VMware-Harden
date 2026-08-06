@@ -8,6 +8,7 @@ from vmware_harden.cli import doctor as doctor_cmd
 from vmware_harden.cli import drift as drift_cmd
 from vmware_harden.cli import report as report_cmd
 from vmware_harden.cli import scan as scan_cmd
+from vmware_harden.cli import stig as stig_cmd
 from vmware_harden.cli import web as web_cmd
 
 app = typer.Typer(
@@ -18,6 +19,7 @@ app = typer.Typer(
 app.add_typer(scan_cmd.app, name="scan", help="Run compliance scans.")
 app.add_typer(report_cmd.app, name="report", help="Generate compliance reports.")
 app.add_typer(baseline_cmd.app, name="baseline", help="Manage compliance baselines.")
+app.add_typer(stig_cmd.app, name="stig", help="Inspect the vSphere 9 STIG-aligned catalog.")
 app.add_typer(drift_cmd.app, name="drift", help="Show drift between snapshots.")
 app.add_typer(web_cmd.app, name="web", help="Start the web dashboard.")
 app.add_typer(advise_cmd.app, name="advise", help="Generate LLM remediation suggestions.")

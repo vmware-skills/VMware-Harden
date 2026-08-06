@@ -117,3 +117,65 @@ def test_host_collector_raises_on_malformed_host(tmp_path: Path):
         with pytest.raises(CollectorError, match="missing required field"):
             HostCollector(twin).collect(snap_id, target="v.lab")
     twin.close()
+
+
+class _Opt:
+    """Minimal stand-in for a pyVmomi OptionValue (.key/.value)."""
+
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
+@pytest.mark.unit
+def test_advanced_settings_reducer_maps_only_stig_keys():
+    """The pure reducer converts ESXi OptionValues to the STIG snake_case attrs
+    the baseline SQL reads, and ignores everything else."""
+    from vmware_harden.collectors.hosts import _advanced_settings_to_attrs
+
+    options = [
+        _Opt("Security.AccountLockFailures", 5),
+        _Opt("DCUI.Access", "root,ops"),
+        _Opt("Net.BlockGuestBPDU", 1),
+        _Opt("Config.HostAgent.plugins.solo.enableMob", True),
+        _Opt("Some.Unrelated.Setting", "ignored"),
+    ]
+    attrs = _advanced_settings_to_attrs(options)
+    assert attrs == {
+        "account_lock_failures": 5,
+        "dcui_access": "root,ops",
+        "block_guest_bpdu": 1,
+        "mob_enabled": True,
+    }
+    # "Some.Unrelated.Setting" must not leak into the record.
+    assert "ignored" not in attrs.values()
+
+
+@pytest.mark.unit
+def test_advanced_settings_reducer_is_defensive():
+    """A None list or a malformed entry (no .key) must not raise — a partial
+    host config cannot be allowed to abort the whole collection."""
+    from vmware_harden.collectors.hosts import _advanced_settings_to_attrs
+
+    assert _advanced_settings_to_attrs(None) == {}
+    assert _advanced_settings_to_attrs([object(), _Opt("DCUI.Access", "root")]) == {
+        "dcui_access": "root"
+    }
+
+
+@pytest.mark.unit
+def test_shape_host_merges_advanced_settings():
+    """_shape_host folds the collected advanced settings into the record so the
+    STIG SQL can read them; without the merge every STIG rule matches 0 rows."""
+    from vmware_harden.collectors.hosts import _shape_host
+
+    rec = _shape_host(
+        {"name": "esx01.lab", "esxi_version": "9.0.0"},
+        {"dcui_access": "root", "account_lock_failures": 3},
+    )
+    assert rec["id"] == "esx01.lab"
+    assert rec["dcui_access"] == "root"  # merged advanced setting is present
+    assert rec["account_lock_failures"] == 3
+    assert rec["esxi_version"] == "9.0.0"  # base record preserved
+    # Backwards-compatible single-arg call still works (advanced optional).
+    assert _shape_host({"name": "esx02.lab"})["id"] == "esx02.lab"

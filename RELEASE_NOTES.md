@@ -1,3 +1,102 @@
+## v1.8.9 (2026-08-06) — vSphere 9 / VCF 9 STIG-aligned baseline + catalog tools (experimental, collector-pending)
+
+Adds a vSphere 9 / VCF 9 STIG-aligned host baseline and two read-only MCP tools
+for inspecting and routing it. This is **content sync, not an API wrapper**: VCF
+Operations 9.1 Automated Configuration Compliance (ACC) / Security Posture
+Management (SPM) is UI- and schedule-driven with a paid Salt engine and exposes
+**no public compliance REST API** — the VCF Operations 9.1 OpenAPI (343 paths)
+has zero Compliance / Benchmark / Baseline / Posture / Scan / Remediation
+classes. There is nothing to wrap, so harden keeps its own DuckDB-persisted
+scan engine and aligns its rule catalog with the open-source DISA/DoD STIG
+content instead. For continuous, fleet-wide enforcement and automated
+remediation, use VCF Operations SPM/ACC (UI); harden is the API-scriptable,
+cross-target **point-in-time** scanner for CI and agent workflows.
+
+### Added — `vsphere-stig-v9-subset` baseline (12 host controls) ⚠ EXPERIMENTAL
+
+A rule-bearing STIG-aligned baseline of **12 ESXi host advanced-setting
+controls**: account lockout / unlock time, password quality + history, DCUI
+access, ESXi shell / DCUI idle timeouts, MOB disabled, shell-warning
+suppression, guest BPDU blocking, and remote syslog. Each rule maps to the
+**public, documented ESXi advanced-setting key** it governs (e.g.
+`Security.AccountLockFailures`), evaluated with a declarative SQL check against
+the twin — the same mechanism as the CIS / SCG subsets. Rule ids use harden's
+own `stig-esxi9-<control>` namespace; they are **not** invented DISA V-IDs /
+STIG-IDs (`ESXI-90-000xxx`), which would require cross-referencing the published
+XCCDF. `baseline list` now returns **9 ids / 99 rules** (7 rule-bearing sets +
+2 v9 aliases).
+
+**Marked `status: experimental-collector-pending`.** The checks read host
+advanced settings that a new collector pass fetches, and **that fetch is
+verified at the code level only, not against a live 9.1 appliance** (see the
+caveats below). The `status` field is surfaced through `list_baselines` and
+`describe_stig_content_sync` so a scan self-declares that its STIG results are
+not yet authoritative.
+
+### Added — STIG advanced-settings host collector (real-hardware-gated)
+
+The host collector gained an advanced-settings enrichment step: one batched
+PropertyCollector pass over `config.option` per host (a single server-side call
+for the whole fleet, not an `OptionManager.QueryOptions` round-trip per host —
+踩坑 #31), reduced to the twelve snake_case `nodes.attrs` keys the STIG rules
+read and merged into each host record. The pure reducer
+(`_advanced_settings_to_attrs`) is unit-tested offline; the live
+connect-and-fetch wrapper (`_fetch_advanced_settings`) is **REAL-HARDWARE-GATED
+and exercised only against a live vCenter/ESXi.**
+
+### Added — two read-only MCP tools + `vmware-harden stig` CLI (MCP 6 → 8)
+
+- `list_stig_controls` — the STIG baseline's controls as a flat, paginated
+  catalog `{id, title, severity, category, advanced_setting}`.
+- `describe_stig_content_sync` — states that no compliance API exists, names the
+  open-source STIG content sources harden syncs against, explains the
+  InSpec→rule mapping mechanism, and routes continuous enforcement to SPM/ACC.
+
+Both are `[READ]`, parse local baseline YAML only (no database, network, or
+compliance API), and are audited via `@vmware_tool`. All **8 MCP tools remain
+read-only** with respect to vSphere/NSX (verified: `mcp.list_tools()` returns 8;
+SKILL.md and README updated to match — 踩坑 #34). CLI adds `vmware-harden stig
+controls` / `vmware-harden stig sync-info`. The InSpec/Cinc profile importer is
+**deferred** (`import_inspec_profile` raises `NotImplementedError` with a
+teaching next step); hand-author or override baseline YAML for now.
+
+### Fixed — review findings from today's Fable5 pass
+
+- **`list_stig_controls` reported "more remaining" forever past page one.**
+  `paginated()` computes `truncated = returned < total`, which is
+  offset-unaware: every slice past the first page is partial, so the final page
+  would still say `truncated: true` and an agent paging to the end would never
+  learn it was done. The tool now recomputes `truncated` against the absolute
+  position (`offset + len(page) < total`) and clears the `hint` on the last page.
+- **A partial host config could abort the whole collection.** The advanced-
+  settings reducer now skips a `None` option list or an entry missing `.key`
+  rather than raising, so one malformed host cannot fail the fleet scan.
+- **A "compliant" STIG result could be a data gap, not a pass.** If an advanced
+  setting is not collected (older ESXi without the key, a permissions/version
+  gap, or the fetch not yet run on real hardware), the rule's SQL matches zero
+  rows and the host reports compliant. This is now (a) self-declared via the
+  `status` field on the baseline and in `describe_stig_content_sync`
+  (`authoritative: false` + an explicit caveat), and (b) guarded by a doc-vs-code
+  parity test that fails CI if any STIG rule reads a `nodes.attrs` key the
+  collector cannot populate (形态 #6 / #1).
+
+### Verification honesty — what is and isn't proven
+
+- **Verified at the PATH / OpenAPI level, not against a live 9.1 appliance.**
+  The "no public compliance API" fact is pinned against the VCF Operations 9.1
+  OpenAPI in `tests/eval/spec/vcf91_compliance.py` (a one-line reverification is
+  documented there). The STIG advanced-setting keys are public, stable, and
+  cross-checked against a verified-settings allowlist — but the end-to-end
+  **collect → evaluate** path has not been run against a real vCenter/ESXi 9.1.
+- **The collector fetch is real-hardware-gated.** Treat STIG scan results as
+  indicative, not authoritative, until validated on your estate on first use;
+  a green result may reflect an uncollected setting rather than a real pass.
+- Regression coverage: baseline discoverability + pinned 12-rule count, every
+  control maps to a verified advanced setting (anti-phantom), source is a
+  verified content source, no hallucinated compliance-API path fragment anywhere
+  in the package, offset-aware pagination, and the experimental-status marker.
+  No feature is claimed beyond what these tests exercise.
+
 ## v1.8.8 — moved to vmware-skills org + MCP Registry namespace io.github.vmware-skills/vmware-harden
 
 Repo transferred from github.com/zw008 to github.com/vmware-skills (redirects preserve old links).

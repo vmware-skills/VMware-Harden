@@ -1,5 +1,5 @@
 {
-  "_comment": "Capability eval scores. Regenerate with: pytest -m capability. These are tracked trends, not pass/fail gates \u2014 see _scoring.py.",
+  "_comment": "Capability eval scores. Regenerate with: pytest -m capability. These are tracked trends, not pass/fail gates \u2014 see _scoring.py. Entries marked stale=true were carried over from an earlier run because this run did not measure them.",
   "scores": {
     "entity_reachability_full": {
       "detail": {
@@ -8,13 +8,15 @@
           "list_baselines",
           "list_violations",
           "list_drift_events",
-          "scan_target"
+          "scan_target",
+          "list_stig_controls",
+          "describe_stig_content_sync"
         ],
         "reachable_on_surface": 2,
         "reachable_only_via_description": 0,
         "required_entity_params": 2,
         "required_params_classified": "2/3",
-        "tool_count": 6
+        "tool_count": 8
       },
       "maximum": 2,
       "pct": 100.0,
@@ -38,18 +40,18 @@
       },
       "maximum": 2,
       "pct": 100.0,
+      "stale": true,
       "unit": "required entity params",
       "value": 2
     },
     "entry_point_availability": {
       "detail": {
-        "full_entry_points": 4,
-        "read_only_entry_points": 4
+        "full_entry_points": 6
       },
-      "maximum": 6,
-      "pct": 66.7,
+      "maximum": 8,
+      "pct": 75.0,
       "unit": "entry points",
-      "value": 4
+      "value": 6
     },
     "error_actionability": {
       "detail": {
@@ -67,54 +69,54 @@
           }
         ],
         "per_dimension_pct": {
-          "names_artifact": 93.8,
-          "names_input": 93.8,
-          "states_remedy": 93.8
+          "names_artifact": 94.7,
+          "names_input": 94.7,
+          "states_remedy": 94.7
         },
-        "raise_sites": 16
+        "raise_sites": 19
       },
-      "maximum": 48,
-      "pct": 93.8,
+      "maximum": 57,
+      "pct": 94.7,
       "unit": "points",
-      "value": 45
+      "value": 54
     },
     "manifest_context_headroom": {
       "detail": {
         "heaviest_tools": {
           "get_baseline_rules": 163,
-          "list_baselines": 147,
           "list_drift_events": 176,
+          "list_stig_controls": 215,
           "list_violations": 249,
           "scan_target": 182
         },
-        "manifest_tokens": 1054,
-        "mean_tokens_per_tool": 175.7,
+        "manifest_tokens": 1388,
+        "mean_tokens_per_tool": 173.5,
         "reference_context": 16384,
-        "tool_count": 6
+        "tool_count": 8
       },
       "maximum": 16384,
-      "pct": 93.6,
+      "pct": 91.5,
       "unit": "tokens",
-      "value": 15330
+      "value": 14996
     },
     "parameter_documentation_coverage": {
       "detail": {
         "undocumented_by_tool": {}
       },
-      "maximum": 8,
+      "maximum": 10,
       "pct": 100.0,
       "unit": "parameters",
-      "value": 8
+      "value": 10
     },
     "per_tool_token_discipline": {
       "detail": {
         "ceiling": 350,
         "over_ceiling": {}
       },
-      "maximum": 6,
+      "maximum": 8,
       "pct": 100.0,
       "unit": "tools",
-      "value": 6
+      "value": 8
     },
     "read_only_manifest_saving": {
       "detail": {
@@ -126,6 +128,7 @@
       },
       "maximum": 1054,
       "pct": 0.0,
+      "stale": true,
       "unit": "tokens",
       "value": 0
     },
@@ -133,10 +136,10 @@
       "detail": {
         "unmarked": []
       },
-      "maximum": 6,
+      "maximum": 8,
       "pct": 100.0,
       "unit": "points",
-      "value": 6
+      "value": 8
     },
     "remedy_survives_truncation": {
       "detail": {
@@ -146,26 +149,26 @@
           "advisor.py:59",
           "advisor.py:85",
           "loader.py:71",
-          "runner.py:92",
+          "runner.py:96",
+          "stig.py:23",
+          "stig.py:28",
           "tools.py:26",
           "tools.py:80",
           "tools.py:87",
-          "tools.py:92",
-          "client.py:165",
-          "client.py:152"
+          "tools.py:92"
         ]
       },
-      "maximum": 15,
+      "maximum": 18,
       "pct": 100.0,
       "unit": "messages",
-      "value": 15
+      "value": 18
     },
     "teaching_error_rate": {
       "detail": {},
-      "maximum": 16,
-      "pct": 93.8,
+      "maximum": 19,
+      "pct": 94.7,
       "unit": "messages",
-      "value": 15
+      "value": 18
     },
     "tool_description_quality": {
       "detail": {
@@ -175,39 +178,43 @@
           "marker": 100.0,
           "next_hop": 100.0,
           "what": 100.0,
-          "when": 66.7
+          "when": 62.5
         },
-        "tools_graded": 6,
+        "tools_graded": 8,
         "weakest_tools": {
+          "describe_stig_content_sync": [],
           "get_baseline_rules": [],
           "get_remediation": [
             "when"
           ],
           "list_baselines": [],
           "list_drift_events": [],
+          "list_stig_controls": [
+            "when"
+          ],
           "list_violations": [],
           "scan_target": [
             "when"
           ]
         }
       },
-      "maximum": 36,
-      "pct": 94.4,
+      "maximum": 48,
+      "pct": 93.8,
       "unit": "points",
-      "value": 34
+      "value": 45
     },
     "tool_failure_payload_quality": {
       "detail": {
         "bare_string_error_lines": [],
-        "carries_hint": 6,
-        "dict_shaped": 6,
-        "error_return_sites": 6,
-        "hint_names_artifact": 6
+        "carries_hint": 8,
+        "dict_shaped": 8,
+        "error_return_sites": 8,
+        "hint_names_artifact": 8
       },
-      "maximum": 18,
+      "maximum": 24,
       "pct": 100.0,
       "unit": "checks",
-      "value": 18
+      "value": 24
     }
   }
 }

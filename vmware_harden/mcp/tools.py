@@ -35,8 +35,11 @@ def list_baselines() -> dict:
     """List built-in and user-imported baselines.
 
     Returns: the family list envelope; `items` is a list of
-    {id, name, version, applies_to, rule_count}. Every discovered baseline is
-    loaded, so `total` is the real count and `truncated` is always False.
+    {id, name, version, applies_to, rule_count, status}. `status` is None for
+    production-ready baselines and a maturity marker (e.g.
+    "experimental-collector-pending") otherwise — surfaced so a scan self-declares
+    a baseline whose results are not yet authoritative. Every discovered baseline
+    is loaded, so `total` is the real count and `truncated` is always False.
     """
     from vmware_harden.baselines.loader import list_builtins, load_builtin
 
@@ -51,6 +54,7 @@ def list_baselines() -> dict:
                     "version": b.version,
                     "applies_to": list(b.applies_to),
                     "rule_count": len(b.rules),
+                    "status": getattr(b, "status", None),
                 }
             )
         except Exception as e:

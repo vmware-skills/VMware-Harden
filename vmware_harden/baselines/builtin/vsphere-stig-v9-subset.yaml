@@ -1,0 +1,298 @@
+# VCF 9 / vSphere 9 STIG-aligned baseline (subset) — provenance note
+# ---------------------------------------------------------------------------
+# WHAT THIS IS
+#   A harden-native compliance baseline whose rules map to the ESXi host
+#   *advanced settings* enumerated by the official DISA/DoD vSphere STIG line
+#   and Broadcom's open-source STIG automation content (MITRE InSpec / Cinc
+#   Auditor profiles + Ansible + PowerCLI). It carries the vSphere-8 SCG/CIS
+#   host controls forward into the vSphere 9 / VCF 9 STIG naming, plus the
+#   account-policy and access-control advanced-setting controls the STIG adds
+#   on top of the CIS/SCG subset already shipped here.
+#
+# WHY IT IS NOT AN API WRAPPER (踩坑 #36 guard)
+#   VCF Operations 9.1 Automated Configuration Compliance (ACC) / Security
+#   Posture Management (SPM) has *no public compliance REST API* — it is UI +
+#   schedule driven with a paid Salt engine. There is nothing to wrap. The
+#   verified, honest integration is *content sync*: aligning this rule catalog
+#   with the downloadable open-source STIG profiles. See
+#   tests/eval/spec/vcf91_compliance.py for the verified facts this file is
+#   pinned against, and references/stig-content-sync.md for the sync mechanism.
+#
+# NAMING HONESTY (no-fabrication rule)
+#   Rule ids use harden's own `stig-esxi9-<control>` namespace. They are NOT
+#   invented DISA V-IDs / STIG-IDs (e.g. ESXI-90-000xxx): those exact numeric
+#   identifiers must be cross-referenced from the published STIG XCCDF, which is
+#   why each rule instead names its *advanced setting key* — the stable, public,
+#   verifiable control surface. Every setting referenced below is asserted to be
+#   in the verified-settings set in the spec module, so a hallucinated control
+#   fails the regression test rather than silently shipping.
+#
+# ATTR MAPPING + COLLECTOR STATUS (踩坑 形态 #1 guard — read this)
+#   Each rule's SQL reads a `nodes.attrs` key that the host collector's
+#   advanced-settings fetch (vmware_harden/collectors/hosts.py:
+#   _fetch_advanced_settings, mapping STIG_ADVANCED_SETTING_ATTRS) is written to
+#   populate. Where a v8 CIS/SCG rule already covers the same setting, this
+#   baseline reuses the exact same attr key (shell_timeout_seconds,
+#   dcui_timeout_seconds, syslog_remote_host) so the two never diverge; new
+#   advanced-setting controls introduce new snake_case attr keys following the
+#   same convention. The rule->key parity is enforced by
+#   tests/eval/regression/test_stig_baseline.py.
+#
+#   ⚠ EXPERIMENTAL — COLLECTOR PENDING REAL-HARDWARE VERIFICATION.
+#   The advanced-settings fetch is REAL-HARDWARE-GATED: it runs one
+#   PropertyCollector pass for `config.option` per host against a live
+#   vCenter/ESXi and has NOT been verified end-to-end here. Until it is, treat
+#   results as NON-AUTHORITATIVE: if a setting is not collected (older ESXi
+#   without the key, a permissions/version gap, or the fetch not yet run on real
+#   hardware) the rule's SQL matches zero rows and the host reports COMPLIANT for
+#   that control. In other words, a green result may be a data gap, not a pass.
+#   The `status:` field below is surfaced by list_baselines /
+#   describe_stig_content_sync so a scan self-declares this caveat.
+#
+#   Operators wanting site-specific thresholds should copy this file to
+#   ~/.vmware-harden/baselines/ and override individual rules (user dir wins).
+# ---------------------------------------------------------------------------
+id: vsphere-stig-v9-subset
+name: "VMware vSphere 9 / VCF 9 STIG-aligned host baseline (subset — advanced settings)"
+version: "1.0.0-subset"
+status: "experimental-collector-pending"
+source: "https://github.com/vmware/dod-compliance-and-automation"
+applies_to:
+  - host
+
+rules:
+  # --- account-policy (Security.Account* advanced settings) ---
+  - id: stig-esxi9-account-lock-failures
+    title: "Ensure host account lockout triggers after at most 3 failed logins (Security.AccountLockFailures)"
+    severity: medium
+    category: auth
+    rationale: "STIG 要求 Security.AccountLockFailures <= 3，限制凭据爆破尝试次数。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.account_lock_failures') AS INTEGER) > 3
+    remediation:
+      summary: "Set Security.AccountLockFailures to 3 (or fewer)"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.AccountLockFailures = 3"
+      risk: "过于严格的锁定阈值会增加自动化账户被误锁概率；先清点服务账户登录频率"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: stig-esxi9-account-unlock-time
+    title: "Ensure locked host accounts stay locked at least 900s (Security.AccountUnlockTime)"
+    severity: low
+    category: auth
+    rationale: "STIG 要求 Security.AccountUnlockTime >= 900，延长爆破窗口成本。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.account_unlock_time') AS INTEGER) < 900
+    remediation:
+      summary: "Set Security.AccountUnlockTime to 900 seconds or more"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.AccountUnlockTime = 900"
+      risk: "无业务影响；仅延长误锁账户的自动解锁等待"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: stig-esxi9-password-quality
+    title: "Ensure host password complexity policy is configured (Security.PasswordQualityControl)"
+    severity: high
+    category: auth
+    rationale: "空的 Security.PasswordQualityControl 表示未强制密码复杂度，弱口令可被直接爆破。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (json_extract_string(attrs, '$.password_quality_control') IS NULL
+               OR json_extract_string(attrs, '$.password_quality_control') = '')
+    remediation:
+      summary: "Set Security.PasswordQualityControl to the STIG pam_passwdqc policy"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.PasswordQualityControl"
+      risk: "策略过严会拒绝既有弱口令的下一次改密；配合密码轮换窗口实施"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  - id: stig-esxi9-password-history
+    title: "Ensure host remembers at least 5 previous passwords (Security.PasswordHistory)"
+    severity: low
+    category: auth
+    rationale: "STIG 要求 Security.PasswordHistory >= 5，防止密码轮换时复用旧口令。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.password_history') AS INTEGER) < 5
+    remediation:
+      summary: "Set Security.PasswordHistory to 5 or more"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.PasswordHistory = 5"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # --- access-control (DCUI.Access) ---
+  - id: stig-esxi9-dcui-access
+    title: "Ensure DCUI.Access is limited to the root account (DCUI.Access)"
+    severity: medium
+    category: access-control
+    rationale: "DCUI.Access 列出可绕过 lockdown 直接操作 DCUI 的账户，STIG 要求仅 root。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND json_extract_string(attrs, '$.dcui_access') != 'root'
+    remediation:
+      summary: "Set DCUI.Access to 'root' only"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → DCUI.Access = root"
+      risk: "移除额外的 DCUI 应急账户后，本地控制台仅 root 可救援；先确认 root 口令可用"
+    review_policy:
+      human_review_required: true
+      min_confidence: 0.9
+
+  # --- session timeouts (UserVars.* advanced settings) ---
+  - id: stig-esxi9-shell-interactive-timeout
+    title: "Ensure ESXi shell interactive timeout <= 900s (UserVars.ESXiShellInteractiveTimeOut)"
+    severity: low
+    category: session
+    rationale: "空闲交互 shell 会话被劫持风险高，STIG 要求 <= 900 秒。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
+    remediation:
+      summary: "Set UserVars.ESXiShellInteractiveTimeOut <= 900"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellInteractiveTimeOut"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: stig-esxi9-shell-timeout
+    title: "Ensure ESXi shell availability timeout <= 600s (UserVars.ESXiShellTimeOut)"
+    severity: low
+    category: session
+    rationale: "STIG 要求 UserVars.ESXiShellTimeOut <= 600，限制启用后的 shell/SSH 可用时长。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.esxi_shell_timeout_seconds') AS INTEGER) > 600
+    remediation:
+      summary: "Set UserVars.ESXiShellTimeOut <= 600"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellTimeOut"
+      risk: "无业务影响；启用中的排障 shell 会更快自动关闭"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: stig-esxi9-dcui-timeout
+    title: "Ensure DCUI idle timeout <= 600s (UserVars.DcuiTimeOut)"
+    severity: low
+    category: session
+    rationale: "DCUI 长时间空闲会话给物理访问者机会，STIG 要求 <= 600 秒。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
+    remediation:
+      summary: "Set UserVars.DcuiTimeOut <= 600"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.DcuiTimeOut"
+      risk: "无业务影响"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # --- services (MOB / shell warning) ---
+  - id: stig-esxi9-mob-disabled
+    title: "Ensure the Managed Object Browser (MOB) is disabled (Config.HostAgent.plugins.solo.enableMob)"
+    severity: medium
+    category: services
+    rationale: "MOB 暴露 vSphere 托管对象模型，STIG 要求关闭以缩小信息泄露/攻击面。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.mob_enabled') AS BOOLEAN) = true
+    remediation:
+      summary: "Set Config.HostAgent.plugins.solo.enableMob = false"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Config.HostAgent.plugins.solo.enableMob = false"
+      risk: "无业务影响；仅少数依赖 MOB 的老工具需改走 vCenter API"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  - id: stig-esxi9-suppress-shell-warning
+    title: "Ensure ESXi shell/SSH warnings are not suppressed (UserVars.SuppressShellWarning)"
+    severity: low
+    category: services
+    rationale: "抑制 shell 警告会隐藏 SSH/ESXi shell 长期开启的合规信号，STIG 要求保持 0。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.suppress_shell_warning') AS INTEGER) = 1
+    remediation:
+      summary: "Set UserVars.SuppressShellWarning = 0"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.SuppressShellWarning = 0"
+      risk: "无业务影响；vCenter 会重新显示 shell 已启用的警告横幅"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # --- network (Net.BlockGuestBPDU) ---
+  - id: stig-esxi9-block-guest-bpdu
+    title: "Ensure guest BPDU frames are blocked (Net.BlockGuestBPDU)"
+    severity: medium
+    category: network
+    rationale: "未阻断 guest BPDU 时恶意 VM 可注入 STP 帧干扰物理交换机，STIG 要求 = 1。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND CAST(json_extract(attrs, '$.block_guest_bpdu') AS INTEGER) != 1
+    remediation:
+      summary: "Set Net.BlockGuestBPDU = 1"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Net.BlockGuestBPDU = 1"
+      risk: "极少数需要透传 BPDU 的嵌套虚拟化/网络实验场景会受影响；先确认无此需求"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9
+
+  # --- logging (Syslog.global.logHost) ---
+  - id: stig-esxi9-syslog-loghost
+    title: "Ensure a remote syslog host is configured (Syslog.global.logHost)"
+    severity: high
+    category: logging
+    rationale: "无远程 syslog 时主机重启或被攻陷即丢失审计日志，STIG 要求配置 logHost。"
+    check:
+      type: query
+      sql: |
+        SELECT id, name FROM nodes
+        WHERE type = 'host'
+          AND (json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+               OR json_extract_string(attrs, '$.syslog_remote_host') = '')
+    remediation:
+      summary: "Set Syslog.global.logHost to a reachable remote syslog endpoint"
+      manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.logHost"
+      risk: "无业务影响；需确保目标 syslog 收集器可达"
+    review_policy:
+      human_review_required: false
+      min_confidence: 0.9

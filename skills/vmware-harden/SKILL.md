@@ -1,12 +1,12 @@
 ---
 name: vmware-harden
 description: >
-  Use this skill whenever the user needs to perform VMware compliance auditing,
+  Use this skill whenever the user needs to perform VMware cyber compliance auditing (aligned with VCF 9 Advanced Cyber Compliance / ACC),
   baseline checking, or drift detection on vSphere/ESXi/NSX environments.
   Directly handles: CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 scans;
   custom YAML baselines; LLM-driven remediation suggestions; web dashboard.
   Always use this skill for "scan compliance", "check baseline", "audit etcd",
-  "check 等保", "drift detection", "compliance report" when the context is
+  "check 等保", "drift detection", "compliance report", "cyber compliance scan", "ACC posture", "STIG check" when the context is
   explicitly VMware/vSphere/ESXi.
   Do NOT use for general vSphere monitoring (use vmware-monitor or vmware-aiops),
   network changes (use vmware-nsx), or executing remediations directly
@@ -53,7 +53,7 @@ For first-time use, ensure a vmware-aiops target is configured (harden uses aiop
 
 Use vmware-harden when the user needs to:
 
-- Run a **compliance scan** against CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2
+- Run a **compliance scan** against CIS / vSphere SCG / **vSphere 9 STIG-aligned** / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2
 - **Author or import a custom YAML baseline** (e.g., internal corporate baseline)
 - Detect **drift** between two scans of the same target
 - Get **AI-suggested remediation steps** for a violation (advice only — does not execute)
@@ -65,12 +65,15 @@ Use vmware-harden when the user needs to:
 - The task is VM lifecycle, snapshots, or guest operations → use **vmware-aiops**
 - The user wants to actually **execute** a remediation (set advanced setting, change DFW rule, etc.) → use **vmware-pilot** (multi-step approval-gated workflow)
 - The task is purely NSX networking/segments → use **vmware-nsx**
+- The user wants **continuous, fleet-wide compliance enforcement + automated remediation** across the estate → use **VCF Operations SPM/ACC (UI)**. VCF Operations 9.1 Automated Configuration Compliance / Security Posture Management is UI- and schedule-driven (paid Salt engine) and exposes **no public compliance API**. harden is the complementary, **API-scriptable, DuckDB-persisted, cross-target point-in-time scanner** for CI and agent workflows; it does not replace SPM/ACC. See [references/stig-content-sync.md](./references/stig-content-sync.md).
 
 ## Related Skills — Skill Routing
 
 | User Intent | Recommended Skill |
 |-------------|-------------------|
 | "Scan ESXi for CIS compliance" | **vmware-harden** ← this skill |
+| "Scan against the vSphere 9 STIG" | **vmware-harden** (`--baseline vsphere-stig-v9-subset`) |
+| "Continuous fleet-wide enforcement + auto-remediation" | **VCF Operations SPM/ACC (UI)** — no public API; harden is the scriptable point-in-time scanner |
 | "Check 等保 2.0 三级" | **vmware-harden** |
 | "What changed since last week?" (drift) | **vmware-harden** |
 | "Fix this violation now" | **vmware-pilot** (approval-gated execution) |
@@ -115,22 +118,24 @@ Use vmware-harden when the user needs to:
 | Scenario | Recommended | Why |
 |----------|:-----------:|-----|
 | Local CLI scans by an operator | **CLI** | Direct, scripts well into CI |
-| AI agent integration | **MCP** | 6 read-only tools, structured responses |
+| AI agent integration | **MCP** | 8 read-only tools, structured responses |
 | Reviewing posture interactively | **Web** | `vmware-harden web` — sortable tables, drift timeline |
 | CI/CD pipeline gates | **CLI** | Exit code reflects compliance pass/fail |
 
-## MCP Tools (6 — 6 read, 0 write)
+## MCP Tools (8 — 8 read, 0 write)
 
 | Category | Tool | Description |
 |----------|------|-------------|
 | Baseline | `list_baselines` | All built-in + imported baselines (id, framework, version) |
 | Baseline | `get_baseline_rules` | Rules for a given baseline_id (severity, references) |
+| STIG | `list_stig_controls` | vSphere 9 STIG-aligned controls (id, severity, ESXi advanced setting) |
+| STIG | `describe_stig_content_sync` | How harden syncs STIG content + routing to SPM/ACC (no compliance API) |
 | Violation | `list_violations` | Current violations, filterable by severity |
 | Violation | `get_remediation` | Remediation suggestion for a violation_id (LLM or mock) |
 | Drift | `list_drift_events` | Recent drift events from snapshot diff |
 | Scan | `scan_target` | Trigger a scan against a target (read-only on the target) |
 
-All 6 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Actual remediation execution is intentionally **deferred to vmware-pilot** (approval-gated).
+All 8 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Actual remediation execution is intentionally **deferred to vmware-pilot** (approval-gated).
 
 **List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
 

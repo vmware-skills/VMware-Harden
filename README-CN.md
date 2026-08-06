@@ -10,7 +10,7 @@
 
 AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员。
 
-- **对 vSphere 只读**：全部 6 个 MCP 工具均带 `[READ]` 标记，没有任何一个会修改受管的 VMware
+- **对 vSphere 只读**：全部 8 个 MCP 工具均带 `[READ]` 标记，没有任何一个会修改受管的 VMware
   基础设施；`scan_target` 只写本地 twin DB（它自己观测结果的缓存）。详见[只读设计](#只读设计)。
 
 ## GA 家族成员（自 v1.5.18 起）
@@ -48,7 +48,7 @@ vmware-harden web --port 8080  # → http://127.0.0.1:8080
 
 ## 只读设计
 
-vmware-harden 在设计上就是只读的 —— 6 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
+vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
 VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/twin.duckdb`，观测结果的缓存，
 不是受管基础设施）。本 skill 从不执行修复，修复一律交由 vmware-pilot。
 
@@ -124,7 +124,7 @@ YAML 支持 `extends:` 从内置基线继承。用户目录下的同名基线优
 vmware-harden mcp  # stdio MCP server（旧入口 vmware-harden-mcp 仍兼容）
 ```
 
-MCP 客户端配置模板见 `examples/mcp-configs/*.json`。6 个 MCP 工具全部只读：
+MCP 客户端配置模板见 `examples/mcp-configs/*.json`。8 个 MCP 工具全部只读：
 `list_baselines`、`list_violations`、`get_remediation`、`list_drift_events`、
 `get_baseline_rules`、`scan_target`。
 
@@ -165,7 +165,7 @@ pytest tests/eval/regression -v -m lab
 
 - 221 项测试通过
 - Bandit：任意严重级别下 0 issue
-- 全部 6 个 MCP 工具均被审计
+- 全部 8 个 MCP 工具均被审计
 - SKILL.md ≤ 3000 词，符合家族规范
 - SECURITY.md 含 6 个要素 + Broadcom 声明
 - 6 组内置基线（87 条规则）
