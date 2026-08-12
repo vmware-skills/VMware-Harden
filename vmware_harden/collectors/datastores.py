@@ -1,6 +1,25 @@
 """Datastore inventory collector. Pulls datastore data via vmware-storage."""
 from vmware_harden.collectors.base import Collector
 
+#: Every ``nodes.attrs`` key this collector can populate: the keys
+#: ``vmware_storage.ops.inventory.list_datastores`` builds into each entry, plus
+#: the ``id`` stamped by :func:`_shape_datastore`. ``vm_count`` is absent on
+#: purpose — it is opt-in upstream (``include_vm_count=True``) and this collector
+#: does not ask for it. Single source of truth for the baseline contract test.
+PRODUCIBLE_DATASTORE_ATTRS: frozenset[str] = frozenset(
+    {
+        "name",
+        "type",
+        "free_gb",
+        "used_gb",
+        "total_gb",
+        "usage_pct",
+        "accessible",
+        "url",
+        "id",
+    }
+)
+
 
 def _fetch_datastores(target: str) -> list[dict]:
     """Fetch datastore inventory for ``target``. Patched in tests.

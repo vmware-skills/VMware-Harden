@@ -6,6 +6,46 @@ from vmware_harden.collectors.base import Collector
 #: it pages explicitly rather than accept a silent 50-item cap.
 _PAGE = 200
 
+#: Every ``nodes.attrs`` key this collector can populate for a ``dfw_section``
+#: node: the keys ``vmware_nsx_security.ops.dfw_policy.list_dfw_policies``
+#: builds, plus the ``name`` stamped by :func:`_shape_dfw`.
+PRODUCIBLE_DFW_SECTION_ATTRS: frozenset[str] = frozenset(
+    {
+        "id",
+        "display_name",
+        "category",
+        "sequence_number",
+        "stateful",
+        "tcp_strict",
+        "rule_count",
+        "path",
+        "name",
+    }
+)
+
+#: Same for a ``dfw_rule`` node, from ``list_dfw_rules``. Note ``sources`` and
+#: ``destinations`` are plural lists and ``action`` is upper case
+#: (``ALLOW``/``DROP``/``REJECT``/``JUMP_TO_APPLICATION``) — baselines that
+#: assumed singular keys or lower-case actions were repaired in 1.8.10.
+PRODUCIBLE_DFW_RULE_ATTRS: frozenset[str] = frozenset(
+    {
+        "id",
+        "display_name",
+        "action",
+        "sources",
+        "destinations",
+        "services",
+        "scope",
+        "direction",
+        "ip_protocol",
+        "disabled",
+        "logged",
+        "sequence_number",
+        "path",
+        "name",
+    }
+)
+
 
 def _fetch_dfw(target: str) -> dict:
     """Fetch every DFW policy (section) + rule for ``target``. Patched in tests.

@@ -1,6 +1,26 @@
 """VM inventory collector. Pulls VM data via vmware-aiops."""
 from vmware_harden.collectors.base import Collector
 
+#: Every ``nodes.attrs`` key this collector can populate: the keys
+#: ``vmware_aiops.ops.inventory.list_vms`` builds into each entry, plus the
+#: ``id`` stamped by :func:`_shape_vm`. Single source of truth for the baseline
+#: contract test — a rule reading a key outside this set matches zero rows and
+#: reports false compliance (doc-vs-code parity, 形态 #6).
+PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
+    {
+        "name",
+        "power_state",
+        "cpu",
+        "memory_mb",
+        "guest_os",
+        "ip_address",
+        "host",
+        "uuid",
+        "tools_status",
+        "id",
+    }
+)
+
 
 def _fetch_vms(target: str) -> list[dict]:
     """Fetch VM inventory for ``target``. Patched in tests.

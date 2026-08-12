@@ -189,7 +189,7 @@ rules:
         WHERE NOT EXISTS (
           SELECT 1 FROM nodes
           WHERE type = 'dfw_rule'
-            AND json_extract_string(attrs, '$.action') IN ('REJECT', 'DROP', 'DENY')
+            AND json_extract_string(attrs, '$.action') IN ('REJECT', 'DROP')
         )
     remediation:
       summary: "Append a terminating deny rule at the end of DFW policy"
