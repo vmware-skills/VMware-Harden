@@ -54,8 +54,8 @@ rules:
         WHERE NOT EXISTS (
           SELECT 1 FROM nodes
           WHERE type = 'dfw_rule'
-            AND (json_extract_string(attrs, '$.source') LIKE '%zone%'
-              OR json_extract_string(attrs, '$.destination') LIKE '%zone%')
+            AND (json_extract_string(attrs, '$.sources') LIKE '%zone%'
+              OR json_extract_string(attrs, '$.destinations') LIKE '%zone%')
         )
     remediation:
       summary: "Tag VMs by trust zone and create DFW rules between zone groups"
@@ -189,7 +189,7 @@ rules:
         WHERE NOT EXISTS (
           SELECT 1 FROM nodes
           WHERE type = 'dfw_rule'
-            AND json_extract_string(attrs, '$.action') IN ('reject', 'drop', 'deny')
+            AND json_extract_string(attrs, '$.action') IN ('REJECT', 'DROP', 'DENY')
         )
     remediation:
       summary: "Append a terminating deny rule at the end of DFW policy"

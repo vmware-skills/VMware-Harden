@@ -14,7 +14,7 @@ HOSTS = [
         "id": "host-good",
         "name": "esx-good",
         "esxi_version": "8.0.2",
-        "build": 99999999,
+        "esxi_build": 99999999,
         "ntp_enabled": True,
         "ntp_servers": ["10.0.0.1"],
         "ntp_service_policy": "on",
@@ -41,7 +41,7 @@ HOSTS = [
         "id": "host-bad",
         "name": "esx-bad",
         "esxi_version": "8.0.2",
-        "build": 1,                    # outdated → cis-esxi-2.2.1
+        "esxi_build": 1,                    # outdated → cis-esxi-2.2.1
         "ntp_enabled": False,          # → cis-esxi-2.1.1
         "ntp_servers": [],
         "ntp_service_policy": "on",
@@ -171,7 +171,7 @@ def test_scan_dispatches_multiple_collectors_for_dengbao(tmp_path: Path, capsys)
     db = str(tmp_path / "t.duckdb")
 
     one_host = [
-        {"id": "h-1", "name": "esx", "ntp_enabled": True, "build": 99999999,
+        {"id": "h-1", "name": "esx", "ntp_enabled": True, "esxi_build": 99999999,
          "ntp_servers": ["10.0.0.1"], "ntp_service_policy": "on",
          "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
          "persistent_logs": True, "audit_retention_days": 200,

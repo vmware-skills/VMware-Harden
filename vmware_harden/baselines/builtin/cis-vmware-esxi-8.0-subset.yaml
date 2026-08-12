@@ -37,7 +37,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.build') AS INTEGER) < 23305546
+          AND CAST(json_extract_string(attrs, '$.esxi_build') AS BIGINT) < 23305546
     remediation:
       summary: "Upgrade ESXi to build 23305546 or newer"
       manual_steps: "vCenter Lifecycle Manager → Apply latest baseline to host"

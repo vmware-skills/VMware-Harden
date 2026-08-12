@@ -16,7 +16,7 @@ def _seed_violation(twin: Twin, snap_id: str) -> str:
     twin.conn.execute(
         "INSERT INTO nodes (id, type, target, name, attrs) "
         "VALUES (?, 'host', 'lab', 'esx-1', ?)",
-        ["lab:h-1", json.dumps({"ntp_enabled": False, "build": 99999999})],
+        ["lab:h-1", json.dumps({"ntp_enabled": False, "esxi_build": 99999999})],
     )
     vid = str(uuid.uuid4())
     twin.conn.execute(

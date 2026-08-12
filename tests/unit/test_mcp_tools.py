@@ -119,7 +119,7 @@ def test_get_baseline_rules():
 def test_scan_target_invokes_collectors(tmp_path: Path):
     db = tmp_path / "scan.duckdb"
     fake_hosts = [
-        {"id": "h-1", "name": "esx", "ntp_enabled": True, "build": 99999999,
+        {"id": "h-1", "name": "esx", "ntp_enabled": True, "esxi_build": 99999999,
          "ntp_servers": [], "ntp_service_policy": "on", "lockdown_mode": "normal",
          "syslog_remote_host": "syslog", "persistent_logs": True,
          "audit_retention_days": 90, "mgmt_vmk_isolated": True,

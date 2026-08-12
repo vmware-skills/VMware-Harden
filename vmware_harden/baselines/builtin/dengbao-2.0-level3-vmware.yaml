@@ -27,7 +27,7 @@ rules:
         WHERE NOT EXISTS (
           SELECT 1 FROM nodes
           WHERE type = 'dfw_rule'
-            AND json_extract_string(attrs, '$.action') IN ('reject', 'drop', 'deny')
+            AND json_extract_string(attrs, '$.action') IN ('REJECT', 'DROP', 'DENY')
         )
     remediation:
       summary: "在 DFW 末尾追加默认 deny rule"
@@ -49,9 +49,9 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'dfw_rule'
-          AND json_extract_string(attrs, '$.action') = 'allow'
-          AND json_extract_string(attrs, '$.source') LIKE '%ANY%'
-          AND json_extract_string(attrs, '$.destination') LIKE '%ANY%'
+          AND json_extract_string(attrs, '$.action') = 'ALLOW'
+          AND json_extract_string(attrs, '$.sources') LIKE '%ANY%'
+          AND json_extract_string(attrs, '$.destinations') LIKE '%ANY%'
     remediation:
       summary: "细化 source/destination，避免 ANY/ANY allow"
       manual_steps: "NSX → DFW → 编辑该规则，按业务最小化范围拆分"
@@ -336,7 +336,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.tools_running') AS BOOLEAN) = false
+          AND json_extract_string(attrs, '$.tools_status') != 'guestToolsRunning'
     remediation:
       summary: "在 Guest OS 内启动/安装 VMware Tools"
       manual_steps: "Guest OS 内 systemctl start vmtoolsd 或重新安装 open-vm-tools"

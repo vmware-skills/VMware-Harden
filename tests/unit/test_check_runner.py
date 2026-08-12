@@ -35,11 +35,11 @@ def test_runner_detects_ntp_violation_on_noncompliant_host(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-01", "esx01",
-        {"ntp_enabled": True, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": True, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -58,7 +58,7 @@ def test_violations_persisted_to_db(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -82,7 +82,7 @@ _FULLY_COMPLIANT_HOST_ATTRS = {
     "ntp_enabled": True,
     "ntp_service_policy_on": True,
     # patching
-    "build": 99999999,
+    "esxi_build": 99999999,
     "lockdown_mode_enabled": True,
     # logging
     "syslog_remote_host": "syslog.lab.local:514",
@@ -130,7 +130,7 @@ def test_violation_evidence_includes_query_row(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -150,7 +150,7 @@ def test_violation_evidence_includes_query_row(tmp_path: Path):
 def test_runner_returns_per_violation_metadata(tmp_path: Path):
     twin = Twin(tmp_path / "t.duckdb")
     snap_id = twin.start_snapshot("v.lab")
-    _insert_host(twin, "h-1", "n", {"ntp_enabled": False, "build": 1}, snapshot_id=snap_id)
+    _insert_host(twin, "h-1", "n", {"ntp_enabled": False, "esxi_build": 1}, snapshot_id=snap_id)
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
     violations = CheckRunner(twin).run_baseline(snap_id, baseline)
@@ -208,7 +208,7 @@ def test_runner_duplicates_violations_on_rerun(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -235,7 +235,7 @@ def test_violations_scoped_to_snapshot_nodes_not_other_targets(tmp_path: Path):
     snap_b = twin.start_snapshot("vcenter-b.lab")
     _insert_host(
         twin, "host-b1", "esxb1",
-        {"ntp_enabled": False, "build": 1},
+        {"ntp_enabled": False, "esxi_build": 1},
         snapshot_id=snap_b, target="vcenter-b.lab",
     )
     twin.finish_snapshot(snap_b)
@@ -244,7 +244,7 @@ def test_violations_scoped_to_snapshot_nodes_not_other_targets(tmp_path: Path):
     snap_a = twin.start_snapshot("vcenter-a.lab")
     _insert_host(
         twin, "host-a1", "esxa1",
-        {"ntp_enabled": False, "build": 1},
+        {"ntp_enabled": False, "esxi_build": 1},
         snapshot_id=snap_a, target="vcenter-a.lab",
     )
 
@@ -282,7 +282,7 @@ def test_absence_check_synthetic_id_violation_is_emitted(tmp_path: Path):
     # A real scanned host lives in node_state; no DFW deny rule anywhere.
     _insert_host(
         twin, "host-a1", "esxa1",
-        {"ntp_enabled": True, "build": 99999999},
+        {"ntp_enabled": True, "esxi_build": 99999999},
         snapshot_id=snap_a, target="vcenter-a.lab",
     )
 
@@ -317,7 +317,7 @@ def test_violation_evidence_includes_rule_category_and_title(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "build": 99999999}, snapshot_id=snap_id,
+        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")

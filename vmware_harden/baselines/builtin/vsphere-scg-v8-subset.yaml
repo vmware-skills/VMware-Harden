@@ -152,7 +152,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.tools_running') AS BOOLEAN) = false
+          AND json_extract_string(attrs, '$.tools_status') != 'guestToolsRunning'
     remediation:
       summary: "Install or start VMware Tools / open-vm-tools in guest"
       manual_steps: "Linux: systemctl enable --now vmtoolsd；Windows: 安装 VMware Tools"

@@ -12,7 +12,7 @@ from vmware_harden.web.app import build_app
 def _full_compliant_host(host_id: str, ntp: bool, build: int = 99999999) -> dict:
     return {
         "id": host_id, "name": f"esx-{host_id}",
-        "ntp_enabled": ntp, "build": build,
+        "ntp_enabled": ntp, "esxi_build": build,
         "ntp_servers": [], "ntp_service_policy": "on",
         "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
         "persistent_logs": True, "audit_retention_days": 90,
