@@ -7,6 +7,7 @@ import json
 import uuid
 
 from vmware_harden.baselines.model import Baseline, QueryCheck
+from vmware_harden.checks.evaluability import classify
 from vmware_harden.checks.query import execute_query_check
 from vmware_harden.store.twin import Twin
 
@@ -52,8 +53,23 @@ class CheckRunner:
             r[0] for r in self.twin.conn.execute("SELECT id FROM nodes").fetchall()
         }
         insert_rows: list[list] = []
+        outcome_rows: list[list] = []
         for rule in baseline.rules:
             if isinstance(rule.check, QueryCheck):
+                # Refuse before executing. A rule reading an uncollected key
+                # matches zero rows, and zero rows here would be reported as
+                # "no violations" — asserting compliance the scan never
+                # established. Recorded as undetermined instead.
+                verdict = classify(rule)
+                outcome_rows.append(
+                    [
+                        str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                        "evaluated" if verdict.evaluable else "undetermined",
+                        verdict.reason or None,
+                    ]
+                )
+                if not verdict.evaluable:
+                    continue
                 rows = execute_query_check(self.twin, rule.check)
                 for row in rows:
                     node_id = row.get("id") or row.get("node_id")
@@ -83,18 +99,29 @@ class CheckRunner:
             # ScriptCheck and any unknown check types are silently skipped
             # (loader gates against ScriptCheck; this is defensive).
 
-        # Persist all violations in one transaction + executemany rather than
-        # row-by-row (a full baseline can fire hundreds of rules).
-        if insert_rows:
+        # Persist violations and per-rule outcomes in one transaction +
+        # executemany rather than row-by-row (a full baseline can fire hundreds
+        # of rules). Both go in the same transaction: a scan that recorded
+        # violations but lost its outcome rows would look fully evaluated, which
+        # is the failure this whole mechanism exists to prevent.
+        if insert_rows or outcome_rows:
             self.twin.conn.execute("BEGIN TRANSACTION")
             try:
-                self.twin.conn.executemany(
-                    """INSERT INTO violation
-                       (id, snapshot_id, baseline_id, rule_id, node_id,
-                        severity, evidence)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    insert_rows,
-                )
+                if insert_rows:
+                    self.twin.conn.executemany(
+                        """INSERT INTO violation
+                           (id, snapshot_id, baseline_id, rule_id, node_id,
+                            severity, evidence)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        insert_rows,
+                    )
+                if outcome_rows:
+                    self.twin.conn.executemany(
+                        """INSERT INTO rule_outcome
+                           (id, snapshot_id, baseline_id, rule_id, outcome, reason)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        outcome_rows,
+                    )
                 self.twin.conn.execute("COMMIT")
             except Exception:
                 self.twin.conn.execute("ROLLBACK")

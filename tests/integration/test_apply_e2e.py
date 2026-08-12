@@ -14,12 +14,26 @@ from vmware_harden.store.twin import Twin
 cli = CliRunner()
 
 
-def _full_compliant_host(host_id: str, ntp: bool) -> dict:
+def _full_compliant_host(host_id: str, compliant: bool) -> dict:
+    """A host compliant on every CIS rule except, optionally, remote syslog.
+
+    The single non-compliance used to be ``ntp_enabled=False``, but that rule
+    reads an attribute no collector writes, so it is now recorded undetermined
+    rather than executed and the scan had nothing to advise on. ``syslog_remote_host``
+    is collected for real (it is one of the advanced settings the host collector
+    fetches), and like the old NTP rule its remediation needs no human review —
+    so this flow still exercises apply's straight-through path rather than the
+    approval gate.
+
+    ``build`` was also the wrong key — rule 2.2.1 reads ``$.esxi_build``; the old
+    spelling made this fixture's "current build" claim unfalsifiable.
+    """
     return {
         "id": host_id, "name": f"esx-{host_id}",
-        "ntp_enabled": ntp, "build": 99999999,
+        "esxi_build": 99999999,
         "ntp_servers": [], "ntp_service_policy": "on",
-        "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
+        "lockdown_mode": "normal",
+        "syslog_remote_host": "syslog.lab" if compliant else "",
         "persistent_logs": True, "audit_retention_days": 90,
         "mgmt_vmk_isolated": True, "vswitch_promiscuous_mode": "reject",
         "forged_transmits": "reject", "firewall_enabled": True,
@@ -49,18 +63,18 @@ def test_scan_advise_apply_e2e(tmp_path: Path, monkeypatch, capsys):
     """Run the full M3 user flow against a mocked vCenter + mocked LLM + mocked pilot."""
     db = str(tmp_path / "e2e.duckdb")
 
-    # Step 1: scan with NTP off → at least one violation
+    # Step 1: scan with remote syslog unset → at least one violation
     with patch(
         "vmware_harden.collectors.hosts._fetch_hosts",
-        return_value=[_full_compliant_host("h-1", ntp=False)],
+        return_value=[_full_compliant_host("h-1", compliant=False)],
     ):
         run_scan(target="lab", baseline="cis-vmware-esxi-8.0-subset", db=db)
     capsys.readouterr()
 
-    # Get the NTP violation id
+    # Get the syslog violation id
     twin = Twin(Path(db))
     rows = twin.conn.execute(
-        "SELECT id FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "SELECT id FROM violation WHERE rule_id = 'cis-esxi-3.1.1' "
         "AND node_id = 'lab:h-1'"
     ).fetchall()
     twin.close()
@@ -100,13 +114,13 @@ def test_apply_without_existing_suggestion_invokes_advisor(tmp_path: Path, monke
 
     with patch(
         "vmware_harden.collectors.hosts._fetch_hosts",
-        return_value=[_full_compliant_host("h-1", ntp=False)],
+        return_value=[_full_compliant_host("h-1", compliant=False)],
     ):
         run_scan(target="lab", baseline="cis-vmware-esxi-8.0-subset", db=db)
 
     twin = Twin(Path(db))
     rows = twin.conn.execute(
-        "SELECT id FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "SELECT id FROM violation WHERE rule_id = 'cis-esxi-3.1.1' "
         "AND node_id = 'lab:h-1'"
     ).fetchall()
     twin.close()

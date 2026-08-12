@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from vmware_harden.baselines import loader
 from vmware_harden.cli.main import app
 from vmware_harden.cli.runner import run_report, run_scan
+from vmware_harden.store.twin import Twin
 
 cli = CliRunner()
 
@@ -21,9 +22,14 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
 
     # 2. Write a child baseline that:
     #    - extends cis-vmware-esxi-8.0-subset (20 rules)
-    #    - overrides cis-esxi-2.1.1 (NTP) with a stricter critical severity
-    #    - adds a new rule cust-1 that flags hosts with build > 999999998 (always fires
-    #      on our test data so we can assert "new rule fired")
+    #    - overrides cis-esxi-3.1.1 (remote syslog) with a stricter critical severity
+    #    - adds cust-tag-required, which reads an attribute no collector produces
+    #
+    # The override deliberately targets a rule whose attribute IS collected, so it
+    # really fires. cust-tag-required deliberately targets one that is not, so the
+    # runner records it undetermined — the protection that matters most for user
+    # baselines, which CI never sees. Before this existed, such a rule matched zero
+    # rows and the report counted it as a pass.
     custom_yaml = tmp_path / "my-strict.yaml"
     custom_yaml.write_text(textwrap.dedent("""
         id: my-strict-cis
@@ -32,16 +38,17 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
         extends: cis-vmware-esxi-8.0-subset
         applies_to: [host]
         rules:
-          - id: cis-esxi-2.1.1
-            title: NTP must be enabled (STRICTER — was medium)
+          - id: cis-esxi-3.1.1
+            title: Remote syslog must be configured (STRICTER — was high)
             severity: critical
-            category: time-sync
+            category: logging
             check:
               type: query
               sql: |
                 SELECT id, name FROM nodes
                 WHERE type = 'host'
-                  AND CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
+                  AND (json_extract_string(attrs, '$.syslog_remote_host') IS NULL
+                       OR json_extract_string(attrs, '$.syslog_remote_host') = '')
             remediation:
               summary: Enable NTP
             review_policy:
@@ -70,17 +77,16 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
     assert (user_dir / "my-strict-cis.yaml").exists()
 
     # 4. Scan a fixture estate where:
-    #    - host-bad has ntp_enabled=False (fires cis-esxi-2.1.1 — overridden, severity=critical)
-    #                   AND no managed_by (fires cust-tag-required)
+    #    - host-bad has no remote syslog (fires cis-esxi-3.1.1 — overridden, critical)
+    #                   AND no managed_by (cust-tag-required → undetermined, not a pass)
     db = str(tmp_path / "scan.duckdb")
     hosts = [
         {
             "id": "host-bad", "name": "esx-bad",
-            "ntp_enabled": False,        # triggers stricter NTP rule
-            "build": 99999999,
+            "esxi_build": 99999999,
             "ntp_servers": [], "ntp_service_policy": "on",
             "lockdown_mode": "normal",
-            "syslog_remote_host": "syslog.lab",
+            "syslog_remote_host": "",    # triggers the stricter syslog rule
             "persistent_logs": True, "audit_retention_days": 90,
             "mgmt_vmk_isolated": True,
             "vswitch_promiscuous_mode": "reject",
@@ -107,20 +113,24 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
 
     by_rule = {(v["rule"], v["node"]): v for v in payload}
 
-    # Overridden rule: cis-esxi-2.1.1, severity is now CRITICAL (was medium in parent)
-    assert ("cis-esxi-2.1.1", "lab:host-bad") in by_rule
-    assert by_rule[("cis-esxi-2.1.1", "lab:host-bad")]["severity"] == "critical"
+    # Overridden rule: cis-esxi-3.1.1, severity is now CRITICAL (was high in parent)
+    assert ("cis-esxi-3.1.1", "lab:host-bad") in by_rule
+    assert by_rule[("cis-esxi-3.1.1", "lab:host-bad")]["severity"] == "critical"
 
-    # New rule fires
-    assert ("cust-tag-required", "lab:host-bad") in by_rule
-    assert by_rule[("cust-tag-required", "lab:host-bad")]["severity"] == "high"
+    # The custom rule reads $.managed_by, which no collector writes. It must NOT
+    # appear as a violation — and, more importantly, must not be counted as a pass
+    # either. It is recorded undetermined, with a reason naming the attribute.
+    assert ("cust-tag-required", "lab:host-bad") not in by_rule
 
-    # Inherited rules from parent still apply (e.g., NTP-related are now consolidated
-    # under the override; but other parent rules like 2.2.1 don't fire because build is OK).
-    # Verify count: 1 host with NTP off + missing managed_by = 2 violations from these 2 rules.
-    # Plus any other parent rules that happen to fire on this fixture host. Most parent
-    # rules have a "good" config in this fixture, so we assert >= 2 (the two we know fire).
-    assert len(payload) >= 2
+    twin = Twin(Path(db))
+    outcome, reason = twin.conn.execute(
+        "SELECT outcome, reason FROM rule_outcome WHERE rule_id = 'cust-tag-required'"
+    ).fetchone()
+    twin.close()
+    assert outcome == "undetermined"
+    assert "managed_by" in reason
+
+    assert len(payload) >= 1
 
 
 @pytest.mark.integration

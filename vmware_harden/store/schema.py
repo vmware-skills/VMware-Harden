@@ -74,6 +74,36 @@ DDL: list[str] = [
         pilot_task_id VARCHAR
     )
     """,
+    """
+    -- Per-rule verdict for a scan: was the rule actually able to judge?
+    --
+    -- Deliberately NOT a row in `violation`. Every consumer of that table
+    -- (web dashboard, list_violations, advisor, cli advise) selects from it
+    -- expecting violations; writing non-violations there would silently change
+    -- what all of them return. Keeping outcomes separate leaves those queries
+    -- untouched and makes the new information opt-in.
+    --
+    -- Both outcomes are recorded, not just 'undetermined': storing only the
+    -- bad case leaves "rule evaluated fine" and "scanned by a build that did
+    -- not track this" indistinguishable, and a report cannot then state how
+    -- much of the baseline it actually covered.
+    --
+    -- Written per scan rather than derived at render time on purpose: which
+    -- attributes are collectable changes between releases, so re-deriving an
+    -- old snapshot's coverage under today's vocabulary would relabel history
+    -- with facts that were not true when it was taken.
+    CREATE TABLE IF NOT EXISTS rule_outcome (
+        id VARCHAR PRIMARY KEY,
+        snapshot_id VARCHAR NOT NULL,
+        baseline_id VARCHAR NOT NULL,
+        rule_id VARCHAR NOT NULL,
+        -- 'evaluated'    — every attribute it reads is collected; result is real
+        -- 'undetermined' — an attribute is uncollected, so it was NOT executed
+        outcome VARCHAR NOT NULL,
+        reason VARCHAR,
+        evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
     # snapshot_id is the hot filter for list/report/diff; without these indexes
     # the violation table degrades to full scan as scans accumulate.
     "CREATE INDEX IF NOT EXISTS idx_violation_snapshot ON violation(snapshot_id)",
@@ -83,6 +113,8 @@ DDL: list[str] = [
     # (per-node drift history, suggestion lookup per violation).
     "CREATE INDEX IF NOT EXISTS idx_change_event_node ON change_event(node_id)",
     "CREATE INDEX IF NOT EXISTS idx_remediation_violation ON remediation(violation_id)",
+    # Same hot filter as violation: every report scopes outcomes to one snapshot.
+    "CREATE INDEX IF NOT EXISTS idx_rule_outcome_snapshot ON rule_outcome(snapshot_id)",
 ]
 
 # Severity is stored as plain text; a bare `ORDER BY severity DESC` sorts

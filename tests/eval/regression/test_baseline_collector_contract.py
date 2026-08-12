@@ -28,10 +28,13 @@ real record shapes is ``test_real_shape_rule_parity.py``. Even together these
 are static-plus-fixture guards; the runtime refusal to execute a pending rule
 (design step 2) is what protects a user running an external baseline.
 """
-import re
-
 import pytest
 
+from vmware_harden.baselines.introspect import (
+    cited_attributes,
+    cited_literals,
+    node_type_of,
+)
 from vmware_harden.baselines.loader import load_builtin
 from vmware_harden.baselines.model import QueryCheck
 from vmware_harden.baselines.vocabulary import PRODUCIBLE_BY_NODE_TYPE, Status, lookup, suggest
@@ -50,65 +53,10 @@ BUILTIN_BASELINE_IDS = (
     "vsphere-stig-v9-subset",
 )
 
-_NODE_TYPE_RE = re.compile(r"type\s*=\s*'([a-z_]+)'")
-_ATTR_RE = re.compile(r"\$\.([a-zA-Z0-9_]+)")
-#: ``json_extract[_string](attrs, '$.x') <op> 'literal'`` plus the ``IN`` and
-#: ``NOT IN`` list forms.
-#:
-#: Both extraction functions must be matched, and ``NOT`` must be optional: the
-#: first version of this pattern accepted only ``json_extract_string`` and only
-#: bare ``IN``, so it silently skipped two of the 49 literal comparisons in the
-#: builtin baselines. A check whose name promises to validate value domains but
-#: quietly ignores a whole comparison form is the exact defect shape this file
-#: was written to catch (形态 #4) — measure coverage, do not assume it.
-#:
-#: Ordered comparisons (``<``, ``>``) are deliberately excluded: their literal is
-#: a threshold, not a member of the domain, so ``tls_min_version < '1.2'`` is
-#: correct even though ``'1.2'`` need not be an enumerated value. ``LIKE`` is
-#: excluded for the same reason — its operand is a pattern.
-_CMP_RE = re.compile(
-    r"json_extract(?:_string)?\(\s*attrs\s*,\s*'\$\.([a-zA-Z0-9_]+)'\s*\)\s*"
-    r"(?:(?:=|!=|<>)\s*'([^']*)'|(?:NOT\s+)?IN\s*\(([^)]*)\))",
-    re.IGNORECASE,
-)
-
-
 #: Shell baselines (``rules: []``) inherit their parent's rules verbatim, so
 #: they contribute nothing of their own and are skipped when attributing rules —
 #: otherwise every parent rule would be counted twice under the wrong owner.
 _SHELL_BASELINES = {"cis-vmware-esxi-9.0-subset", "vsphere-scg-v9-subset"}
-
-
-def _node_type_of(rule) -> str:
-    """The single node type a rule's SQL is scoped to.
-
-    Refuses to guess. An earlier analysis defaulted to ``host`` when no scope was
-    found — a fail-open that happened never to trigger, but would have hidden a
-    whole rule from the contract the day it did.
-    """
-    assert isinstance(rule.check, QueryCheck), f"{rule.id}: only query checks are supported"
-    found = set(_NODE_TYPE_RE.findall(rule.check.sql))
-    assert len(found) == 1, (
-        f"{rule.id}: expected exactly one `type = '...'` scope in the SQL, "
-        f"found {found or 'none'}. "
-        "The contract cannot be checked without knowing which collector owns the attributes."
-    )
-    return found.pop()
-
-
-def _cited_attrs(rule) -> set[str]:
-    return set(_ATTR_RE.findall(rule.check.sql))
-
-
-def _cited_literals(rule) -> list[tuple[str, list[str]]]:
-    """``(attr, [literals])`` for each equality/IN comparison in the SQL."""
-    out = []
-    for attr, single, in_list in _CMP_RE.findall(rule.check.sql):
-        if single:
-            out.append((attr, [single]))
-        elif in_list:
-            out.append((attr, re.findall(r"'([^']*)'", in_list)))
-    return out
 
 
 def _real_rules():
@@ -145,8 +93,8 @@ def test_every_cited_attribute_is_declared():
     """Layer 1: no rule may read an attribute the vocabulary does not know."""
     offenders = []
     for baseline_id, rule in _real_rules():
-        node_type = _node_type_of(rule)
-        for attr in sorted(_cited_attrs(rule)):
+        node_type = node_type_of(rule)
+        for attr in sorted(cited_attributes(rule)):
             if lookup(node_type, attr) is None:
                 offenders.append(
                     f"  {baseline_id}::{rule.id} reads {node_type}.{attr}"
@@ -187,7 +135,7 @@ def test_comparison_pattern_recognises_every_form_used(sql, expected):
     found at all.
     """
     rule = type("R", (), {"check": QueryCheck(type="query", sql=sql)})()
-    assert _cited_literals(rule) == expected
+    assert cited_literals(rule) == expected
 
 
 @pytest.mark.unit
@@ -199,8 +147,8 @@ def test_compared_literals_are_inside_the_declared_value_domain():
     """
     offenders = []
     for baseline_id, rule in _real_rules():
-        node_type = _node_type_of(rule)
-        for attr, literals in _cited_literals(rule):
+        node_type = node_type_of(rule)
+        for attr, literals in cited_literals(rule):
             entry = lookup(node_type, attr)
             if entry is None or not entry.value_domain:
                 continue
@@ -225,10 +173,10 @@ def test_rules_blocked_on_a_pending_collector_match_the_frozen_list():
     """
     actual = set()
     for baseline_id, rule in _real_rules():
-        node_type = _node_type_of(rule)
+        node_type = node_type_of(rule)
         if any(
             (entry := lookup(node_type, attr)) and entry.status is Status.PENDING
-            for attr in _cited_attrs(rule)
+            for attr in cited_attributes(rule)
         ):
             actual.add((baseline_id, rule.id))
 

@@ -65,8 +65,9 @@ def test_web_e2e_scan_toggle_scan_verify(tmp_path: Path, capsys):
     r = client.get("/violations")
     assert r.status_code == 200
     violations = r.text
-    assert "cis-esxi-2.1.1" in violations  # NTP rule
     assert "cis-esxi-2.2.1" in violations  # build rule
+    # NTP rule is undetermined (nothing collects $.ntp_enabled), not a violation
+    assert "cis-esxi-2.1.1" not in violations
     assert "lab:h-1" in violations
 
     # 3. Drift page shows the field changes between scan 1 and scan 2

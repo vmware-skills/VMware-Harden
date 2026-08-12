@@ -81,8 +81,11 @@ def test_scan_then_report_text(tmp_path: Path, capsys):
     # Violator host appears
     assert "host-bad" in out
     # Specific rules fire
-    assert "cis-esxi-2.1.1" in out  # NTP
     assert "cis-esxi-2.2.1" in out  # build
+    # 2.1.1 (NTP) is NOT expected: it reads $.ntp_enabled, which no collector
+    # writes, so the runner records it undetermined instead of executing it.
+    # The fixture sets ntp_enabled by hand, but a real scan never would.
+    assert "cis-esxi-2.1.1" not in out
     # Compliant host doesn't show as violator (text mode lists violators only)
     assert "host-good" not in out
 
@@ -100,10 +103,10 @@ def test_scan_then_report_json(tmp_path: Path, capsys):
     payload = json.loads(capsys.readouterr().out)
 
     assert isinstance(payload, list)
-    assert len(payload) >= 2  # at least NTP + build for host-bad
+    assert len(payload) >= 1  # at least the build violation for host-bad
     rule_ids = {entry["rule"] for entry in payload}
-    assert "cis-esxi-2.1.1" in rule_ids
     assert "cis-esxi-2.2.1" in rule_ids
+    assert "cis-esxi-2.1.1" not in rule_ids  # undetermined, see text-mode test
     # Each entry has the canonical fields
     for entry in payload:
         assert "rule" in entry

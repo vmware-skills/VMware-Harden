@@ -28,18 +28,28 @@ def _insert_host(
         twin.write_node_state(snapshot_id, host_id, attrs)
 
 
+# The canonical "a rule fires" fixture used to be cis-esxi-2.1.1 (NTP). That
+# rule reads $.ntp_enabled, which no collector writes — so the suite's standard
+# example of the check engine working was a rule that cannot fire outside a test
+# that hand-injects the attribute. These tests now drive cis-esxi-2.2.1, whose
+# $.esxi_build the host collector really produces, so they exercise a path a
+# real scan reaches. Rule 2.2.1 flags a build older than 23305546.
+_OUTDATED_BUILD = 1
+_CURRENT_BUILD = 99999999
+
+
 @pytest.mark.unit
-def test_runner_detects_ntp_violation_on_noncompliant_host(tmp_path: Path):
-    """Host with ntp_enabled=false should be flagged by CIS rule 2.1.1."""
+def test_runner_detects_build_violation_on_noncompliant_host(tmp_path: Path):
+    """Host with an outdated esxi_build should be flagged by CIS rule 2.2.1."""
     twin = Twin(tmp_path / "t.duckdb")
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-01", "esx01",
-        {"ntp_enabled": True, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _CURRENT_BUILD}, snapshot_id=snap_id,
     )
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -47,8 +57,8 @@ def test_runner_detects_ntp_violation_on_noncompliant_host(tmp_path: Path):
     violations = runner.run_baseline(snap_id, baseline)
 
     pairs = {(v["rule_id"], v["node_id"]) for v in violations}
-    assert ("cis-esxi-2.1.1", "host-02") in pairs
-    assert ("cis-esxi-2.1.1", "host-01") not in pairs
+    assert ("cis-esxi-2.2.1", "host-02") in pairs
+    assert ("cis-esxi-2.2.1", "host-01") not in pairs
     twin.close()
 
 
@@ -58,7 +68,7 @@ def test_violations_persisted_to_db(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -70,7 +80,7 @@ def test_violations_persisted_to_db(tmp_path: Path):
         [snap_id],
     ).fetchall()
     assert any(
-        r[0] == "cis-esxi-2.1.1" and r[1] == "host-02" and r[2] == "medium"
+        r[0] == "cis-esxi-2.2.1" and r[1] == "host-02" and r[2] == "high"
         and r[3] == "cis-vmware-esxi-8.0-subset"
         for r in rows
     )
@@ -130,14 +140,14 @@ def test_violation_evidence_includes_query_row(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
     CheckRunner(twin).run_baseline(snap_id, baseline)
 
     row = twin.conn.execute(
-        "SELECT evidence FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "SELECT evidence FROM violation WHERE rule_id = 'cis-esxi-2.2.1' "
         "AND node_id = 'host-02'"
     ).fetchone()
     evidence = json.loads(row[0])
@@ -150,14 +160,15 @@ def test_violation_evidence_includes_query_row(tmp_path: Path):
 def test_runner_returns_per_violation_metadata(tmp_path: Path):
     twin = Twin(tmp_path / "t.duckdb")
     snap_id = twin.start_snapshot("v.lab")
-    _insert_host(twin, "h-1", "n", {"ntp_enabled": False, "esxi_build": 1}, snapshot_id=snap_id)
+    _insert_host(twin, "h-1", "n", {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id)
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
     violations = CheckRunner(twin).run_baseline(snap_id, baseline)
 
-    # Both rules should fire on this host (NTP off + outdated build)
+    # Outdated build fires 2.2.1. The NTP rule that used to be asserted here is
+    # undetermined, not passing — nothing collects $.ntp_enabled.
     rule_ids = {v["rule_id"] for v in violations}
-    assert {"cis-esxi-2.1.1", "cis-esxi-2.2.1"}.issubset(rule_ids)
+    assert "cis-esxi-2.2.1" in rule_ids
 
     # Each violation has the canonical fields
     for v in violations:
@@ -208,7 +219,7 @@ def test_runner_duplicates_violations_on_rerun(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
@@ -217,7 +228,7 @@ def test_runner_duplicates_violations_on_rerun(tmp_path: Path):
     runner.run_baseline(snap_id, baseline)
 
     count = twin.conn.execute(
-        "SELECT COUNT(*) FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "SELECT COUNT(*) FROM violation WHERE rule_id = 'cis-esxi-2.2.1' "
         "AND node_id = 'host-02'"
     ).fetchone()[0]
     assert count == 2  # current MVP behavior — duplicates allowed
@@ -317,15 +328,15 @@ def test_violation_evidence_includes_rule_category_and_title(tmp_path: Path):
     snap_id = twin.start_snapshot("v.lab")
     _insert_host(
         twin, "host-02", "esx02",
-        {"ntp_enabled": False, "esxi_build": 99999999}, snapshot_id=snap_id,
+        {"esxi_build": _OUTDATED_BUILD}, snapshot_id=snap_id,
     )
 
     baseline = load_builtin("cis-vmware-esxi-8.0-subset")
     CheckRunner(twin).run_baseline(snap_id, baseline)
 
-    rule = next(r for r in baseline.rules if r.id == "cis-esxi-2.1.1")
+    rule = next(r for r in baseline.rules if r.id == "cis-esxi-2.2.1")
     row = twin.conn.execute(
-        "SELECT evidence FROM violation WHERE rule_id = 'cis-esxi-2.1.1' "
+        "SELECT evidence FROM violation WHERE rule_id = 'cis-esxi-2.2.1' "
         "AND node_id = 'host-02'"
     ).fetchone()
     evidence = json.loads(row[0])
