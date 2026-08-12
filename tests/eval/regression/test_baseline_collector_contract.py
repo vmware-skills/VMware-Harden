@@ -52,10 +52,23 @@ BUILTIN_BASELINE_IDS = (
 
 _NODE_TYPE_RE = re.compile(r"type\s*=\s*'([a-z_]+)'")
 _ATTR_RE = re.compile(r"\$\.([a-zA-Z0-9_]+)")
-#: ``json_extract_string(attrs, '$.x') <op> 'literal'`` and the ``IN (...)`` form.
+#: ``json_extract[_string](attrs, '$.x') <op> 'literal'`` plus the ``IN`` and
+#: ``NOT IN`` list forms.
+#:
+#: Both extraction functions must be matched, and ``NOT`` must be optional: the
+#: first version of this pattern accepted only ``json_extract_string`` and only
+#: bare ``IN``, so it silently skipped two of the 49 literal comparisons in the
+#: builtin baselines. A check whose name promises to validate value domains but
+#: quietly ignores a whole comparison form is the exact defect shape this file
+#: was written to catch (形态 #4) — measure coverage, do not assume it.
+#:
+#: Ordered comparisons (``<``, ``>``) are deliberately excluded: their literal is
+#: a threshold, not a member of the domain, so ``tls_min_version < '1.2'`` is
+#: correct even though ``'1.2'`` need not be an enumerated value. ``LIKE`` is
+#: excluded for the same reason — its operand is a pattern.
 _CMP_RE = re.compile(
-    r"json_extract_string\(\s*attrs\s*,\s*'\$\.([a-zA-Z0-9_]+)'\s*\)\s*"
-    r"(?:(?:=|!=|<>)\s*'([^']*)'|IN\s*\(([^)]*)\))",
+    r"json_extract(?:_string)?\(\s*attrs\s*,\s*'\$\.([a-zA-Z0-9_]+)'\s*\)\s*"
+    r"(?:(?:=|!=|<>)\s*'([^']*)'|(?:NOT\s+)?IN\s*\(([^)]*)\))",
     re.IGNORECASE,
 )
 
@@ -145,6 +158,36 @@ def test_every_cited_attribute_is_declared():
         "reports compliant regardless of the real configuration. Declare it (with the\n"
         "collector source) or fix the name:\n" + "\n".join(offenders)
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("sql", "expected"),
+    [
+        ("json_extract_string(attrs, '$.a') = 'X'", [("a", ["X"])]),
+        ("json_extract_string(attrs, '$.a') != 'X'", [("a", ["X"])]),
+        ("json_extract_string(attrs, '$.a') <> 'X'", [("a", ["X"])]),
+        ("json_extract_string(attrs, '$.a') IN ('X', 'Y')", [("a", ["X", "Y"])]),
+        ("json_extract_string(attrs, '$.a') NOT IN ('X', 'Y')", [("a", ["X", "Y"])]),
+        # the other extraction function must be covered too
+        ("json_extract(attrs, '$.a') = 'X'", [("a", ["X"])]),
+        ("json_extract(attrs, '$.a') NOT IN ('X')", [("a", ["X"])]),
+        # thresholds and patterns are not domain members — must NOT be captured
+        ("json_extract_string(attrs, '$.a') < '1.2'", []),
+        ("json_extract_string(attrs, '$.a') LIKE '%zone%'", []),
+    ],
+)
+def test_comparison_pattern_recognises_every_form_used(sql, expected):
+    """Pin what layer 2 can see, form by form.
+
+    The mutation test for layer 2 only ever tried a lower-case ``IN`` list, so it
+    passed while ``NOT IN`` went unexamined — an exercise that confirms the
+    answer already known rather than probing the boundary (形态 #2). These cases
+    fail if the pattern loses a form, and are the reason the ``NOT IN`` gap was
+    found at all.
+    """
+    rule = type("R", (), {"check": QueryCheck(type="query", sql=sql)})()
+    assert _cited_literals(rule) == expected
 
 
 @pytest.mark.unit
