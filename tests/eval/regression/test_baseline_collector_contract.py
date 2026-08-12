@@ -38,7 +38,7 @@ from vmware_harden.baselines.introspect import (
     node_type_of,
 )
 from vmware_harden.baselines.loader import load_builtin
-from vmware_harden.baselines.model import QueryCheck
+from vmware_harden.baselines.model import QueryCheck, Remediation, Rule
 from vmware_harden.baselines.vocabulary import PRODUCIBLE_BY_NODE_TYPE, Status, lookup, suggest
 
 from .known_pending_rules import KNOWN_PENDING_RULES
@@ -59,6 +59,18 @@ BUILTIN_BASELINE_IDS = (
 #: they contribute nothing of their own and are skipped when attributing rules —
 #: otherwise every parent rule would be counted twice under the wrong owner.
 _SHELL_BASELINES = {"cis-vmware-esxi-9.0-subset", "vsphere-scg-v9-subset"}
+
+
+def _rule_with(predicate: str) -> Rule:
+    """A minimal, parseable rule whose WHERE clause is ``predicate``."""
+    return Rule(
+        id="probe", title="probe", severity="high", category="test",
+        check=QueryCheck(
+            type="query",
+            sql=f"SELECT id, name FROM nodes n WHERE type = 'host' AND {predicate}",
+        ),
+        remediation=Remediation(summary="x"),
+    )
 
 
 def _real_rules():
@@ -152,21 +164,28 @@ def test_every_cited_attribute_is_declared():
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("sql", "expected"),
+    ("predicate", "expected"),
     [
         ("json_extract_string(attrs, '$.a') = 'X'", [("a", ["X"])]),
         ("json_extract_string(attrs, '$.a') != 'X'", [("a", ["X"])]),
         ("json_extract_string(attrs, '$.a') <> 'X'", [("a", ["X"])]),
         ("json_extract_string(attrs, '$.a') IN ('X', 'Y')", [("a", ["X", "Y"])]),
         ("json_extract_string(attrs, '$.a') NOT IN ('X', 'Y')", [("a", ["X", "Y"])]),
-        # the other extraction function must be covered too
+        # the other extraction functions and the operator forms
         ("json_extract(attrs, '$.a') = 'X'", [("a", ["X"])]),
         ("json_extract(attrs, '$.a') NOT IN ('X')", [("a", ["X"])]),
-        # a table-qualified read is the same read
+        # parenthesised: ->> binds looser than AND, so without them the
+        # conjunction becomes the operator's left operand
+        ("(attrs ->> '$.a') = 'X'", [("a", ["X"])]),
+        # spellings the parser used to lose: a stray space, a comment, quoting,
+        # a bare key, a table qualifier. The AST normalises every one of them,
+        # which is the whole reason for parsing instead of pattern matching.
+        ("json_extract_string (attrs, '$.a') = 'X'", [("a", ["X"])]),
+        ("json_extract_string(attrs/*c*/, '$.a') = 'X'", [("a", ["X"])]),
+        ('json_extract_string("attrs", \'$.a\') = \'X\'', [("a", ["X"])]),
+        ("json_extract_string(attrs, 'a') = 'X'", [("a", ["X"])]),
         ("json_extract_string(n.attrs, '$.a') = 'X'", [("a", ["X"])]),
-        # the empty literal is a value like any other: `''` is falsy, and
-        # branching on truthiness dropped this comparison while keeping the
-        # equivalent IN form
+        # the empty literal is a value like any other
         ("json_extract_string(attrs, '$.a') = ''", [("a", [""])]),
         ("json_extract_string(attrs, '$.a') IN ('')", [("a", [""])]),
         # thresholds and patterns are not domain members — must NOT be captured
@@ -174,20 +193,19 @@ def test_every_cited_attribute_is_declared():
         ("json_extract_string(attrs, '$.a') LIKE '%zone%'", []),
     ],
 )
-def test_comparison_pattern_recognises_every_form_used(sql, expected):
-    """Pin what layer 2 can see, form by form.
+def test_comparison_extraction_sees_every_form(predicate, expected):
+    """Pin what the value-domain check can see, form by form.
 
-    The mutation test for layer 2 only ever tried a lower-case ``IN`` list, so it
-    passed while ``NOT IN`` went unexamined — an exercise that confirms the
-    answer already known rather than probing the boundary (形态 #2). These cases
-    fail if the pattern loses a form, and are the reason the ``NOT IN`` gap was
-    found at all.
+    Its mutation test once tried only a lower-case ``IN`` list, so ``NOT IN``
+    went unexamined — an exercise that confirms the answer already known rather
+    than probing the boundary (形态 #2). The spellings that defeated the old
+    text matching are included deliberately: under the AST they must all resolve
+    to the same read.
     """
-    rule = type("R", (), {"check": QueryCheck(type="query", sql=sql)})()
+    rule = _rule_with(predicate)
     assert cited_literals(rule) == expected
 
 
-@pytest.mark.unit
 def test_compared_literals_are_inside_the_declared_value_domain():
     """Layer 2: a right name compared against an impossible value is still dead.
 

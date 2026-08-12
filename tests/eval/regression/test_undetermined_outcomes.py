@@ -367,31 +367,30 @@ def test_scope_predicate_the_parser_cannot_read_is_refused(predicate):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("comment", ["-- note\n", "/* note */ "])
-def test_sql_comments_are_refused_on_their_own(comment):
-    """Pin the comment gate independently of the attrs-count gate.
+def test_a_comment_neither_hides_a_read_nor_blocks_a_valid_rule(comment):
+    """Comments had to be banned outright while the check matched SQL text.
 
-    Both gates catch a comment used to smuggle a read, so neither test pinned
-    the comment rule by itself. Here the SQL is otherwise canonical and reads a
-    collected attribute: only the comment rule can refuse it.
+    ``json_extract_string(attrs/*c*/, '$.k')`` parsed for DuckDB and not for the
+    pattern, so a comment could hide a read — and the ban also rejected honest
+    commented rules. The parser strips comments before we see the tree, so they
+    are neither a blind spot nor a reason to refuse. Both halves are pinned: a
+    comment must not make a valid rule unreadable, and must not conceal a read
+    of an uncollected attribute.
     """
-    verdict = classify(_rule(
-        "commented",
+    ok = classify(_rule(
+        "commented-ok",
         f"SELECT id, name FROM nodes WHERE type = 'host' {comment}"
         f"AND json_extract_string(attrs, '$.mob_enabled') = 'false'",
     ))
-    assert not verdict.evaluable
-    assert "comment" in verdict.reason
+    assert ok.evaluable
 
-
-@pytest.mark.unit
-def test_the_canonical_spelling_still_passes():
-    """The refusals must not swallow the form every builtin rule uses."""
-    verdict = classify(_rule(
-        "canonical",
-        "SELECT id, name FROM nodes WHERE type = 'host' "
-        "AND json_extract_string(attrs, '$.mob_enabled') = 'false'",
+    hidden = classify(_rule(
+        "commented-smuggle",
+        f"SELECT id, name FROM nodes WHERE type = 'host' {comment}"
+        f"AND json_extract_string(attrs, '$.ssh_enabled') = 'true'",
     ))
-    assert verdict.evaluable
+    assert not hidden.evaluable
+    assert "ssh_enabled" in hidden.reason
 
 
 @pytest.mark.unit
@@ -412,3 +411,35 @@ def test_a_subquery_cannot_smuggle_a_second_scope():
     ))
     assert not verdict.evaluable
     assert "type" in verdict.reason
+
+
+@pytest.mark.unit
+def test_a_computed_path_is_refused_not_silently_dropped():
+    """The extraction is recognised; the attribute it names is not.
+
+    ``json_extract_string(attrs, '$.' || 'ssh_enabled')`` is a read the parser
+    sees — so the column reference is accounted for and the stray check is
+    satisfied — while the path is assembled at runtime. Dropping it would leave
+    the rule citing nothing, which the caller reads as safe to run.
+    """
+    verdict = classify(_rule(
+        "computed-path",
+        "SELECT id, name FROM nodes WHERE type = 'host' "
+        "AND json_extract_string(attrs, '$.' || 'ssh_enabled') = 'true'",
+    ))
+    assert not verdict.evaluable
+    assert "computed path" in verdict.reason
+
+
+@pytest.mark.unit
+def test_sql_that_will_not_parse_is_refused_not_waved_through():
+    """A parse failure means unknown inputs, and must not become "no inputs".
+
+    It also must not abort the scan: the runner turns this into an undetermined
+    outcome so the remaining rules still run.
+    """
+    verdict = classify(_rule(
+        "malformed", "SELECT id, name FROM nodes WHERE type = 'host' AND ((("
+    ))
+    assert not verdict.evaluable
+    assert "could not be parsed" in verdict.reason
