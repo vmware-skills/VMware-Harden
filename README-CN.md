@@ -46,6 +46,27 @@ vmware-harden advise --all-critical
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
 
+### 读结果：只看 violations 不构成结论
+
+规则只能判定「采集器真的采到了的配置」。数据没被采集的规则**不会执行**——
+它们记为「无法判定」，绝不算通过。各个界面都会明说：
+
+```
+$ vmware-harden report
+No violations among the rules that could be evaluated.
+
+16 of 20 rules could not be evaluated — no collector provides the data they
+check, so their result is unknown, not compliant.
+Not evaluated:
+  cis-esxi-2.1.1   no collector writes host.ntp_enabled
+  ...
+```
+
+`--format json` 返回 `{"violations": [...], "coverage": {...}}`，MCP 工具返回同样的
+`coverage` 块——所以 agent 读到 `violations: 0` 也不能据此判定合规。v1.9.0 之前，
+这些规则匹配 0 行并被静默算作通过，详见 RELEASE_NOTES.md。
+
+
 ## 只读设计
 
 vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的

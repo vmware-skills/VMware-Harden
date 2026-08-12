@@ -13,7 +13,7 @@ vSphere/NSX resource is ever modified by this skill.
 
 | Level | Meaning | Tools in this skill |
 |:-:|---|---|
-| **L1** | Read-only, raw data — agent may auto-call | `list_baselines`, `get_baseline_rules`, `list_violations`, `list_drift_events`, `get_remediation` |
+| **L1** | Read-only, raw data — agent may auto-call | `list_baselines`, `get_baseline_rules`, `list_violations`, `list_drift_events`, `get_remediation`, `list_stig_controls`, `describe_stig_content_sync` |
 | **L2** | Read + analysis (LLM advisor uses Twin evidence only) | `get_remediation` (when populated by `advise`) |
 | **L3** | Single write — user must approve | *N/A* — use **vmware-pilot** |
 | **L4** | Multi-step plan / apply | *N/A* — use **vmware-pilot** |
@@ -128,19 +128,30 @@ complete.
 ### Returns
 
 ```json
-[
-  {
-    "id": "v-cis-1.1.1-host-esxi-01",
-    "rule_id": "cis-1.1.1",
-    "node_id": "host-esxi-01",
-    "severity": "critical",
-    "baseline_id": "cis-vmware-esxi-8.0-subset",
-    "evidence": { "ntp_servers": [], "expected": ["pool.ntp.org"] }
-  }
-]
+{
+  "violations": [
+    {
+      "id": "v-cis-2.2.1-host-esxi-01",
+      "rule_id": "cis-esxi-2.2.1",
+      "node_id": "host-esxi-01",
+      "severity": "high",
+      "baseline_id": "cis-vmware-esxi-8.0-subset",
+      "evidence": { "id": "host-esxi-01", "name": "esxi-01",
+                    "category": "patching", "title": "Ensure ESXi build is current" }
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "has_more": false,
+  "coverage": { "...": "see above" },
+  "note": null
+}
 ```
 
-Returns `[]` when no scans exist or when the latest snapshot is clean.
+`violations` is `[]` when no scans exist, or when nothing was found among the
+rules that could be evaluated. It is **not** a statement that the estate is
+clean — check `coverage.complete` before saying so.
 
 ### Gotchas
 
@@ -359,9 +370,21 @@ A small summary:
   "target": "lab-vc01",
   "baseline": "cis-vmware-esxi-8.0-subset",
   "hosts": 4,
-  "violations": 17
+  "violations": 17,
+  "coverage": {"evaluated": 4, "undetermined": 16, "total": 20,
+               "tracked": true, "complete": false,
+               "undetermined_rules": [
+                 {"rule": "cis-esxi-2.1.1",
+                  "reason": "no collector writes host.ntp_enabled"}]},
+  "note": "16 of 20 rules could not be evaluated — ... unknown, not compliant."
 }
 ```
+
+`violations` is only meaningful together with `coverage`: rules whose data no
+collector gathers are **not executed**, and count as undetermined rather than
+passing. Do not report an estate as compliant when `coverage.complete` is false
+— say how many rules were evaluated out of how many. See
+[Tool 2](#tool-2-list_violations) for the full field description.
 
 ### Gotchas
 
@@ -405,3 +428,82 @@ dropped them, which made drift scenarios (node deleted, violations went
 away) appear falsely clean. Agents should treat a violation whose node
 renders as `[orphan]` as a deleted-node finding worth surfacing to the
 user. See CLAUDE.md 踩坑 #29.
+
+---
+
+## Tool 7: `list_stig_controls`
+
+### Signature
+
+```python
+list_stig_controls(limit: int = 50, offset: int = 0) -> dict
+```
+
+### When to use
+
+Inspect the `vsphere-stig-v9-subset` catalog without running a scan — to answer
+"which STIG controls does harden cover, and which ESXi setting does each
+govern?", or to map a violation's `rule_id` back to its advanced setting.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|:-:|-------------|
+| `limit` | `int` | No | Page size. Default 50. |
+| `offset` | `int` | No | Row offset for paging. Default 0. |
+
+### Returns
+
+The family list envelope `{items, returned, limit, total, truncated, hint}`.
+Each item is `{id, title, severity, category, advanced_setting}`, where
+`advanced_setting` is the ESXi advanced setting the control governs (e.g.
+`Security.AccountLockFailures`). The catalog is paged locally, so `total` is
+exact.
+
+### Gotchas
+
+- Rule ids use harden's own `stig-esxi9-*` namespace and are **not** DISA
+  V-IDs / STIG-IDs. The stable cross-reference to official content is
+  `advanced_setting`, not the id.
+- The catalog is static content; it says nothing about any estate. Run
+  `scan_target` for findings.
+
+### Typical response size
+
+12 controls, ≈ 900 tokens for the full catalog.
+
+---
+
+## Tool 8: `describe_stig_content_sync`
+
+### Signature
+
+```python
+describe_stig_content_sync() -> dict
+```
+
+### When to use
+
+Answer "why doesn't harden just call the VCF Operations compliance API?", or
+decide whether a continuous-enforcement request belongs to harden or to VCF
+Operations SPM/ACC.
+
+### Parameters
+
+None.
+
+### Returns
+
+`{compliance_api_available, why_no_api, content_sources, mechanism,
+routing_note, importer_status}` — static, local, no I/O.
+
+### Gotchas
+
+- `importer_status` is `"deferred"`: `import_inspec_profile()` raises
+  `NotImplementedError`. Do not present InSpec/Cinc import as available.
+- Routing, not capability: for fleet-wide continuous enforcement the answer is
+  VCF Operations SPM/ACC (UI-driven), not harden.
+
+### Typical response size
+
+≈ 400 tokens.
