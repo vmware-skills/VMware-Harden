@@ -70,6 +70,20 @@ class Attribute:
     #: contradict; that gap between assumed and actual values is the defect this
     #: module exists to prevent, so it must not be reintroduced here.
     value_domain: tuple[str, ...] = ()
+    #: Values this attribute plausibly holds on a real estate, for probing
+    #: whether a rule can decide anything at all.
+    #:
+    #: A property of the attribute, never of any rule — that separation is the
+    #: whole point. A discrimination probe that derived its values from the rule
+    #: under test moved with every mutation and caught none of them; a probe
+    #: using one global spread let a lockout threshold of 30000 look reachable,
+    #: because a build number is in the same list. The span has to be what *this*
+    #: setting really ranges over, so a threshold outside it is visibly
+    #: unreachable.
+    #:
+    #: Empty means "no numeric range worth pinning" — booleans and free strings
+    #: are covered by the probe's own generic values.
+    probe_values: tuple[str, ...] = ()
     #: Confirmed other spellings of this same fact. Migration aid only: rules
     #: must use the canonical name. Never used for runtime rewriting — an
     #: implicit read-side rename would mean the SQL says one thing and queries
@@ -84,6 +98,7 @@ def _a(
     description: str,
     source: str,
     value_domain: tuple[str, ...] = (),
+    probe_values: tuple[str, ...] = (),
 ) -> Attribute:
     """Declare an ACTIVE attribute, asserting the collector really produces it.
 
@@ -102,6 +117,7 @@ def _a(
         description=description,
         source=source,
         value_domain=value_domain,
+        probe_values=probe_values,
     )
 
 
@@ -139,31 +155,42 @@ _VSW = "HostSystem.config.network.vswitch.spec.policy.security"
 _ENTRIES: tuple[Attribute, ...] = (
     # --- host: ACTIVE (STIG advanced settings + base inventory) --------------
     _a("host", _HOST, "account_lock_failures", "失败登录锁定阈值",
-       f"{_ADV} Security.AccountLockFailures"),
+       f"{_ADV} Security.AccountLockFailures",
+       probe_values=("0", "3", "5", "10")),
     _a("host", _HOST, "account_unlock_time", "账号解锁等待秒数",
-       f"{_ADV} Security.AccountUnlockTime"),
+       f"{_ADV} Security.AccountUnlockTime",
+       probe_values=("0", "60", "300", "900", "1800")),
     _a("host", _HOST, "password_quality_control", "密码复杂度策略串",
        f"{_ADV} Security.PasswordQualityControl"),
     _a("host", _HOST, "password_history", "密码历史保留数",
-       f"{_ADV} Security.PasswordHistory"),
+       f"{_ADV} Security.PasswordHistory",
+       probe_values=("0", "3", "5", "10")),
     _a("host", _HOST, "dcui_access", "允许 DCUI 访问的账号",
-       f"{_ADV} DCUI.Access"),
+       f"{_ADV} DCUI.Access",
+       probe_values=("root", "root,operator", "", "operator")),
     _a("host", _HOST, "shell_timeout_seconds", "ESXi Shell 交互超时",
-       f"{_ADV} UserVars.ESXiShellInteractiveTimeOut"),
+       f"{_ADV} UserVars.ESXiShellInteractiveTimeOut",
+       probe_values=("0", "300", "600", "900", "1800", "3600")),
     _a("host", _HOST, "esxi_shell_timeout_seconds", "ESXi Shell 空闲超时",
-       f"{_ADV} UserVars.ESXiShellTimeOut"),
+       f"{_ADV} UserVars.ESXiShellTimeOut",
+       probe_values=("0", "300", "600", "900", "1800", "3600")),
     _a("host", _HOST, "dcui_timeout_seconds", "DCUI 空闲超时",
-       f"{_ADV} UserVars.DcuiTimeOut"),
+       f"{_ADV} UserVars.DcuiTimeOut",
+       probe_values=("0", "120", "600", "900", "1800")),
     _a("host", _HOST, "mob_enabled", "Managed Object Browser 是否启用",
-       f"{_ADV} Config.HostAgent.plugins.solo.enableMob"),
+       f"{_ADV} Config.HostAgent.plugins.solo.enableMob",
+       probe_values=("true", "false")),
     _a("host", _HOST, "suppress_shell_warning", "是否抑制 Shell 告警",
-       f"{_ADV} UserVars.SuppressShellWarning"),
+       f"{_ADV} UserVars.SuppressShellWarning",
+       probe_values=("0", "1")),
     _a("host", _HOST, "block_guest_bpdu", "是否阻断 guest BPDU",
-       f"{_ADV} Net.BlockGuestBPDU"),
+       f"{_ADV} Net.BlockGuestBPDU",
+       probe_values=("0", "1")),
     _a("host", _HOST, "syslog_remote_host", "远端 syslog 目标",
        f"{_ADV} Syslog.global.logHost"),
     _a("host", _HOST, "esxi_build", "ESXi build 号（字符串，比较前须 CAST）",
-       "HostSystem.config.product.build"),
+       "HostSystem.config.product.build",
+       probe_values=("20000000", "23305545", "23305546", "24853646")),
 
     # --- host: PENDING — access control --------------------------------------
     # value_domain omitted on purpose: the collector is unwritten, so whether it
