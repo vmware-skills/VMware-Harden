@@ -18,7 +18,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
     remediation:
       summary: "Enable TPM 2.0 attestation on host"
       manual_steps: "vCenter → Host → Configure → Security Profile → Trust Authority / Attestation"
@@ -37,7 +37,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
     remediation:
       summary: "Enable UEFI Secure Boot on host"
       manual_steps: "BIOS/UEFI → Secure Boot → Enable；reboot ESXi"
@@ -114,7 +114,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
     remediation:
       summary: "Enable Secure Boot on the VM"
       manual_steps: "vCenter → VM → Edit Settings → VM Options → Boot Options → Secure Boot"
@@ -133,7 +133,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.hw_version_int') AS INTEGER) < 19
+          AND TRY_CAST(json_extract(attrs, '$.hw_version_int') AS INTEGER) < 19
     remediation:
       summary: "Upgrade VM compatibility to hardware version 19+"
       manual_steps: "vCenter → VM → Compatibility → Upgrade VM Compatibility"
@@ -172,7 +172,7 @@ rules:
         SELECT id, name FROM nodes
         WHERE type = 'vm'
           AND json_extract_string(attrs, '$.tags') LIKE '%Public%'
-          AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable VM encryption via storage policy"
       manual_steps: "vCenter → VM → VM Policies → Edit → Apply 'VM Encryption Policy'"
@@ -191,7 +191,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.isolation_copy_disabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.isolation_copy_disabled') AS BOOLEAN) = false
     remediation:
       summary: "Set isolation.tools.copy.disable / paste.disable = TRUE"
       manual_steps: "vCenter → VM → Edit Settings → VM Options → Advanced → Configuration Parameters"
@@ -211,7 +211,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
     remediation:
       summary: "Tag management portgroup with dedicated VLAN ID"
       manual_steps: "vCenter → Host → Networking → Management portgroup → Edit → VLAN ID"
@@ -249,7 +249,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.standard_vswitch_count') AS INTEGER) > 0
+          AND TRY_CAST(json_extract(attrs, '$.standard_vswitch_count') AS INTEGER) > 0
     remediation:
       summary: "Migrate workloads to vSphere Distributed Switch"
       manual_steps: "vCenter → Networking → Distributed Switch → Add and Manage Hosts → Migrate VMkernel & VM networking"
@@ -269,8 +269,8 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
-          AND CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable vSAN data-at-rest encryption with KMS"
       manual_steps: "vCenter → Cluster → Configure → vSAN → Services → Data-At-Rest encryption"

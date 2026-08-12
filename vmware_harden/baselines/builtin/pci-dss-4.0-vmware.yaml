@@ -264,7 +264,7 @@ rules:
         WHERE type = 'host'
           AND (
             json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
-            OR CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 90
+            OR TRY_CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 90
           )
     remediation:
       summary: "Increase audit log retention to >= 90 days"

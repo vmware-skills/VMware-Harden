@@ -72,7 +72,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.account_lock_failures') AS INTEGER) > 3
+          AND TRY_CAST(json_extract(attrs, '$.account_lock_failures') AS INTEGER) > 3
     remediation:
       summary: "Set Security.AccountLockFailures to 3 (or fewer)"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.AccountLockFailures = 3"
@@ -91,7 +91,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.account_unlock_time') AS INTEGER) < 900
+          AND TRY_CAST(json_extract(attrs, '$.account_unlock_time') AS INTEGER) < 900
     remediation:
       summary: "Set Security.AccountUnlockTime to 900 seconds or more"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.AccountUnlockTime = 900"
@@ -130,7 +130,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.password_history') AS INTEGER) < 5
+          AND TRY_CAST(json_extract(attrs, '$.password_history') AS INTEGER) < 5
     remediation:
       summary: "Set Security.PasswordHistory to 5 or more"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Security.PasswordHistory = 5"
@@ -170,7 +170,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
+          AND TRY_CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
     remediation:
       summary: "Set UserVars.ESXiShellInteractiveTimeOut <= 900"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellInteractiveTimeOut"
@@ -189,7 +189,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.esxi_shell_timeout_seconds') AS INTEGER) > 600
+          AND TRY_CAST(json_extract(attrs, '$.esxi_shell_timeout_seconds') AS INTEGER) > 600
     remediation:
       summary: "Set UserVars.ESXiShellTimeOut <= 600"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellTimeOut"
@@ -208,7 +208,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
+          AND TRY_CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
     remediation:
       summary: "Set UserVars.DcuiTimeOut <= 600"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.DcuiTimeOut"
@@ -228,7 +228,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.mob_enabled') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.mob_enabled') AS BOOLEAN) = true
     remediation:
       summary: "Set Config.HostAgent.plugins.solo.enableMob = false"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Config.HostAgent.plugins.solo.enableMob = false"
@@ -247,7 +247,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.suppress_shell_warning') AS INTEGER) = 1
+          AND TRY_CAST(json_extract(attrs, '$.suppress_shell_warning') AS INTEGER) = 1
     remediation:
       summary: "Set UserVars.SuppressShellWarning = 0"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.SuppressShellWarning = 0"
@@ -267,7 +267,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.block_guest_bpdu') AS INTEGER) != 1
+          AND TRY_CAST(json_extract(attrs, '$.block_guest_bpdu') AS INTEGER) != 1
     remediation:
       summary: "Set Net.BlockGuestBPDU = 1"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Net.BlockGuestBPDU = 1"

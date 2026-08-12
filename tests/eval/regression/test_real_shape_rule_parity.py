@@ -21,6 +21,7 @@ Full coverage of every baseline is design step 1 in
 ``design/LLD-harden-baseline-collector-contract.md``; this pins the repaired subset.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,9 @@ import pytest
 from vmware_harden.baselines.loader import load_builtin
 from vmware_harden.checks.runner import CheckRunner
 from vmware_harden.store.twin import Twin
+
+#: Where the shipped baselines live, for the source-level CAST check below.
+_BUILTIN_DIR = Path(__file__).resolve().parents[3] / "vmware_harden" / "baselines" / "builtin"
 
 #: Rules that flag an overly permissive ANY -> ANY firewall rule.
 ANY_TO_ANY_RULES = [
@@ -211,3 +215,48 @@ def test_the_parametrised_rule_lists_are_populated():
     assert ANY_TO_ANY_RULES
     assert DEFAULT_DENY_RULES
     assert VM_TOOLS_RULES
+
+
+# --- one unreadable value must not take the scan down ------------------------
+
+@pytest.mark.unit
+def test_no_builtin_rule_uses_a_bare_cast():
+    """A failed CAST aborts the whole query, and with it the scan.
+
+    ``list_hosts`` returns the string ``"N/A"`` whenever a property is
+    unavailable — a disconnected host, a permission gap — so
+    ``CAST(json_extract_string(attrs, '$.esxi_build') AS BIGINT)`` is not a
+    hypothetical failure. One such host ended the scan with a ConversionException
+    and the snapshot marked failed: no report at all, for every other host too.
+
+    ``TRY_CAST`` yields NULL instead, so the row simply does not match. Enforced
+    across all baselines rather than fixed case by case, because the next rule
+    author would reach for ``CAST`` again.
+    """
+    offenders = []
+    for path in sorted(_BUILTIN_DIR.glob("*.yaml")):
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            if re.search(r"(?<!TRY_)\bCAST\s*\(", line):
+                offenders.append(f"  {path.name}:{lineno} {line.strip()}")
+    assert not offenders, (
+        "Use TRY_CAST — a bare CAST on collector data aborts the scan when a "
+        "value is not convertible:\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.integration
+def test_a_host_with_an_unreadable_build_does_not_abort_the_scan(tmp_path: Path):
+    """The estate keeps its report when one host has an unusable value."""
+    twin = Twin(tmp_path / "t.duckdb")
+    snap = twin.start_snapshot("v.lab")
+    _insert(twin, "h-ok", "host", {"name": "esx-ok", "esxi_build": "1"}, snap)
+    _insert(twin, "h-bad", "host", {"name": "esx-bad", "esxi_build": "N/A"}, snap)
+
+    violations = CheckRunner(twin).run_baseline(
+        snap, load_builtin("cis-vmware-esxi-8.0-subset")
+    )
+
+    fired = {(v["rule_id"], v["node_id"]) for v in violations}
+    assert ("cis-esxi-2.2.1", "h-ok") in fired      # outdated build still caught
+    assert ("cis-esxi-2.2.1", "h-bad") not in fired  # unreadable, not judged
+    twin.close()

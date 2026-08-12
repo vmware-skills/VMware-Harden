@@ -114,7 +114,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.mgmt_vlan_tagged') AS BOOLEAN) = false
     remediation:
       summary: "为 management vmkernel 配置 VLAN tag"
       manual_steps: "vCenter → Host → Networking → vmk0 → Edit → VLAN ID"
@@ -138,7 +138,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
     remediation:
       summary: "清空 /etc/ssh/keys-root/authorized_keys"
       manual_steps: "ESXi shell → rm /etc/ssh/keys-root/authorized_keys"
@@ -159,7 +159,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
     remediation:
       summary: "Join host to Active Directory"
       manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
@@ -180,7 +180,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
     remediation:
       summary: "启用 Normal 或 Strict Lockdown Mode"
       manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode"
@@ -201,7 +201,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
     remediation:
       summary: "启用 ESXi firewall"
       manual_steps: "vCenter → Host → Configure → Firewall → Enable"
@@ -246,7 +246,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 180
+          AND TRY_CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 180
     remediation:
       summary: "调高审计日志保留时长到 180 天以上"
       manual_steps: "集中日志平台调整 retention policy；本地需 Syslog.global.logDirUnique=true 配持久 datastore"
@@ -267,7 +267,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
     remediation:
       summary: "在 UEFI 中启用 Secure Boot"
       manual_steps: "BIOS/UEFI → Secure Boot → Enable；reboot ESXi"
@@ -288,7 +288,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.host_tpm_attested') AS BOOLEAN) = false
     remediation:
       summary: "Enable TPM 2.0 attestation"
       manual_steps: "vCenter → Host → Configure → Security Profile → Trust Authority"
@@ -310,8 +310,8 @@ rules:
         SELECT id, name FROM nodes
         WHERE type = 'host'
           AND (
-            CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
-            OR CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
+            TRY_CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
+            OR TRY_CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
           )
     remediation:
       summary: "配置 NTP 服务并设置随主机启动"
@@ -357,7 +357,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'vm'
-          AND CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.secure_boot') AS BOOLEAN) = false
     remediation:
       summary: "VM Settings → VM Options → Boot Options → Secure Boot"
       manual_steps: "需关机操作；将 firmware 切到 EFI 后启用 Secure Boot"
@@ -382,7 +382,7 @@ rules:
         SELECT id, name FROM nodes
         WHERE type = 'vm'
           AND json_extract_string(attrs, '$.tags') LIKE '%public%'
-          AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
     remediation:
       summary: "对 public-tagged VM 启用 vSphere VM Encryption"
       manual_steps: "VM → Policies → VM Storage Policies → 切到加密策略 → Reconfigure"
@@ -405,7 +405,7 @@ rules:
         WHERE NOT EXISTS (
           SELECT 1 FROM nodes
           WHERE type = 'datastore'
-            AND CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = true
+            AND TRY_CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = true
         )
     remediation:
       summary: "至少创建一个 vSAN encryption 或外部加密的 datastore"

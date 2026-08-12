@@ -16,7 +16,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.ntp_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable and configure NTP on the host"
       mcp_tool: vmware_aiops.host_ntp_configure
@@ -37,7 +37,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract_string(attrs, '$.esxi_build') AS BIGINT) < 23305546
+          AND TRY_CAST(json_extract_string(attrs, '$.esxi_build') AS BIGINT) < 23305546
     remediation:
       summary: "Upgrade ESXi to build 23305546 or newer"
       manual_steps: "vCenter Lifecycle Manager → Apply latest baseline to host"
@@ -56,7 +56,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.ntp_service_policy_on') AS BOOLEAN) = false
     remediation:
       summary: "Set NTP service policy to start with host"
       manual_steps: "vCenter → Host → Configure → Services → ntpd → Policy: Start and stop with host"
@@ -75,7 +75,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable lockdown mode (Normal or Strict)"
       manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Edit"
@@ -114,7 +114,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.persistent_logs') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.persistent_logs') AS BOOLEAN) = false
     remediation:
       summary: "Set Syslog.global.logDir to persistent datastore path"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.logDir"
@@ -133,7 +133,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 30
+          AND TRY_CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 30
     remediation:
       summary: "Increase audit log retention to >= 30 days"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → Syslog.global.auditRecord.storageCapacity"
@@ -152,7 +152,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.mgmt_vmk_isolated') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.mgmt_vmk_isolated') AS BOOLEAN) = false
     remediation:
       summary: "Move management VMK to a dedicated isolated VLAN"
       manual_steps: "vCenter → Host → Configure → VMkernel adapters → migrate to dedicated port group/VLAN"
@@ -209,7 +209,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.firewall_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable ESXi firewall"
       manual_steps: "esxcli network firewall set --enabled true"
@@ -228,7 +228,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.ssh_running') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.ssh_running') AS BOOLEAN) = true
     remediation:
       summary: "Stop SSH service and set policy to off"
       manual_steps: "vCenter → Host → Configure → Services → SSH → Stop, Policy: Start and stop manually"
@@ -247,7 +247,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.ad_joined') AS BOOLEAN) = false
     remediation:
       summary: "Join ESXi host to Active Directory domain"
       manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
@@ -266,7 +266,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.lockdown_exceptions_count') AS INTEGER) > 0
+          AND TRY_CAST(json_extract(attrs, '$.lockdown_exceptions_count') AS INTEGER) > 0
     remediation:
       summary: "Remove all entries from lockdown exception users list"
       manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Exception Users"
@@ -285,7 +285,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.root_ssh_key_auth') AS BOOLEAN) = true
     remediation:
       summary: "Remove /etc/ssh/keys-root/authorized_keys entries"
       manual_steps: "SSH 到主机后清空 /etc/ssh/keys-root/authorized_keys；或通过 host profile 强制"
@@ -304,8 +304,8 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
-          AND CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.vsan_enabled') AS BOOLEAN) = true
+          AND TRY_CAST(json_extract(attrs, '$.vsan_encryption_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable vSAN data-at-rest encryption with KMS"
       manual_steps: "vCenter → Cluster → Configure → vSAN → Services → Data-At-Rest encryption"
@@ -343,7 +343,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
+          AND TRY_CAST(json_extract(attrs, '$.dcui_timeout_seconds') AS INTEGER) > 600
     remediation:
       summary: "Set UserVars.DcuiTimeOut <= 600"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.DcuiTimeOut"
@@ -362,7 +362,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
+          AND TRY_CAST(json_extract(attrs, '$.shell_timeout_seconds') AS INTEGER) > 900
     remediation:
       summary: "Set UserVars.ESXiShellInteractiveTimeOut <= 900"
       manual_steps: "vCenter → Host → Configure → Advanced System Settings → UserVars.ESXiShellInteractiveTimeOut"

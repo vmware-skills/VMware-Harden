@@ -109,7 +109,7 @@ rules:
         WHERE type = 'host'
           AND (
             json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
-            OR CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 365
+            OR TRY_CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 365
           )
     remediation:
       summary: "Increase audit log retention to >= 365 days, preferably to remote SIEM"
