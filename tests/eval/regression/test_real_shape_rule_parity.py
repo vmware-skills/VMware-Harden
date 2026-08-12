@@ -198,3 +198,16 @@ def test_vm_without_running_tools_is_detected(
 def test_vm_with_running_tools_is_not_flagged(tmp_path: Path, baseline_id: str, rule_id: str):
     fired = _fired(tmp_path, baseline_id, [("v1", "vm", _vm("guestToolsRunning"))])
     assert rule_id not in fired, f"{baseline_id}: a VM with running tools tripped {rule_id}"
+
+
+@pytest.mark.unit
+def test_the_parametrised_rule_lists_are_populated():
+    """Emptying a list turns its tests into silent skips, suite still green.
+
+    This file is the only behavioural guard for the repaired rules; a fixture
+    list that quietly becomes empty removes that guard without a red build
+    (形态 #1).
+    """
+    assert ANY_TO_ANY_RULES
+    assert DEFAULT_DENY_RULES
+    assert VM_TOOLS_RULES

@@ -12,6 +12,8 @@ into disagreeing about the same snapshot.
 
 from dataclasses import dataclass, field
 
+import duckdb
+
 
 @dataclass(frozen=True)
 class Coverage:
@@ -87,19 +89,31 @@ def coverage_for(twin, snapshot_id: str, *, rule_limit: int = 100) -> Coverage:
     complete would put the original false-compliance claim back, one release
     later and harder to see.
     """
-    counts = dict(
-        twin.conn.execute(
-            "SELECT outcome, COUNT(*) FROM rule_outcome WHERE snapshot_id = ? "
-            "GROUP BY outcome",
-            [snapshot_id],
+    try:
+        counts = dict(
+            twin.conn.execute(
+                "SELECT outcome, COUNT(*) FROM rule_outcome WHERE snapshot_id = ? "
+                "GROUP BY outcome",
+                [snapshot_id],
+            ).fetchall()
+        )
+        rules = twin.conn.execute(
+            "SELECT rule_id, reason FROM rule_outcome "
+            "WHERE snapshot_id = ? AND outcome = 'undetermined' "
+            "ORDER BY rule_id LIMIT ?",
+            [snapshot_id, rule_limit],
         ).fetchall()
-    )
-    rules = twin.conn.execute(
-        "SELECT rule_id, reason FROM rule_outcome "
-        "WHERE snapshot_id = ? AND outcome = 'undetermined' "
-        "ORDER BY rule_id LIMIT ?",
-        [snapshot_id, rule_limit],
-    ).fetchall()
+    except duckdb.CatalogException:
+        # The table does not exist: a database created before 1.9.0, opened
+        # read-only. `Twin.open_readonly` skips schema init because DDL is a
+        # write, so the web dashboard cannot self-heal the way the CLI does —
+        # and every page that shows violations would 500 on a user's existing
+        # database the moment they upgrade, before they run a new scan.
+        #
+        # A missing table is exactly what `tracked=False` describes: coverage
+        # was never measured. Returning that is both accurate and the same
+        # answer the CLI gives for such a snapshot.
+        return Coverage()
     return Coverage(
         evaluated=counts.get("evaluated", 0),
         undetermined=counts.get("undetermined", 0),

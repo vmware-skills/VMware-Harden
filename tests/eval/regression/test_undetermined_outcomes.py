@@ -243,3 +243,49 @@ def test_a_second_baseline_on_one_snapshot_adds_its_own_rules(tmp_path: Path):
 
     assert coverage_for(twin, snap_id).total == 32  # 20 CIS + 12 NIS2
     twin.close()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", ["ssh_enabled", "$.ssh_enabled", '$."ssh_enabled"'])
+def test_every_path_spelling_duckdb_accepts_is_checked(path):
+    """DuckDB reads a bare key exactly as it reads ``$.key``.
+
+    Matching only the ``$.`` form meant a rule written the other way cited no
+    attributes at all, so it was judged evaluable, ran, matched nothing, and
+    counted as compliance. Legal SQL, and reachable by an external baseline —
+    precisely the case the runtime check exists for.
+    """
+    verdict = classify(_rule(
+        "spelling",
+        f"SELECT id, name FROM nodes WHERE type = 'host' "
+        f"AND json_extract_string(attrs, '{path}') = 'true'",
+    ))
+    assert not verdict.evaluable
+    assert "ssh_enabled" in verdict.reason
+
+
+@pytest.mark.unit
+def test_table_qualified_attrs_read_is_checked():
+    """``n.attrs`` is the same column as ``attrs``."""
+    verdict = classify(_rule(
+        "qualified",
+        "SELECT n.id, n.name FROM nodes n WHERE n.type = 'host' "
+        "AND json_extract_string(n.attrs, '$.ssh_enabled') = 'true'",
+    ))
+    assert not verdict.evaluable
+
+
+@pytest.mark.unit
+def test_unparseable_attrs_path_is_undetermined_not_ignored():
+    """A path we cannot reduce to one name means unknown inputs, not no inputs.
+
+    Returning an empty set for a nested path would read as "cites nothing",
+    which the caller takes as safe to run — the same fail-open shape.
+    """
+    verdict = classify(_rule(
+        "nested",
+        "SELECT id, name FROM nodes WHERE type = 'host' "
+        "AND json_extract_string(attrs, '$.a.b') = 'x'",
+    ))
+    assert not verdict.evaluable
+    assert "cannot resolve" in verdict.reason

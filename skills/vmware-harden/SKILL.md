@@ -33,12 +33,12 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 
 | Category | Tools | Count | Read or Write |
 |----------|-------|-------|---------------|
-| Baseline Management | 8 built-in baselines (CIS ESXi 8.0/9.0, vSphere SCG v8/v9, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 8+N | Read |
+| Baseline Management | 9 built-in baselines (CIS ESXi 8.0/9.0, vSphere SCG v8/v9, vSphere 9 STIG, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 9+N | Read |
 | Scanning | Multi-collector (vCenter, ESXi, NSX, vSAN, K8s) → typed Twin store | 1 pipeline | Read (no target writes) |
 | Drift Detection | Snapshot-to-snapshot configuration diff (per-node added/removed/changed fields) | 1 type | Read |
 | Remediation Advisor | LLM-driven (Anthropic) suggestions per violation; mock fallback when no key | 1 advisor | Read |
 | Web Dashboard | FastAPI + Jinja2 read-only UI for violations / drift / advice | 1 server | Read |
-| MCP Server | Compliance query tools | 6 | All Read |
+| MCP Server | Compliance query tools | 8 | All Read |
 
 ## Quick Install
 
@@ -180,8 +180,8 @@ This avoids `uvx` re-resolving PyPI through the corporate MitM proxy. The legacy
 ### "Twin DB not found" on first MCP call
 Run at least one scan first: `vmware-harden scan --baseline cis-vmware-esxi-8.0-subset --target <t>`. The DuckDB file is created on first scan at `~/.vmware-harden/twin.duckdb` (override with `VMWARE_HARDEN_DB`).
 
-### 等保 baseline rules are not firing (all checks "skipped")
-The 等保 baseline references node types from multiple collectors (vCenter advanced settings + ESXi NTP + NSX DFW). If only the vCenter collector ran, rules referencing `nsx.*` paths skip with status "no evidence". Run a scan with all collectors enabled, or filter the baseline to only the relevant rules.
+### 等保 baseline reports most rules as not evaluated
+Two different causes, and the report distinguishes them. A rule whose attribute no collector produces is recorded `undetermined` with the reason naming that attribute — see `coverage.undetermined_rules`; those are collector work, tracked in RELEASE_NOTES. Separately, the 等保 baseline spans several collectors (vCenter advanced settings + NSX DFW), so if only the vCenter collector ran, the DFW rules have no nodes to match. Run a scan with all collectors installed, or pick a baseline whose `applies_to` matches what you have.
 
 ### Web dashboard shows 0 violations even after a scan
 Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in your shell but not in the systemd/launchd unit running `vmware-harden web`, the web server reads the default `~/.vmware-harden/twin.duckdb` while your scans wrote elsewhere.
@@ -193,7 +193,7 @@ Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in
 3. **Webhook data scope**: none. Harden makes **no outbound network calls** other than (a) optional Anthropic API requests when `ANTHROPIC_API_KEY` is set for advisor suggestions, and (b) the local web dashboard bound to `127.0.0.1` by default.
 4. **TLS verification**: harden does not connect to vCenter/NSX directly — TLS handling is delegated to vmware-aiops. The advisor's HTTPS calls to `api.anthropic.com` use system TLS verification (no opt-out).
 5. **Prompt injection protection**: advisor LLM context is built exclusively from typed Twin queries (rule id, severity, evidence dict) — no free-text user input is forwarded. Evidence text passes through `_sanitize()` (truncate ≤500 chars, strip C0/C1 control characters).
-6. **Least privilege**: all 6 MCP tools are read-only. Remediation execution is intentionally not exposed — agents that need to apply a fix must invoke **vmware-pilot**, which provides approval gates and audit logging.
+6. **Least privilege**: all 8 MCP tools are read-only. Remediation execution is intentionally not exposed — agents that need to apply a fix must invoke **vmware-pilot**, which provides approval gates and audit logging.
 
 All MCP operations are audited via the `@vmware_tool` decorator (vmware-policy dependency) to `~/.vmware/audit.db`. View with `vmware-audit log --last 20`.
 

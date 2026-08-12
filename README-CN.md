@@ -15,9 +15,9 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 
 ## GA 家族成员（自 v1.5.18 起）
 
-生产可用的合规平台：**8 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
-**EU NIS2**、**BSI IT-Grundschutz**）、**87 条规则**、多 vCenter Twin、drift 检测、
-**LLM Remediation Advisor**、带 6 个受审计工具的 **MCP server**、Web dashboard，以及
+生产可用的合规平台：**9 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
+**EU NIS2**、**BSI IT-Grundschutz**）、**99 条规则**、多 vCenter Twin、drift 检测、
+**LLM Remediation Advisor**、带 8 个受审计工具的 **MCP server**、Web dashboard，以及
 `vmware-harden doctor` 环境诊断。
 
 ## 快速开始
@@ -83,9 +83,11 @@ VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/
 | `pci-dss-4.0-vmware` | 10 | host, dfw_rule | PCI-DSS v4.0 |
 | `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 指令（第 21/23 条，附件 I） |
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz（OPS.1.1.4 + SYS.1.1） |
+| `vsphere-stig-v9-subset` ⚠️ *实验性* | 12 | host | vSphere 9 STIG 对齐的主机高级设置（[DoD/DISA STIG 内容](https://github.com/vmware/dod-compliance-and-automation)）—— 采集路径待真机验证 |
+| `cis-vmware-esxi-9.0-subset` | 20 | host | 通过 `extends:` 继承 `cis-vmware-esxi-8.0-subset` |
+| `vsphere-scg-v9-subset` | 15 | host, vm | 通过 `extends:` 继承 `vsphere-scg-v8-subset` |
 
-以上 6 组基线共 **87 条规则**。另有两个通过 `extends:` 继承的 v9 别名，见下方 VCF 兼容性小节 ——
-因此 `vmware-harden baseline list` 实际会列出 8 个可选基线 ID。
+`baseline list` 返回 9 个 ID：上表 7 组含规则的基线（共 **99 条规则**）加两个 v9 别名，别名自身不含规则，解析为其 v8 父基线的规则。
 
 ### 等保 2.0 三级（国内合规）
 
@@ -106,7 +108,7 @@ VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/
 等保测评的**佐证材料**，而不只是一个通过/失败的布尔值。
 
 规则跨越多个 collector（vCenter 高级设置 + ESXi NTP + NSX DFW）。若只跑了 vCenter collector，
-引用 `nsx.*` 路径的规则会以「无证据」状态跳过 —— 这是预期行为，不是误报。
+缺少对应采集器时，那些规则没有节点可匹配 —— 这是预期行为，不是误报。另需区分：属性无人采集的规则会记为「无法判定」(`coverage.undetermined`)，报告会点名是哪个属性。
 
 ```bash
 vmware-harden scan --target <vc> --baseline dengbao-2.0-level3-vmware
@@ -189,7 +191,7 @@ pytest tests/eval/regression -v -m lab
 - 全部 8 个 MCP 工具均被审计
 - SKILL.md ≤ 3000 词，符合家族规范
 - SECURITY.md 含 6 个要素 + Broadcom 声明
-- 6 组内置基线（87 条规则）
+- 6 组内置基线（99 条规则）
 - `vmware-harden doctor` 环境诊断
 - `vmware-*` 家族 GA 成员（版本对齐至 1.5.28）
 

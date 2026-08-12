@@ -28,6 +28,8 @@ real record shapes is ``test_real_shape_rule_parity.py``. Even together these
 are static-plus-fixture guards; the runtime refusal to execute a pending rule
 (design step 2) is what protects a user running an external baseline.
 """
+from pathlib import Path
+
 import pytest
 
 from vmware_harden.baselines.introspect import (
@@ -72,6 +74,46 @@ def _real_rules():
             seen.add(rule.id)
             pairs.append((baseline_id, rule))
     return pairs
+
+
+@pytest.mark.unit
+def test_the_baseline_list_matches_what_ships():
+    """The entry list must not drift from the directory.
+
+    Every check in this file iterates ``BUILTIN_BASELINE_IDS``. A tenth baseline
+    added to ``builtin/`` and not listed here would be invisible to all three
+    layers, and ``test_scan_is_not_empty``'s count would not move either — the
+    new file is simply never visited. That is how the STIG-only parity test let
+    seven baselines drift for a year, rebuilt one layer up.
+    """
+    from vmware_harden.baselines import builtin
+
+    shipped = {p.stem for p in Path(builtin.__file__).parent.glob("*.yaml")}
+    assert shipped, "no builtin baseline YAML found — wrong directory?"
+    assert set(BUILTIN_BASELINE_IDS) == shipped
+
+
+@pytest.mark.unit
+def test_value_domains_are_declared_where_they_are_relied_on():
+    """Layer 2 can be disarmed by deleting a domain, silently.
+
+    ``test_compared_literals_are_inside_the_declared_value_domain`` skips any
+    attribute with an empty ``value_domain``, so removing one turns the check
+    into a no-op with every test still green — on the very attribute whose
+    case-sensitivity bug is why layer 2 exists. Pin which attributes must carry
+    one, the way KNOWN_PENDING_RULES pins the backlog.
+    """
+    from vmware_harden.baselines.vocabulary import VOCABULARY
+
+    must_have_domain = {("dfw_rule", "action"), ("vm", "tools_status")}
+    missing = {
+        key for key in must_have_domain
+        if not (VOCABULARY.get(key) and VOCABULARY[key].value_domain)
+    }
+    assert not missing, (
+        f"these attributes must declare a value_domain or layer 2 stops "
+        f"checking them: {sorted(missing)}"
+    )
 
 
 @pytest.mark.unit
@@ -120,6 +162,13 @@ def test_every_cited_attribute_is_declared():
         # the other extraction function must be covered too
         ("json_extract(attrs, '$.a') = 'X'", [("a", ["X"])]),
         ("json_extract(attrs, '$.a') NOT IN ('X')", [("a", ["X"])]),
+        # a table-qualified read is the same read
+        ("json_extract_string(n.attrs, '$.a') = 'X'", [("a", ["X"])]),
+        # the empty literal is a value like any other: `''` is falsy, and
+        # branching on truthiness dropped this comparison while keeping the
+        # equivalent IN form
+        ("json_extract_string(attrs, '$.a') = ''", [("a", [""])]),
+        ("json_extract_string(attrs, '$.a') IN ('')", [("a", [""])]),
         # thresholds and patterns are not domain members — must NOT be captured
         ("json_extract_string(attrs, '$.a') < '1.2'", []),
         ("json_extract_string(attrs, '$.a') LIKE '%zone%'", []),
@@ -200,6 +249,8 @@ def test_active_attributes_are_really_produced_by_their_collector():
     """
     from vmware_harden.baselines.vocabulary import VOCABULARY
 
+    active = [e for e in VOCABULARY.values() if e.status is Status.ACTIVE]
+    assert active, "no ACTIVE attributes — this test would pass vacuously"
     for (node_type, name), entry in VOCABULARY.items():
         if entry.status is Status.ACTIVE:
             producible = PRODUCIBLE_BY_NODE_TYPE[node_type]

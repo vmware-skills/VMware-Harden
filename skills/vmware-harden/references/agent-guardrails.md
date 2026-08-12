@@ -79,8 +79,16 @@ your agent's instruction block.
 - Preserve the exact severity, status and rule identifier values the tools
   return. Do not translate, normalise, or prettify them, and do not map a
   control to a different framework's numbering.
-- A rule reported "skipped" or "no evidence" is not a pass. Report it in its
-  own category.
+- A rule that could not be evaluated is not a pass. Report it in its own
+  category. The tools return this as `coverage.undetermined` (with
+  `coverage.undetermined_rules` naming each rule and the attribute that blocks
+  it) — a rule whose data no collector gathers is not executed at all, so its
+  result is unknown, not compliant.
+- **An empty violation list is not a compliance verdict.** Before saying an
+  estate is compliant or clean, check `coverage.complete`. When it is false,
+  state how many rules were evaluated out of how many. When `coverage.tracked`
+  is false the snapshot predates coverage tracking, so its coverage is unknown —
+  ask for a re-scan rather than assume.
 - If a requested field was not returned, show it as "not available". Do not
   infer it from other fields.
 - Preserve the original order and the full set of fields when the user asks
@@ -125,7 +133,7 @@ checklist when evaluating any local model against these skills:
 | Multi-tool workflows take 30–50s end to end | `list_violations` already carries severity and can be filtered server-side — filter there rather than pulling everything and reasoning over it. |
 | Recites CIS or 等保 control text from training data instead of the scanned baseline | The "never answer from training data" rule. Have the model quote the rule identifier the tool returned. |
 | Reports "no violations" when no scan has run, or when the twin DB is empty | Require the model to state the scan it is reporting on. An empty twin is not a clean estate. |
-| Counts "skipped" rules as passes and overstates the compliance rate | The "skipped is not a pass" rule. Rules that reference a collector which did not run skip with "no evidence". |
+| Counts unevaluated rules as passes and overstates the compliance rate | The "could not be evaluated is not a pass" rule. Such rules appear in `coverage.undetermined`, not in `violations`; a scan where `coverage.complete` is false has not judged the whole baseline. |
 | Presents the mock remediation template as LLM-generated analysis | The `ANTHROPIC_API_KEY` rule above. |
 | Offers to apply the fix | It cannot. Route to vmware-pilot. |
 

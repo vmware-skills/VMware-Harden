@@ -212,8 +212,12 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
 
             if not cov.complete:
                 typer.echo(f"\n{cov.summary_line()}")
-                typer.echo("Not evaluated:")
-                for rule_id, reason in cov.undetermined_rules:
-                    typer.echo(f"  {rule_id:30s} {reason}")
+                # Only when there is a list to print: an untracked snapshot has
+                # no rules to name, and a bare "Not evaluated:" header with
+                # nothing under it reads as a rendering fault.
+                if cov.undetermined_rules:
+                    typer.echo("Not evaluated:")
+                    for rule_id, reason in cov.undetermined_rules:
+                        typer.echo(f"  {rule_id:30s} {reason}")
     finally:
         twin.close()

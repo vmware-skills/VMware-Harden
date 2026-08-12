@@ -17,7 +17,24 @@ import re
 from vmware_harden.baselines.model import QueryCheck, Rule
 
 _NODE_TYPE_RE = re.compile(r"type\s*=\s*'([a-z_]+)'")
-_ATTR_RE = re.compile(r"\$\.([a-zA-Z0-9_]+)")
+
+#: Every read of the ``attrs`` JSON column, whatever path syntax it uses.
+#:
+#: Anchored on the extraction call rather than on ``$.``, because DuckDB accepts
+#: a bare key too: ``json_extract_string(attrs, 'ssh_enabled')`` returns exactly
+#: what ``'$.ssh_enabled'`` does. Matching only the ``$.`` form meant such a rule
+#: cited *no* attributes at all, so it was judged evaluable, ran, matched
+#: nothing, and its silence counted as compliance — the very defect this module
+#: exists to prevent, reachable by an external baseline written in legal SQL.
+_ATTRS_READ_RE = re.compile(
+    r"json_extract(?:_string)?\(\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*\.\s*)?attrs\s*,\s*'([^']*)'\s*\)",
+    re.IGNORECASE,
+)
+#: A path this module knows how to reduce to a single attribute name:
+#: ``$.name``, ``$."name"`` or a bare ``name``. Anything else (nested paths,
+#: wildcards, array indexes) is deliberately *not* parsed — see
+#: :func:`cited_attributes`.
+_SIMPLE_PATH_RE = re.compile(r"^\s*(?:\$\.)?\"?([a-zA-Z0-9_]+)\"?\s*$")
 
 #: ``json_extract[_string](attrs, '$.x') <op> 'literal'`` plus ``IN`` / ``NOT IN``.
 #:
@@ -31,7 +48,8 @@ _ATTR_RE = re.compile(r"\$\.([a-zA-Z0-9_]+)")
 #: ``tls_min_version < '1.2'`` is correct even though ``'1.2'`` is not an
 #: enumerated value.
 _CMP_RE = re.compile(
-    r"json_extract(?:_string)?\(\s*attrs\s*,\s*'\$\.([a-zA-Z0-9_]+)'\s*\)\s*"
+    r"json_extract(?:_string)?\(\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*\.\s*)?attrs\s*,\s*"
+    r"'(?:\$\.)?\"?([a-zA-Z0-9_]+)\"?'\s*\)\s*"
     r"(?:(?:=|!=|<>)\s*'([^']*)'|(?:NOT\s+)?IN\s*\(([^)]*)\))",
     re.IGNORECASE,
 )
@@ -64,10 +82,31 @@ def node_type_of(rule: Rule) -> str:
 
 
 def cited_attributes(rule: Rule) -> set[str]:
-    """Every ``$.key`` the rule's SQL reads from ``attrs``."""
+    """Every ``attrs`` key the rule's SQL reads.
+
+    Accepts the three spellings DuckDB treats as equivalent — ``'$.name'``,
+    ``'$."name"'`` and a bare ``'name'``.
+
+    Raises :class:`UnreadableRuleError` for a path this cannot reduce to one
+    attribute name (a nested path, a wildcard, an array index). Returning an
+    empty set there would read as "cites nothing", which the caller takes as
+    "safe to run" — the same fail-open that let bare-key rules through. An
+    unparseable read means the rule's inputs are unknown, and unknown inputs
+    must land on undetermined.
+    """
     if not isinstance(rule.check, QueryCheck):
         return set()
-    return set(_ATTR_RE.findall(rule.check.sql))
+    names: set[str] = set()
+    for path in _ATTRS_READ_RE.findall(rule.check.sql):
+        m = _SIMPLE_PATH_RE.match(path)
+        if m is None:
+            raise UnreadableRuleError(
+                f"{rule.id}: cannot resolve the attrs path {path!r} to a single "
+                f"attribute name, so the rule's inputs cannot be checked against "
+                f"the collector vocabulary"
+            )
+        names.add(m.group(1))
+    return names
 
 
 def cited_literals(rule: Rule) -> list[tuple[str, list[str]]]:
@@ -75,9 +114,14 @@ def cited_literals(rule: Rule) -> list[tuple[str, list[str]]]:
     if not isinstance(rule.check, QueryCheck):
         return []
     out: list[tuple[str, list[str]]] = []
-    for attr, single, in_list in _CMP_RE.findall(rule.check.sql):
-        if single:
+    for m in _CMP_RE.finditer(rule.check.sql):
+        attr, single, in_list = m.group(1), m.group(2), m.group(3)
+        # Branch on which group matched, not on truthiness: `= ''` yields an
+        # empty string, which is falsy, so a comparison against the empty
+        # literal was dropped entirely — validated in `IN ('')` form and
+        # skipped in `= ''` form, for the same attribute.
+        if single is not None:
             out.append((attr, [single]))
-        elif in_list:
+        elif in_list is not None:
             out.append((attr, re.findall(r"'([^']*)'", in_list)))
     return out

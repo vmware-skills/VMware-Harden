@@ -49,12 +49,13 @@ def classify(rule: Rule) -> Evaluability:
     """
     try:
         node_type = node_type_of(rule)
+        attrs = sorted(cited_attributes(rule))
     except UnreadableRuleError as exc:
         return Evaluability(False, str(exc))
 
     pending: list[str] = []
     unknown: list[str] = []
-    for attr in sorted(cited_attributes(rule)):
+    for attr in attrs:
         entry = lookup(node_type, attr)
         if entry is None:
             unknown.append(attr)

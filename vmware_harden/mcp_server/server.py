@@ -219,11 +219,19 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         'low', 'info'; omit to return all severities. limit (optional int, default
         50): max rows returned; offset (optional int, default 0): rows to skip for
         paging. Returns an envelope {violations: [...], total, limit, offset,
-        has_more}; each violation is {id, rule_id, node_id, severity, baseline_id,
-        evidence}, sorted severity-descending then rule_id. `total` is the full
-        matching count (unbounded by limit) so nothing is hidden — page by raising
-        offset while has_more is true. Empty envelope (total 0) when no scan exists
-        — run scan_target first. Read-only local DB query, no network calls. Pass a
+        has_more, coverage, note}; each violation is {id, rule_id, node_id,
+        severity, baseline_id, evidence}, sorted severity-descending then rule_id.
+        `total` is the full matching count (unbounded by limit) so nothing is
+        hidden — page by raising offset while has_more is true. AN EMPTY LIST IS
+        NOT A COMPLIANCE VERDICT: rules whose data no collector gathers are not
+        executed and count as undetermined, never as passing. Read `coverage`
+        {evaluated, undetermined, total, tracked, complete, undetermined_rules}
+        before summarising — when complete is false, say how many rules were
+        evaluated out of how many and do not call the estate compliant or clean;
+        when tracked is false the snapshot predates coverage tracking, so re-scan
+        rather than assume. `note` states the same in one sentence, or null when
+        coverage is complete. Empty envelope (total 0) when no scan exists — run
+        scan_target first. Read-only local DB query, no network calls. Pass a
         row's 'id' to get_remediation for a fix plan."""
         try:
             return t.list_violations(severity, limit=limit, offset=offset)
@@ -297,8 +305,13 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         VMware infrastructure) and writes a new snapshot, violations, and drift
         events (vs the prior scan of the same target) to the local twin DB
         (~/.vmware-harden/twin.duckdb). Returns summary counts {snapshot_id,
-        target, baseline, hosts, violations}; inspect details via list_violations
-        and list_drift_events. May take minutes on large inventories."""
+        target, baseline, hosts, violations, coverage, note}; inspect details via
+        list_violations and list_drift_events. `violations` is meaningful only
+        together with `coverage`: rules whose data no collector gathers are not
+        executed and count as undetermined, never as passing, so violations=0 is
+        not by itself evidence of compliance. When coverage.complete is false,
+        report how many rules were evaluated out of how many instead of calling
+        the estate compliant. May take minutes on large inventories."""
         try:
             return t.scan_target(target, baseline)
         except Exception as e:

@@ -151,8 +151,15 @@ def test_web_pages_state_coverage(tmp_path: Path, capsys):
     violations = client.get("/violations").text
     assert "not a clean bill of health" in violations
     assert "cis-esxi-2.1.1" in violations
-    # and it must not claim the estate is compliant
-    assert "the estate is compliant against every rule" not in violations
+
+    # Collapse whitespace before matching. The template wraps this sentence
+    # across a line break, so the literal needle never appeared in the rendered
+    # page and this assertion could not fail — it passed even with the
+    # partial-coverage branch disabled and the "fully compliant" text restored.
+    # A forever-green check guarding the exact regression this release exists to
+    # prevent is worse than no check (形态 #1/#4).
+    flat = " ".join(violations.split())
+    assert "the estate is compliant against every rule" not in flat
 
 
 # --- the query --------------------------------------------------------------
@@ -176,3 +183,112 @@ def test_coverage_for_reads_only_its_own_snapshot(tmp_path: Path, capsys):
     for snap in snaps:
         assert coverage_for(twin, snap).total == 20
     twin.close()
+
+
+# --- upgrading onto an existing database ------------------------------------
+
+def _pre_1_9_database(tmp_path: Path) -> Path:
+    """A twin.duckdb as v1.8.9 built it: no ``rule_outcome`` table."""
+    import subprocess
+
+    import duckdb
+
+    src = subprocess.run(
+        ["git", "show", "v1.8.9:vmware_harden/store/schema.py"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    ns: dict = {}
+    exec(src, ns)  # noqa: S102 - our own tagged source, not user input
+    db = tmp_path / "old.duckdb"
+    conn = duckdb.connect(str(db))
+    for stmt in ns["DDL"]:
+        conn.execute(stmt)
+    conn.execute(
+        "INSERT INTO snapshots (id, target, scan_started_at, scan_finished_at, status) "
+        "VALUES ('s1', 'lab', now(), now(), 'completed')"
+    )
+    conn.close()
+    return db
+
+
+@pytest.mark.integration
+def test_web_serves_a_pre_1_9_database_instead_of_500ing(tmp_path: Path):
+    """The upgrade path a user hits before running any new scan.
+
+    ``Twin.open_readonly`` skips schema init because DDL is a write, so the web
+    dashboard cannot create the missing table the way the CLI self-heals. Every
+    page that shows violations raised CatalogException — a bare 500 on the
+    user's existing database, immediately after upgrading.
+    """
+    from fastapi.testclient import TestClient
+
+    from vmware_harden.web.app import build_app
+
+    client = TestClient(build_app(_pre_1_9_database(tmp_path)))
+    for path in ("/", "/violations", "/drift"):
+        assert client.get(path).status_code == 200, path
+
+
+@pytest.mark.integration
+def test_pre_1_9_snapshot_reports_unknown_coverage_not_full(tmp_path: Path, capsys):
+    """Absent outcome rows mean "not measured", never "all rules ran"."""
+    run_report(db=str(_pre_1_9_database(tmp_path)), format="json")
+    cov = json.loads(capsys.readouterr().out)["coverage"]
+    assert cov["tracked"] is False
+    assert cov["complete"] is False
+
+
+@pytest.mark.integration
+def test_scan_target_also_carries_coverage(tmp_path: Path, capsys):
+    """The other MCP tool that returns a violation count.
+
+    Its docstring was expanded to tell agents to read coverage while the return
+    dict was only pinned for ``list_violations``; deleting the keys here kept
+    the suite green.
+    """
+    from unittest.mock import patch
+
+    from vmware_harden.mcp import tools as srv
+
+    old = srv._DB_PATH
+    srv._DB_PATH = tmp_path / "t.duckdb"
+    try:
+        with patch("vmware_harden.collectors.hosts._fetch_hosts",
+                   return_value=[_CLEAN_HOST]):
+            out = srv.scan_target(target="prod", baseline=_CIS)
+    finally:
+        srv._DB_PATH = old
+    capsys.readouterr()
+
+    assert out["violations"] == 0
+    assert out["coverage"]["undetermined"] == 16
+    assert out["coverage"]["complete"] is False
+    assert "not compliant" in out["note"]
+
+
+@pytest.mark.integration
+def test_mcp_tool_descriptions_teach_the_coverage_contract():
+    """The surface that survives context compaction.
+
+    FastMCP publishes the docstrings of the wrappers in ``mcp_server/server.py``,
+    not those on ``mcp/tools.py``. Updating only the latter left both violation
+    tools describing their return shape exhaustively and wrongly, and
+    list_violations telling the model an empty result means "no scan exists" —
+    the exact false inference this release removes. SKILL.md says the right
+    thing, but a Level-2 body can be compacted away; a tool description cannot.
+
+    Read from ``list_tools()`` rather than the source file, so this checks what
+    the model is actually served.
+    """
+    import asyncio
+
+    from vmware_harden.mcp_server.server import build_server
+
+    described = {
+        t.name: (t.description or "")
+        for t in asyncio.run(build_server().list_tools())
+    }
+    for name in ("list_violations", "scan_target"):
+        assert "coverage" in described[name], name
+        assert "not" in described[name].lower(), name
+    assert "NOT A COMPLIANCE VERDICT" in described["list_violations"]

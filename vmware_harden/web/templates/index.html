@@ -13,7 +13,10 @@
     Latest scan against <strong>{{ summary.target }}</strong>
     {% if summary.finished_at %} at {{ summary.finished_at }}{% endif %}
     — total <strong>{{ summary.total }}</strong> violations
-    {% if summary.coverage %}
+    {# `tracked`, not truthiness: an untracked snapshot's coverage dict is
+       non-empty but all zeros, and "0 of 0 rules evaluated" states a fact
+       ("nothing was judged") where the truth is "we do not know". #}
+    {% if summary.coverage and summary.coverage.tracked %}
       across <strong>{{ summary.coverage.evaluated }}</strong> of
       <strong>{{ summary.coverage.total }}</strong> rules evaluated
     {% endif %}
