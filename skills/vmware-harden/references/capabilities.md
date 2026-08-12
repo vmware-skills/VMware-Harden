@@ -85,14 +85,39 @@ instead of the metadata fields.
 ### Signature
 
 ```python
-list_violations(severity: str | None = None) -> list[dict]
+list_violations(severity: str | None = None, limit: int = 50, offset: int = 0) -> dict
 ```
+
+Returns `{violations, total, limit, offset, has_more, coverage, note}`.
 
 ### When to use
 
 Show the agent the current compliance gaps, scoped to the latest
 snapshot. Use the `severity` filter to focus the agent on critical /
 high items only — this dramatically reduces context burn.
+
+### Reading the result — `violations: []` is not "compliant"
+
+A rule can only judge configuration a collector actually gathers. Rules whose
+data is not collected are **not executed**, and are reported as undetermined
+rather than passing. Read `coverage` alongside the violation list:
+
+```json
+"coverage": {"evaluated": 4, "undetermined": 16, "total": 20,
+             "tracked": true, "complete": false,
+             "undetermined_rules": [{"rule": "cis-esxi-2.1.1",
+                                     "reason": "no collector writes host.ntp_enabled"}]}
+```
+
+- `complete: true` — every rule ran; an empty violation list does mean compliant
+  against this baseline.
+- `complete: false` — say what was checked and what was not. State the ratio;
+  do not summarise the scan as "compliant" or "clean".
+- `tracked: false` — the snapshot predates coverage tracking; its coverage is
+  unknown. Re-scan before drawing a conclusion.
+
+`note` carries the same statement as one sentence, or `null` when coverage is
+complete.
 
 ### Parameters
 

@@ -90,7 +90,7 @@ Use vmware-harden when the user needs to:
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
-5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard)
+5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard). The JSON is an object — `{"violations": [...], "coverage": {...}}` — read `coverage` before reporting a result; an empty `violations` list only means nothing was found among the rules that could be evaluated.
 
    **Failure branch**: If you see `ConnectError: vmware-aiops target not found`, the aiops side is not configured. Run `vmware-aiops init` first; harden cannot scan without a working collector.
 
@@ -138,6 +138,8 @@ Use vmware-harden when the user needs to:
 All 8 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Actual remediation execution is intentionally **deferred to vmware-pilot** (approval-gated).
 
 **List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
+
+**An empty violation list is not a compliance verdict.** A rule can only judge configuration some collector actually gathers; rules whose data is not collected are not executed and are reported as undetermined, never as passing. `list_violations` and `scan_target` therefore also return `coverage` (`{evaluated, undetermined, total, tracked, complete, undetermined_rules}`) and a one-sentence `note`. Read it before summarising: report "no violations among the N of M rules that could be evaluated" when `complete` is false, and never call an estate compliant or clean on a partial scan. When `tracked` is false the snapshot predates coverage tracking — re-scan rather than assume.
 
 ## CLI Quick Reference
 

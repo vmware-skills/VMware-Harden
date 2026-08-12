@@ -1,3 +1,100 @@
+## v1.9.0 (2026-08-12) — 合规判定诚实化：76/99 条规则此前静默报「合规」
+
+> **⚠️ 升级后你的合规率会下降。这是修正，不是回归——此前的高合规率是假的。**
+
+### 发生了什么
+
+harden 的 99 条内置规则中，**76 条引用了任何采集器都不产出的 `nodes.attrs` 键**。
+这类规则的 SQL 匹配 0 行，而引擎把「0 行」当作「全部合规」——于是它们为**从未真正检查过**的
+配置签发合规结论。其中 74 条静默通过（假阴性，危险），2 条恒报违规（噪音）。
+
+唯一健康的是 STIG 基线（12/12），因为只有它有 parity 测试——而那个测试**只加载它自己**，
+其余 7 个基线从未被检查过。
+
+复现方式（不依赖真机）：把每条规则 SQL 里的 `$.<attr>` 按其 `WHERE type='<node>'` 作用域，
+与该节点采集器实际产出的键集合比对。
+
+### 你会看到的变化
+
+**扫描与报告**
+
+```
+# 此前
+Found 0 violations against cis-vmware-esxi-8.0-subset
+No violations.
+
+# 现在
+Found 0 violations against cis-vmware-esxi-8.0-subset
+  16 of 20 rules could not be evaluated — no collector provides the data they
+  check, so their result is unknown, not compliant.
+
+No violations among the rules that could be evaluated.
+Not evaluated:
+  cis-esxi-2.1.1   no collector writes host.ntp_enabled
+  ...
+```
+
+**⚠️ JSON 报告结构变更（破坏性）** — `vmware-harden report --format json` 从裸数组
+改为对象：
+
+```json
+{"violations": [...], "coverage": {"evaluated": 4, "undetermined": 16,
+ "total": 20, "tracked": true, "complete": false, "undetermined_rules": [...]}}
+```
+
+遍历顶层数组的脚本需改读 `["violations"]`。这个破坏是**刻意的**：数组让调用方无法区分
+「没有问题」和「几乎没检查」——两者都是 `[]`。
+
+**MCP** — `list_violations` / `scan_target` 新增 `coverage` 与 `note` 字段。
+agent 读到 `violations: 0` 时不再能单独据此判定合规。
+
+**Web** — 面板显示「已判定 N / 共 M 条规则」；违规页把
+"the estate is fully compliant" 换成部分覆盖横幅 + 可展开的未判定清单。
+
+### 修好的规则（9 条，现在真的会判定）
+
+| 问题 | 规则 |
+|---|---|
+| `$.source`/`$.destination` → 采集器实为 `sources`/`destinations`（复数） | `pci-r1-1`, `nis2-rm-2`, `db-l3-net-2` |
+| `action` 比较用小写，NSX 返回大写 | `pci-r1-2`, `nis2-net-1`, `db-l3-net-1`, `pci-r1-1`, `db-l3-net-2` |
+| `$.build` → `$.esxi_build`（字符串，需 CAST） | `cis-esxi-2.2.1` |
+| `tools_running` 布尔 → `tools_status` 枚举 | `scg-vm-3`, `db-l3-vm-1` |
+
+同时删除了 `DENY` —— NSX 没有这个 action（合法值仅 `ALLOW`/`DROP`/`REJECT`/`JUMP_TO_APPLICATION`）。
+
+### 仍无法判定的 70 条（等待采集器）
+
+这些规则的意图有效，但没有采集器提供它们检查的数据。**它们此前一直报「合规」。**
+
+- **bsi-itgs-basisabsicherung-vmware** — 9 条: bsi-itgs-malware-1, bsi-itgs-malware-2, bsi-itgs-malware-3, bsi-itgs-server-1, bsi-itgs-server-2, bsi-itgs-server-3, bsi-itgs-server-4, bsi-itgs-server-6, bsi-itgs-server-7
+- **cis-vmware-esxi-8.0-subset** — 16 条: cis-esxi-2.1.1, cis-esxi-2.1.2, cis-esxi-2.2.2, cis-esxi-3.1.2, cis-esxi-3.1.3, cis-esxi-4.1.1, cis-esxi-4.1.2, cis-esxi-4.1.3, cis-esxi-5.1.1, cis-esxi-5.1.2, cis-esxi-6.1.1, cis-esxi-6.1.2, cis-esxi-6.1.3, cis-esxi-7.1.1, cis-esxi-7.1.2, cis-esxi-8.1.3
+- **dengbao-2.0-level3-vmware** — 15 条: db-l3-data-1, db-l3-host-1, db-l3-host-2, db-l3-host-3, db-l3-host-4, db-l3-host-6, db-l3-host-7, db-l3-host-8, db-l3-host-9, db-l3-net-3, db-l3-net-4, db-l3-net-5, db-l3-policy-1, db-l3-vm-2, db-l3-vm-3
+- **eu-nis2-vmware** — 10 条: nis2-ac-1, nis2-ac-2, nis2-ir-1, nis2-ir-2, nis2-ir-3, nis2-net-2, nis2-net-3, nis2-rm-1, nis2-rm-3, nis2-sc-1
+- **pci-dss-4.0-vmware** — 6 条: pci-r10-2, pci-r2-1, pci-r2-2, pci-r7-1, pci-r8-1, pci-r8-2
+- **vsphere-scg-v8-subset** — 14 条: scg-enc-1, scg-enc-2, scg-host-1, scg-host-2, scg-host-3, scg-host-4, scg-host-5, scg-net-1, scg-net-2, scg-net-3, scg-vm-1, scg-vm-2, scg-vm-4, scg-vm-5
+
+需要补的采集项按批次排在 `design/LLD-harden-baseline-collector-contract.md`
+（lockdown / SSH 状态 / NTP / ESXi 防火墙 / secure boot / TPM / vSwitch 安全策略 / 加密 / AD 加域 等）。
+
+### 防止复发
+
+- **`vmware_harden/baselines/vocabulary.py`** — 规范属性词汇表，65 条按
+  `(节点类型, 属性名)` 复合键（`encryption_enabled` 同时属于 VM 和 datastore，
+  按名字全局索引会判错）。17 条 ACTIVE / 48 条 PENDING，每条 PENDING 记录采集来源。
+- **三层契约测试**（CI）：① 引用的属性必须已声明 ② 比较的字面量必须在值域内
+  ③ 待采集规则必须与冻结清单双向精确匹配（修好一条就必须划掉，清单不会腐化成永久豁免）。
+- **运行时拒绝执行**（保护 CI 看不到的外部基线）：不可判定的规则**不执行**，
+  记入新的 `rule_outcome` 表。该表独立于 `violation`——写进去会静默改变
+  web / MCP / advisor 全部既有查询的返回。
+
+### 兼容性
+
+- 旧快照（无 `rule_outcome` 记录）报告为 `tracked: false`，**不**当作全覆盖——
+  「不知道」不等于「都判定了」。重新扫描即可获得覆盖率。
+- `violation` 表结构未变，既有查询不受影响。
+
+---
+
 ## v1.8.9 (2026-08-06) — vSphere 9 / VCF 9 STIG-aligned baseline + catalog tools (experimental, collector-pending)
 
 Adds a vSphere 9 / VCF 9 STIG-aligned host baseline and two read-only MCP tools
