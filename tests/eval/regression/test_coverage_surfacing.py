@@ -292,3 +292,40 @@ def test_mcp_tool_descriptions_teach_the_coverage_contract():
         assert "coverage" in described[name], name
         assert "not" in described[name].lower(), name
     assert "NOT A COMPLIANCE VERDICT" in described["list_violations"]
+
+
+# --- the listed rules are a page, and must say so ---------------------------
+
+@pytest.mark.unit
+def test_a_truncated_rule_list_is_flagged(tmp_path: Path):
+    """A short list beside a large count reads as "the rest were fine".
+
+    The count is always complete, so the summary line stays true either way —
+    but the enumeration is capped, and silence about the cap is the same shape
+    as the defect this release removes: an absence presented as an all-clear.
+    Reachable by scanning one snapshot against several baselines.
+    """
+    from vmware_harden.checks.coverage import coverage_for
+
+    twin = Twin(tmp_path / "t.duckdb")
+    snap = twin.start_snapshot("v.lab")
+    twin.conn.executemany(
+        "INSERT INTO rule_outcome (id, snapshot_id, baseline_id, rule_id, outcome, reason) "
+        "VALUES (?, ?, 'b', ?, 'undetermined', 'x')",
+        [[f"o{i}", snap, f"r{i:03d}"] for i in range(150)],
+    )
+
+    capped = coverage_for(twin, snap, rule_limit=10)
+    assert capped.undetermined == 150          # the count is never a page
+    assert len(capped.undetermined_rules) == 10
+    assert capped.undetermined_rules_truncated is True
+    assert capped.as_dict()["undetermined_rules_truncated"] is True
+
+    whole = coverage_for(twin, snap, rule_limit=200)
+    assert len(whole.undetermined_rules) == 150
+    assert whole.undetermined_rules_truncated is False
+
+    # exactly at the limit is not truncated — an off-by-one here would cry wolf
+    exact = coverage_for(twin, snap, rule_limit=150)
+    assert exact.undetermined_rules_truncated is False
+    twin.close()

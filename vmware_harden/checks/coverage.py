@@ -21,10 +21,18 @@ class Coverage:
 
     evaluated: int = 0
     undetermined: int = 0
-    #: ``(rule_id, reason)`` for rules that were not run, worst-case first only
-    #: in the sense of stable ordering — there is no severity here, because a
-    #: rule that did not run has no finding to rank.
+    #: ``(rule_id, reason)`` for rules that were not run, in stable id order —
+    #: there is no severity here, because a rule that did not run has no finding
+    #: to rank. Capped; see :attr:`undetermined_rules_truncated`.
     undetermined_rules: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    #: True when :attr:`undetermined_rules` is a page rather than the whole list.
+    #:
+    #: The count in :attr:`undetermined` is always complete, so the summary line
+    #: stays honest either way — but a reader shown "16 of 20 could not be
+    #: evaluated" beside a list of one would reasonably conclude the other
+    #: fifteen were fine. Reachable by scanning one snapshot against several
+    #: baselines.
+    undetermined_rules_truncated: bool = False
 
     @property
     def total(self) -> int:
@@ -77,6 +85,7 @@ class Coverage:
                 {"rule": rule_id, "reason": reason}
                 for rule_id, reason in self.undetermined_rules
             ],
+            "undetermined_rules_truncated": self.undetermined_rules_truncated,
         }
 
 
@@ -101,7 +110,9 @@ def coverage_for(twin, snapshot_id: str, *, rule_limit: int = 100) -> Coverage:
             "SELECT rule_id, reason FROM rule_outcome "
             "WHERE snapshot_id = ? AND outcome = 'undetermined' "
             "ORDER BY rule_id LIMIT ?",
-            [snapshot_id, rule_limit],
+            # One extra row is the cheapest way to know the list was cut without
+            # a second COUNT — the surplus is dropped below.
+            [snapshot_id, rule_limit + 1],
         ).fetchall()
     except duckdb.CatalogException:
         # The table does not exist: a database created before 1.9.0, opened
@@ -114,8 +125,10 @@ def coverage_for(twin, snapshot_id: str, *, rule_limit: int = 100) -> Coverage:
         # was never measured. Returning that is both accurate and the same
         # answer the CLI gives for such a snapshot.
         return Coverage()
+    truncated = len(rules) > rule_limit
     return Coverage(
         evaluated=counts.get("evaluated", 0),
         undetermined=counts.get("undetermined", 0),
-        undetermined_rules=tuple((r[0], r[1] or "") for r in rules),
+        undetermined_rules=tuple((r[0], r[1] or "") for r in rules[:rule_limit]),
+        undetermined_rules_truncated=truncated,
     )

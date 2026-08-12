@@ -14,6 +14,10 @@
         {% for r in coverage.undetermined_rules %}
         <li><code>{{ r.rule }}</code> — {{ r.reason }}</li>
         {% endfor %}
+        {% if coverage.undetermined_rules_truncated %}
+        <li class="italic">… showing {{ coverage.undetermined_rules|length }}
+          of {{ coverage.undetermined }}; the rest are not listed.</li>
+        {% endif %}
       </ul>
     </details>
   </div>

@@ -219,5 +219,13 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                     typer.echo("Not evaluated:")
                     for rule_id, reason in cov.undetermined_rules:
                         typer.echo(f"  {rule_id:30s} {reason}")
+                    if cov.undetermined_rules_truncated:
+                        # Say the list is a page. The count above is complete,
+                        # but a short list beside a large count reads as "the
+                        # rest were fine".
+                        typer.echo(
+                            f"  ... and more; showing "
+                            f"{len(cov.undetermined_rules)} of {cov.undetermined}."
+                        )
     finally:
         twin.close()
