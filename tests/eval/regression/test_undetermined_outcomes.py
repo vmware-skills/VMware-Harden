@@ -289,3 +289,126 @@ def test_unparseable_attrs_path_is_undetermined_not_ignored():
     ))
     assert not verdict.evaluable
     assert "cannot resolve" in verdict.reason
+
+
+# --- spellings the text-based parser must refuse rather than miss ------------
+
+#: Legal DuckDB that reads an uncollected attribute while defeating a
+#: pattern-matching parser. Every one of these was verified to (a) really read
+#: the attribute and (b) be judged evaluable, by an adversarial review of the
+#: previous implementation — a single space after the function name was enough.
+#:
+#: The parser cannot be trusted to recognise every spelling, so the contract is
+#: inverted: anything it cannot account for must raise, not return an empty set.
+#: These are the forms that inversion has to keep catching.
+_BYPASS_SQL = {
+    "space-after-function-name":
+        "json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+    "inline-comment-between-args":
+        "json_extract_string(attrs/*c*/, '$.ssh_enabled') = 'true'",
+    "line-comment":
+        "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL --x\n"
+        "  AND json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+    "quoted-identifier":
+        "json_extract_string(\"attrs\", '$.ssh_enabled') = 'true'",
+    "cast-between-column-and-comma":
+        "json_extract_string(attrs::JSON, '$.ssh_enabled') = 'true'",
+    "concatenated-path":
+        "json_extract_string(attrs, '$.' || 'ssh_enabled') = 'true'",
+    "arrow-operator":
+        "attrs->>'$.ssh_enabled' = 'true'",
+    "bare-column-predicate":
+        "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL "
+        "AND attrs LIKE '%ssh%'",
+    "decoy-active-attribute-plus-smuggled-read":
+        "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL "
+        "AND json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("form", sorted(_BYPASS_SQL))
+def test_unparseable_attrs_spelling_is_refused_not_ignored(form):
+    """A read the parser cannot see must not become "reads nothing".
+
+    "Reads nothing" is what the caller treats as safe to run, so a missed read
+    is a rule that executes, matches zero rows on an estate where the attribute
+    was never collected, and counts as compliant.
+    """
+    verdict = classify(_rule(
+        form,
+        f"SELECT id, name FROM nodes WHERE type = 'host' AND {_BYPASS_SQL[form]}",
+    ))
+    assert not verdict.evaluable, f"{form} was waved through"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("predicate", ["type IN ('host')", "type LIKE 'host'"])
+def test_scope_predicate_the_parser_cannot_read_is_refused(predicate):
+    """Scope decides which collector's vocabulary applies.
+
+    Misreading it is enough on its own: an attribute uncollected for hosts may
+    be ACTIVE for another node type, and the vocabulary check then passes while
+    checking the wrong thing.
+
+    Reads ``mob_enabled``, which IS collected for hosts, so the vocabulary has
+    no objection and the unreadable scope is the only thing left to refuse it.
+    A first draft used a pending attribute and passed for that reason instead —
+    the assertion held whether or not the scope gate existed.
+    """
+    verdict = classify(_rule(
+        "scope",
+        f"SELECT id, name FROM nodes WHERE {predicate} "
+        f"AND json_extract_string(attrs, '$.mob_enabled') = 'false'",
+    ))
+    assert not verdict.evaluable
+    assert "type" in verdict.reason
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("comment", ["-- note\n", "/* note */ "])
+def test_sql_comments_are_refused_on_their_own(comment):
+    """Pin the comment gate independently of the attrs-count gate.
+
+    Both gates catch a comment used to smuggle a read, so neither test pinned
+    the comment rule by itself. Here the SQL is otherwise canonical and reads a
+    collected attribute: only the comment rule can refuse it.
+    """
+    verdict = classify(_rule(
+        "commented",
+        f"SELECT id, name FROM nodes WHERE type = 'host' {comment}"
+        f"AND json_extract_string(attrs, '$.mob_enabled') = 'false'",
+    ))
+    assert not verdict.evaluable
+    assert "comment" in verdict.reason
+
+
+@pytest.mark.unit
+def test_the_canonical_spelling_still_passes():
+    """The refusals must not swallow the form every builtin rule uses."""
+    verdict = classify(_rule(
+        "canonical",
+        "SELECT id, name FROM nodes WHERE type = 'host' "
+        "AND json_extract_string(attrs, '$.mob_enabled') = 'false'",
+    ))
+    assert verdict.evaluable
+
+
+@pytest.mark.unit
+def test_a_subquery_cannot_smuggle_a_second_scope():
+    """The one scope attack the other gates do not reach.
+
+    The outer predicate declares ``dfw_rule`` — where ``action`` is collected,
+    so the vocabulary is satisfied — while the rows actually come from a host
+    subquery, where nothing collects it. Both spellings are legal, the attrs
+    read is canonical, and there is no comment: only counting every ``type``
+    reference against the ones parsed catches it.
+    """
+    verdict = classify(_rule(
+        "smuggled-scope",
+        "SELECT id, name FROM nodes WHERE type = 'dfw_rule' "
+        "AND id IN (SELECT id FROM nodes WHERE type IN ('host')) "
+        "AND json_extract_string(attrs, '$.action') = 'DROP'",
+    ))
+    assert not verdict.evaluable
+    assert "type" in verdict.reason

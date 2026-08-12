@@ -16,7 +16,13 @@ import re
 
 from vmware_harden.baselines.model import QueryCheck, Rule
 
-_NODE_TYPE_RE = re.compile(r"type\s*=\s*'([a-z_]+)'")
+_NODE_TYPE_RE = re.compile(r"\btype\s*=\s*'([a-z_]+)'")
+#: Any mention of the `type` column, however it is used. Paired with
+#: `_NODE_TYPE_RE` to prove no scope predicate went unread — see `node_type_of`.
+_TYPE_IDENT_RE = re.compile(r"\btype\b")
+#: Any mention of the `attrs` column, quoted or not. Paired with
+#: `_ATTRS_READ_RE` the same way — see `cited_attributes`.
+_ATTRS_IDENT_RE = re.compile(r'"?\battrs\b"?')
 
 #: Every read of the ``attrs`` JSON column, whatever path syntax it uses.
 #:
@@ -71,12 +77,27 @@ def node_type_of(rule: Rule) -> str:
     """
     if not isinstance(rule.check, QueryCheck):
         raise UnreadableRuleError(f"{rule.id}: not a query check")
-    found = set(_NODE_TYPE_RE.findall(rule.check.sql))
+    sql = rule.check.sql
+    _reject_sql_comments(rule.id, sql)
+    found = set(_NODE_TYPE_RE.findall(sql))
     if len(found) != 1:
         raise UnreadableRuleError(
             f"{rule.id}: expected exactly one `type = '...'` scope in the SQL, "
             f"found {sorted(found) or 'none'} — cannot tell which collector owns "
             f"its attributes"
+        )
+    # Same counting argument as for `attrs`: a predicate written `type IN
+    # ('host')` or `type LIKE 'host'` is invisible to the equality pattern, so a
+    # rule can be scoped to one node type and judged against another's
+    # vocabulary — and an attribute that is uncollected for hosts may well be
+    # ACTIVE for dfw_rule, which turns the vocabulary check into a formality.
+    mentions = len(_TYPE_IDENT_RE.findall(sql))
+    if mentions != len(_NODE_TYPE_RE.findall(sql)):
+        raise UnreadableRuleError(
+            f"{rule.id}: the SQL constrains `type` in a form this cannot read "
+            f"(only `type = '<node_type>'` is understood, not IN / LIKE / a "
+            f"join). The node type decides which collector's vocabulary the "
+            f"rule is checked against, so it must be unambiguous."
         )
     return found.pop()
 
@@ -87,26 +108,84 @@ def cited_attributes(rule: Rule) -> set[str]:
     Accepts the three spellings DuckDB treats as equivalent — ``'$.name'``,
     ``'$."name"'`` and a bare ``'name'``.
 
-    Raises :class:`UnreadableRuleError` for a path this cannot reduce to one
-    attribute name (a nested path, a wildcard, an array index). Returning an
-    empty set there would read as "cites nothing", which the caller takes as
-    "safe to run" — the same fail-open that let bare-key rules through. An
-    unparseable read means the rule's inputs are unknown, and unknown inputs
-    must land on undetermined.
+    Refuses anything else. The refusal is the point: this is regex over SQL
+    text, and a regex that misses a read reports "cites nothing", which the
+    caller reads as safe to run. An adversarial pass produced 19 legal DuckDB
+    spellings that all slipped past an earlier version — a single space after
+    the function name was enough, as were an inline comment, a quoted
+    ``"attrs"``, ``attrs->>'k'``, ``attrs['k']``, a concatenated path, and a
+    CTE that aliases the column. Each read the attribute for real and was
+    waved through as evaluable.
+
+    So the check is inverted: rather than trust the pattern to find every read,
+    :func:`_assert_every_attrs_reference_was_understood` demands that the number
+    of reads it *did* parse accounts for every mention of ``attrs`` in the SQL.
+    A spelling this cannot parse is then a hard error rather than an invisible
+    one, and the runner turns it into an undetermined outcome.
+
+    None of the nine builtin baselines uses any of these forms; the exposure is
+    external ``--baseline`` files and rules written later — which is exactly the
+    case this module exists for.
     """
     if not isinstance(rule.check, QueryCheck):
         return set()
+    sql = rule.check.sql
+    _reject_sql_comments(rule.id, sql)
     names: set[str] = set()
-    for path in _ATTRS_READ_RE.findall(rule.check.sql):
-        m = _SIMPLE_PATH_RE.match(path)
-        if m is None:
+    matches = list(_ATTRS_READ_RE.finditer(sql))
+    for m in matches:
+        path = m.group(1)
+        simple = _SIMPLE_PATH_RE.match(path)
+        if simple is None:
             raise UnreadableRuleError(
                 f"{rule.id}: cannot resolve the attrs path {path!r} to a single "
                 f"attribute name, so the rule's inputs cannot be checked against "
                 f"the collector vocabulary"
             )
-        names.add(m.group(1))
+        names.add(simple.group(1))
+    _assert_every_attrs_reference_was_understood(rule.id, sql, len(matches))
     return names
+
+
+def _reject_sql_comments(rule_id: str, sql: str) -> None:
+    """SQL comments hide reads from every text-based check here.
+
+    ``json_extract_string(attrs/*x*/, '$.k')`` parses for DuckDB and not for us,
+    and a comment can equally carry a decoy ``type = '...'`` that misdirects the
+    scope. No builtin rule uses a comment, so refusing them costs nothing and
+    removes a whole class of blind spot.
+    """
+    if "--" in sql or "/*" in sql:
+        raise UnreadableRuleError(
+            f"{rule_id}: SQL comments are not allowed in a rule — they can hide "
+            f"an attribute read or a node-type scope from the collector-contract "
+            f"check. Remove the comment; put the explanation in the rule's "
+            f"rationale."
+        )
+
+
+def _assert_every_attrs_reference_was_understood(
+    rule_id: str, sql: str, parsed: int
+) -> None:
+    """Every mention of ``attrs`` must belong to a read we parsed.
+
+    The regex can only vouch for reads it recognises. Counting the bare
+    identifier and demanding the totals agree converts "a spelling we never saw"
+    into "a spelling we could not read" — which the fail-closed path already
+    handles. Without it, an unrecognised spelling is silently worth zero cited
+    attributes and the rule runs.
+    """
+    mentions = len(_ATTRS_IDENT_RE.findall(sql))
+    if mentions != parsed:
+        raise UnreadableRuleError(
+            f"{rule_id}: the SQL mentions `attrs` {mentions} time(s) but only "
+            f"{parsed} of them are reads this can parse. Use "
+            f"json_extract_string(attrs, '$.key') — other spellings "
+            f"(->>, attrs['key'], a quoted \"attrs\", an alias, a concatenated "
+            f"path) read the column without declaring which attribute the rule "
+            f"depends on, so it cannot be checked against the collector "
+            f"vocabulary."
+        )
 
 
 def cited_literals(rule: Rule) -> list[tuple[str, list[str]]]:
