@@ -198,3 +198,48 @@ def test_builtin_cis_scan_reports_most_rules_undetermined(tmp_path: Path):
     ).fetchall())
     assert counts == {"evaluated": 4, "undetermined": 16}
     twin.close()
+
+
+@pytest.mark.unit
+def test_rerunning_a_baseline_replaces_outcomes_rather_than_doubling_them(tmp_path: Path):
+    """Coverage is a denominator; appending would fabricate the ratio.
+
+    Violations deliberately accumulate on a re-run — that list just gets longer.
+    Outcomes cannot: a second run of the same baseline against the same snapshot
+    reported "32 of 40 rules could not be evaluated", a total no scan ever had.
+    """
+    from vmware_harden.checks.coverage import coverage_for
+
+    twin = Twin(tmp_path / "t.duckdb")
+    snap_id = twin.start_snapshot("v.lab")
+    _host(twin, snap_id, "h-1", {"syslog_remote_host": "syslog.lab"})
+    baseline = load_builtin("cis-vmware-esxi-8.0-subset")
+
+    runner = CheckRunner(twin)
+    runner.run_baseline(snap_id, baseline)
+    first = coverage_for(twin, snap_id)
+    runner.run_baseline(snap_id, baseline)
+    second = coverage_for(twin, snap_id)
+
+    assert first.total == 20
+    assert (second.total, second.evaluated, second.undetermined) == (
+        first.total, first.evaluated, first.undetermined
+    )
+    twin.close()
+
+
+@pytest.mark.unit
+def test_a_second_baseline_on_one_snapshot_adds_its_own_rules(tmp_path: Path):
+    """Replacement is scoped per baseline, so it must not wipe a sibling's rows."""
+    from vmware_harden.checks.coverage import coverage_for
+
+    twin = Twin(tmp_path / "t.duckdb")
+    snap_id = twin.start_snapshot("v.lab")
+    _host(twin, snap_id, "h-1", {"syslog_remote_host": "syslog.lab"})
+
+    runner = CheckRunner(twin)
+    runner.run_baseline(snap_id, load_builtin("cis-vmware-esxi-8.0-subset"))
+    runner.run_baseline(snap_id, load_builtin("eu-nis2-vmware"))
+
+    assert coverage_for(twin, snap_id).total == 32  # 20 CIS + 12 NIS2
+    twin.close()

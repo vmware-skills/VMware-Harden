@@ -107,6 +107,16 @@ class CheckRunner:
         if insert_rows or outcome_rows:
             self.twin.conn.execute("BEGIN TRANSACTION")
             try:
+                # Outcomes are replaced, not appended. Violations may duplicate
+                # on a re-run (pinned MVP behaviour — the list just grows), but
+                # coverage is a denominator: a second run of the same baseline
+                # against the same snapshot would report "32 of 40 rules could
+                # not be evaluated" off a doubled tally, which is a fabricated
+                # ratio rather than a longer list.
+                self.twin.conn.execute(
+                    "DELETE FROM rule_outcome WHERE snapshot_id = ? AND baseline_id = ?",
+                    [snapshot_id, baseline.id],
+                )
                 if insert_rows:
                     self.twin.conn.executemany(
                         """INSERT INTO violation
