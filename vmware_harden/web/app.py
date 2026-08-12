@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from vmware_harden.checks.coverage import coverage_for
 from vmware_harden.store.schema import SEVERITY_RANK_SQL
 from vmware_harden.store.twin import Twin
 
@@ -81,6 +82,10 @@ def _fetch_summary(db_path: Path) -> dict:
         categories = [
             {"name": c, "count": n} for c, n in sorted(cat_rows)
         ]
+        # The dashboard's headline number is a violation count. Ship the
+        # coverage next to it so a low count is not read as a clean estate when
+        # most rules never ran.
+        cov = coverage_for(twin, snap_id)
         return {
             "has_data": True,
             "snapshot_id": snap_id,
@@ -89,6 +94,8 @@ def _fetch_summary(db_path: Path) -> dict:
             "total": sum(sev_counts.values()),
             "severity": severity,
             "categories": categories,
+            "coverage": cov.as_dict(),
+            "coverage_note": cov.summary_line() or None,
         }
 
 
@@ -104,6 +111,8 @@ def _fetch_violations(
     empty = {
         "has_data": False,
         "violations": [],
+        "coverage": None,
+        "coverage_note": None,
         "page": 1,
         "page_size": page_size,
         "total": 0,
@@ -144,9 +153,12 @@ def _fetch_violations(
             }
             for r in rows
         ]
+        cov = coverage_for(twin, snap_id)
         return {
             "has_data": True,
             "violations": violations,
+            "coverage": cov.as_dict(),
+            "coverage_note": cov.summary_line() or None,
             "page": page,
             "page_size": page_size,
             "total": total,

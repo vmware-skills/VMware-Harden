@@ -7,6 +7,7 @@ import typer
 
 from vmware_harden.baselines.loader import load_builtin
 from vmware_harden.baselines.model import Baseline
+from vmware_harden.checks.coverage import coverage_for
 from vmware_harden.checks.runner import CheckRunner
 from vmware_harden.collectors.base import Collector, CollectorDependencyError
 from vmware_harden.collectors.datastores import DatastoreCollector
@@ -111,6 +112,13 @@ def run_scan(target: str, baseline: str, db: str) -> str:
             raise
 
         typer.echo(f"Found {len(violations)} violations against {b.id}")
+        # A violation count on its own reads as a verdict. Say in the same
+        # breath how much of the baseline actually ran, or "0 violations"
+        # against a mostly-unevaluated baseline reads as "compliant".
+        cov = coverage_for(twin, snap_id)
+        if not cov.complete:
+            typer.echo(f"  {cov.summary_line()}")
+            typer.echo("  Run `vmware-harden report` to see which rules and why.")
         return snap_id
     finally:
         twin.close()
@@ -154,9 +162,10 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
             [latest["id"], limit],
         ).fetchall()
         truncated = total > len(rows)
+        cov = coverage_for(twin, latest["id"])
 
         if format == "json":
-            out = [
+            violations = [
                 {
                     "rule": r[0],
                     "node": r[1],
@@ -166,7 +175,14 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                 }
                 for r in rows
             ]
-            typer.echo(json.dumps(out, indent=2, ensure_ascii=False))
+            # Object, not the bare list this used to emit. A list gives a script
+            # no way to tell "nothing was wrong" from "almost nothing was
+            # checked" — both are `[]`. Callers that iterated the top level need
+            # to read ["violations"]; the release notes call this out.
+            typer.echo(json.dumps(
+                {"violations": violations, "coverage": cov.as_dict()},
+                indent=2, ensure_ascii=False,
+            ))
             if truncated:
                 typer.echo(
                     f"# Showing {len(rows)} of {total} violations "
@@ -175,7 +191,12 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                 )
         else:
             if not rows:
-                typer.echo("No violations.")
+                # Never a bare "No violations." when rules were skipped: that
+                # sentence is the false-compliance claim in three words.
+                typer.echo(
+                    "No violations among the rules that could be evaluated."
+                    if not cov.complete else "No violations."
+                )
             else:
                 for r in rows:
                     typer.echo(
@@ -188,5 +209,11 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                     )
                 else:
                     typer.echo(f"\nTotal: {len(rows)} violations")
+
+            if not cov.complete:
+                typer.echo(f"\n{cov.summary_line()}")
+                typer.echo("Not evaluated:")
+                for rule_id, reason in cov.undetermined_rules:
+                    typer.echo(f"  {rule_id:30s} {reason}")
     finally:
         twin.close()

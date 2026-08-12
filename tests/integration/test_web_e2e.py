@@ -66,9 +66,15 @@ def test_web_e2e_scan_toggle_scan_verify(tmp_path: Path, capsys):
     assert r.status_code == 200
     violations = r.text
     assert "cis-esxi-2.2.1" in violations  # build rule
-    # NTP rule is undetermined (nothing collects $.ntp_enabled), not a violation
-    assert "cis-esxi-2.1.1" not in violations
     assert "lab:h-1" in violations
+
+    # The page states its own coverage instead of implying the estate is clean,
+    # and names the NTP rule as not evaluated rather than passing.
+    assert "not a clean bill of health" in violations
+    assert "rules could not be evaluated" in violations
+    table, _, unevaluated = violations.partition("Rules that were not evaluated")
+    assert "cis-esxi-2.1.1" not in table
+    assert "cis-esxi-2.1.1" in unevaluated
 
     # 3. Drift page shows the field changes between scan 1 and scan 2
     r = client.get("/drift")

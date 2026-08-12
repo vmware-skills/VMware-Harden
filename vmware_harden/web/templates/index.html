@@ -13,7 +13,18 @@
     Latest scan against <strong>{{ summary.target }}</strong>
     {% if summary.finished_at %} at {{ summary.finished_at }}{% endif %}
     — total <strong>{{ summary.total }}</strong> violations
+    {% if summary.coverage %}
+      across <strong>{{ summary.coverage.evaluated }}</strong> of
+      <strong>{{ summary.coverage.total }}</strong> rules evaluated
+    {% endif %}
   </div>
+
+  {% if summary.coverage_note %}
+  <div class="bg-amber-50 border border-amber-300 text-amber-900 p-3 rounded mb-4 text-sm">
+    {{ summary.coverage_note }}
+    <a href="/violations" class="underline">See which rules</a>.
+  </div>
+  {% endif %}
 
   <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
     {% for sev in summary.severity %}

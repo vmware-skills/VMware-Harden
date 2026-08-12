@@ -147,7 +147,7 @@ def test_report_orders_critical_first(tmp_path: Path, capsys):
     db = _seed_mixed_severities(tmp_path)
     run_report(db=str(db), format="json")
     out = json.loads(capsys.readouterr().out)
-    got = [v["severity"] for v in out]
+    got = [v["severity"] for v in out["violations"]]
     assert got == ["critical", "high", "medium", "low", "info"]
 
 
@@ -170,7 +170,9 @@ def test_mcp_list_violations_ignores_running_snapshot(tmp_path: Path):
         out = srv.list_violations()
     finally:
         srv._DB_PATH = old
-    assert len(out) == 5  # violations of the completed snapshot, not []
+    # Count the violations, not the envelope's keys — `len(out)` counted keys
+    # and passed only because there happened to be five of each.
+    assert len(out["violations"]) == 5  # of the completed snapshot, not []
 
 
 # ---------------------------------------------------------------------------

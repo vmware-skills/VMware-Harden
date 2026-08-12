@@ -111,7 +111,7 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
     import json as _json
     payload = _json.loads(capsys.readouterr().out)
 
-    by_rule = {(v["rule"], v["node"]): v for v in payload}
+    by_rule = {(v["rule"], v["node"]): v for v in payload["violations"]}
 
     # Overridden rule: cis-esxi-3.1.1, severity is now CRITICAL (was high in parent)
     assert ("cis-esxi-3.1.1", "lab:host-bad") in by_rule

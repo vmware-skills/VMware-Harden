@@ -76,6 +76,7 @@ def list_violations(
     from typing import get_args
 
     from vmware_harden.baselines.model import Severity
+    from vmware_harden.checks.coverage import coverage_for
     from vmware_harden.store.schema import SEVERITY_RANK_SQL
     from vmware_harden.store.twin import Twin
 
@@ -145,12 +146,18 @@ def list_violations(
                     "evidence": ev,
                 }
             )
+        # Same reason as scan_target: an empty (or short) violations list is not
+        # evidence of compliance when most rules never ran, and the agent has no
+        # other way to learn that.
+        cov = coverage_for(twin, latest["id"])
         return {
             "violations": out,
             "total": total,
             "limit": limit,
             "offset": offset,
             "has_more": offset + len(out) < total,
+            "coverage": cov.as_dict(),
+            "note": cov.summary_line() or None,
         }
     finally:
         twin.close()
@@ -238,7 +245,14 @@ def get_baseline_rules(baseline_id: str) -> dict:
 def scan_target(
     target: str, baseline: str = "cis-vmware-esxi-8.0-subset"
 ) -> dict:
-    """[READ] Run a scan for `target` against `baseline`. Returns counts."""
+    """[READ] Run a scan for `target` against `baseline`. Returns counts.
+
+    `violations` alone does not say whether the estate is compliant — read
+    `coverage` with it. When `coverage.complete` is false, some rules could not
+    be evaluated because nothing collects the data they check, and their result
+    is unknown rather than passing.
+    """
+    from vmware_harden.checks.coverage import coverage_for
     from vmware_harden.cli.runner import run_scan
     from vmware_harden.store.twin import Twin
 
@@ -253,12 +267,18 @@ def scan_target(
         viol_count = twin.conn.execute(
             "SELECT COUNT(*) FROM violation WHERE snapshot_id=?", [snap_id]
         ).fetchone()[0]
+        # An agent reading `violations: 0` will tell the user the estate is
+        # compliant. Return alongside it how much of the baseline actually ran,
+        # so that conclusion is only available when it is true.
+        cov = coverage_for(twin, snap_id)
         return {
             "snapshot_id": snap_id,
             "target": target,
             "baseline": baseline,
             "hosts": host_count,
             "violations": viol_count,
+            "coverage": cov.as_dict(),
+            "note": cov.summary_line() or None,
         }
     finally:
         twin.close()

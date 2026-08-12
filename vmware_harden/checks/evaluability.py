@@ -64,19 +64,17 @@ def classify(rule: Rule) -> Evaluability:
     if not pending and not unknown:
         return Evaluability(True)
 
+    # Name the attributes and nothing else. Why an unevaluated rule is not a
+    # pass belongs in the report's one-line summary, not repeated verbatim on
+    # every row — a reason that scrolls is a reason nobody reads.
     parts: list[str] = []
     if pending:
         parts.append(
-            f"no collector writes {node_type} attribute(s) "
-            f"{', '.join(pending)} yet"
+            f"no collector writes {', '.join(f'{node_type}.{a}' for a in pending)}"
         )
     if unknown:
         parts.append(
-            f"{node_type} attribute(s) {', '.join(unknown)} are not declared in "
-            f"vmware_harden/baselines/vocabulary.py, so nothing collects them"
+            f"{', '.join(f'{node_type}.{a}' for a in unknown)} "
+            f"not declared in vocabulary.py"
         )
-    reason = (
-        f"{'; '.join(parts)} — the rule would match zero rows, which is not "
-        f"evidence of compliance, so it was not run"
-    )
-    return Evaluability(False, reason, tuple(pending + unknown))
+    return Evaluability(False, "; ".join(parts), tuple(pending + unknown))

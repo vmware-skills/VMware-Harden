@@ -3,10 +3,35 @@
 {% block content %}
 <h2 class="text-2xl font-semibold mb-4">Violations</h2>
 
+{% if coverage_note %}
+  <div class="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded mb-4">
+    <p class="font-medium">Partial coverage — this is not a clean bill of health.</p>
+    <p class="text-sm">{{ coverage_note }}</p>
+    <details class="mt-2 text-sm">
+      <summary class="cursor-pointer">Rules that were not evaluated
+        ({{ coverage.undetermined }})</summary>
+      <ul class="mt-2 space-y-1">
+        {% for r in coverage.undetermined_rules %}
+        <li><code>{{ r.rule }}</code> — {{ r.reason }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+  </div>
+{% endif %}
+
 {% if not has_data or violations|length == 0 %}
   <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded">
-    <p class="font-medium">No violations.</p>
-    <p class="text-sm">Either no scans have run, or the estate is fully compliant.</p>
+    {# Never claim compliance on an incomplete scan: "no violations" only means
+       "nothing found among the rules that ran". #}
+    {% if coverage and not coverage.complete %}
+      <p class="font-medium">No violations among the rules that could be evaluated.</p>
+      <p class="text-sm">{{ coverage.undetermined }} of {{ coverage.total }} rules
+        were not evaluated — see above. Compliance is unknown, not confirmed.</p>
+    {% else %}
+      <p class="font-medium">No violations.</p>
+      <p class="text-sm">Either no scans have run, or the estate is compliant
+        against every rule in this baseline.</p>
+    {% endif %}
   </div>
 {% else %}
   <div class="text-sm text-slate-500 mb-3">
