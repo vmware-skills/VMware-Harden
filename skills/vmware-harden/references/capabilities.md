@@ -98,26 +98,47 @@ high items only — this dramatically reduces context burn.
 
 ### Reading the result — `violations: []` is not "compliant"
 
-A rule can only judge configuration a collector actually gathers. Rules whose
-data is not collected are **not executed**, and are reported as undetermined
-rather than passing. Read `coverage` alongside the violation list:
+A rule can only judge configuration that was actually gathered, and that fails
+two independent ways. A rule whose attribute **no collector produces** is not
+executed. A rule that *does* run can still judge nothing about one node, because
+the value arrived absent or as the `N/A` sentinel there. Neither is a pass. Read
+`coverage` alongside the violation list:
 
 ```json
 "coverage": {"evaluated": 4, "undetermined": 16, "total": 20,
              "tracked": true, "complete": false,
              "undetermined_rules": [{"rule": "cis-esxi-2.1.1",
-                                     "reason": "no collector writes host.ntp_enabled"}]}
+                                     "reason": "no collector writes host.ntp_enabled"}],
+             "node_checks_evaluated": 3, "node_checks_undetermined": 5,
+             "node_checks_total": 8, "nodes_affected": 2, "node_tracked": true,
+             "undetermined_node_checks": [{"rule": "cis-esxi-2.2.1",
+                                           "node": "host-esxi-02",
+                                           "missing": "esxi_build"}],
+             "rules_without_targets": []}
 ```
 
-- `complete: true` — every rule ran; an empty violation list does mean compliant
-  against this baseline.
-- `complete: false` — say what was checked and what was not. State the ratio;
+- `complete: true` — every rule ran and reached a verdict on every node in its
+  scope; an empty violation list does mean compliant against this baseline.
+- `complete: false` — say what was checked and what was not. State both ratios;
   do not summarise the scan as "compliant" or "clean".
-- `tracked: false` — the snapshot predates coverage tracking; its coverage is
-  unknown. Re-scan before drawing a conclusion.
+- `undetermined` / `undetermined_rules` — nothing collects that attribute.
+  Collector work; the affected rules did not run at all.
+- `node_checks_undetermined` / `undetermined_node_checks` — the rule ran, but
+  that node had no value to judge. Usually the scanning account's privileges or
+  the host's reachability, not a missing collector. Counted in (rule, node)
+  pairs; `nodes_affected` is the distinct node count.
+- `rules_without_targets` — the rule ran and found no node of its type at all,
+  so its "no violations" covers an empty set. Often a collector that returned
+  nothing.
+- `tracked: false` — the snapshot predates coverage tracking (pre-v1.9.0).
+  `node_tracked: false` — it predates per-node tracking (pre-v1.10.0). Either
+  way its coverage is unknown; re-scan before drawing a conclusion.
 
-`note` carries the same statement as one sentence, or `null` when coverage is
-complete.
+Both `undetermined_rules` and `undetermined_node_checks` are capped pages;
+`undetermined_rules_truncated` / `undetermined_node_checks_truncated` say so.
+The counts beside them are always complete.
+
+`note` carries the same statement in prose, or `null` when coverage is complete.
 
 ### Parameters
 
@@ -375,15 +396,24 @@ A small summary:
                "tracked": true, "complete": false,
                "undetermined_rules": [
                  {"rule": "cis-esxi-2.1.1",
-                  "reason": "no collector writes host.ntp_enabled"}]},
-  "note": "16 of 20 rules could not be evaluated — ... unknown, not compliant."
+                  "reason": "no collector writes host.ntp_enabled"}],
+               "node_checks_evaluated": 3, "node_checks_undetermined": 5,
+               "node_checks_total": 8, "nodes_affected": 2,
+               "node_tracked": true,
+               "undetermined_node_checks": [
+                 {"rule": "cis-esxi-2.2.1", "node": "host-esxi-02",
+                  "missing": "esxi_build"}],
+               "rules_without_targets": []},
+  "note": "16 of 20 rules could not be evaluated — ... unknown, not compliant. 5 of 8 per-node checks could not be made across 2 node(s) — ..."
 }
 ```
 
 `violations` is only meaningful together with `coverage`: rules whose data no
-collector gathers are **not executed**, and count as undetermined rather than
-passing. Do not report an estate as compliant when `coverage.complete` is false
-— say how many rules were evaluated out of how many. See
+collector gathers are **not executed**, and a rule that did run still judged
+nothing about a node whose value was missing. Both count as undetermined rather
+than passing. Do not report an estate as compliant when `coverage.complete` is
+false — say how many rules were evaluated out of how many, and how many per-node
+checks were made out of how many. See
 [Tool 2](#tool-2-list_violations) for the full field description.
 
 ### Gotchas

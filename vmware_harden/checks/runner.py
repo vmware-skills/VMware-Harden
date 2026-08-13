@@ -8,6 +8,7 @@ import uuid
 
 from vmware_harden.baselines.model import Baseline, QueryCheck
 from vmware_harden.checks.evaluability import classify
+from vmware_harden.checks.nodescope import load_snapshot_nodes, scope_for_rule
 from vmware_harden.checks.query import execute_query_check
 from vmware_harden.store.twin import Twin
 
@@ -52,8 +53,12 @@ class CheckRunner:
         real_node_ids: set[str] = {
             r[0] for r in self.twin.conn.execute("SELECT id FROM nodes").fetchall()
         }
+        # Node attributes for this snapshot, keyed by node type. Loaded once and
+        # shared by every rule's per-node gap analysis below.
+        nodes_by_type = load_snapshot_nodes(self.twin, snapshot_id)
         insert_rows: list[list] = []
         outcome_rows: list[list] = []
+        gap_rows: list[list] = []
         for rule in baseline.rules:
             if isinstance(rule.check, QueryCheck):
                 # Refuse before executing. A rule reading an uncollected key
@@ -61,16 +66,16 @@ class CheckRunner:
                 # "no violations" — asserting compliance the scan never
                 # established. Recorded as undetermined instead.
                 verdict = classify(rule)
-                outcome_rows.append(
-                    [
-                        str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
-                        "evaluated" if verdict.evaluable else "undetermined",
-                        verdict.reason or None,
-                    ]
-                )
                 if not verdict.evaluable:
+                    outcome_rows.append(
+                        [
+                            str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                            "undetermined", verdict.reason or None, None, None,
+                        ]
+                    )
                     continue
                 rows = execute_query_check(self.twin, rule.check)
+                rule_violating_nodes: set[str] = set()
                 for row in rows:
                     node_id = row.get("id") or row.get("node_id")
                     if node_id is None:
@@ -90,10 +95,34 @@ class CheckRunner:
                         "evidence": evidence,
                     }
                     violations.append(v)
+                    rule_violating_nodes.add(node_id)
                     insert_rows.append(
                         [
                             v["id"], snapshot_id, baseline.id, rule.id,
                             node_id, rule.severity, json.dumps(evidence, default=str),
+                        ]
+                    )
+
+                # The rule could judge in principle. Now record which nodes it
+                # judged in fact — an ACTIVE attribute can still arrive empty on
+                # a given host, and there the rule's silence means "unknown",
+                # not "compliant".
+                scope = scope_for_rule(
+                    nodes_by_type.get(verdict.node_type, []),
+                    set(verdict.attributes),
+                    rule_violating_nodes,
+                )
+                outcome_rows.append(
+                    [
+                        str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                        "evaluated", None, scope.in_scope, scope.undetermined,
+                    ]
+                )
+                for node_id, missing in scope.gaps:
+                    gap_rows.append(
+                        [
+                            str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                            node_id, ", ".join(missing),
                         ]
                     )
             # ScriptCheck and any unknown check types are silently skipped
@@ -104,7 +133,7 @@ class CheckRunner:
         # of rules). Both go in the same transaction: a scan that recorded
         # violations but lost its outcome rows would look fully evaluated, which
         # is the failure this whole mechanism exists to prevent.
-        if insert_rows or outcome_rows:
+        if insert_rows or outcome_rows or gap_rows:
             self.twin.conn.execute("BEGIN TRANSACTION")
             try:
                 # Outcomes are replaced, not appended. Violations may duplicate
@@ -112,9 +141,14 @@ class CheckRunner:
                 # coverage is a denominator: a second run of the same baseline
                 # against the same snapshot would report "32 of 40 rules could
                 # not be evaluated" off a doubled tally, which is a fabricated
-                # ratio rather than a longer list.
+                # ratio rather than a longer list. Gaps are a tally on the same
+                # footing, so they are replaced too.
                 self.twin.conn.execute(
                     "DELETE FROM rule_outcome WHERE snapshot_id = ? AND baseline_id = ?",
+                    [snapshot_id, baseline.id],
+                )
+                self.twin.conn.execute(
+                    "DELETE FROM rule_node_gap WHERE snapshot_id = ? AND baseline_id = ?",
                     [snapshot_id, baseline.id],
                 )
                 if insert_rows:
@@ -128,9 +162,18 @@ class CheckRunner:
                 if outcome_rows:
                     self.twin.conn.executemany(
                         """INSERT INTO rule_outcome
-                           (id, snapshot_id, baseline_id, rule_id, outcome, reason)
-                           VALUES (?, ?, ?, ?, ?, ?)""",
+                           (id, snapshot_id, baseline_id, rule_id, outcome,
+                            reason, nodes_in_scope, nodes_undetermined)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         outcome_rows,
+                    )
+                if gap_rows:
+                    self.twin.conn.executemany(
+                        """INSERT INTO rule_node_gap
+                           (id, snapshot_id, baseline_id, rule_id, node_id,
+                            missing_attributes)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        gap_rows,
                     )
                 self.twin.conn.execute("COMMIT")
             except Exception:

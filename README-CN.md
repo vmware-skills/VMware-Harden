@@ -48,23 +48,33 @@ vmware-harden web --port 8080  # → http://127.0.0.1:8080
 
 ### 读结果：只看 violations 不构成结论
 
-规则只能判定「采集器真的采到了的配置」。数据没被采集的规则**不会执行**——
-它们记为「无法判定」，绝不算通过。各个界面都会明说：
+规则只能判定「真的采到了的配置」，而这件事有两种独立的失败方式。**没有任何采集器产出**
+该属性的规则，压根不会执行。而**能执行**的规则，仍可能对某一台主机什么都没判定——
+那台主机上取回的是空值或 `N/A` 哨兵（主机失联、账号权限不足、该 ESXi 版本没有这个设置）。
+两种情况都不算通过：
 
 ```
 $ vmware-harden report
-No violations among the rules that could be evaluated.
+No violations among the checks that could be made.
 
 16 of 20 rules could not be evaluated — no collector provides the data they
-check, so their result is unknown, not compliant.
+check, so their result is unknown, not compliant. 6 of 8 per-node checks could
+not be made across 2 node(s): the rules ran, but the values they read were
+missing on those nodes, so those nodes are unknown rather than compliant.
 Not evaluated:
   cis-esxi-2.1.1   no collector writes host.ntp_enabled
+  ...
+Not judged on these nodes (data missing):
+  cis-esxi-2.2.1   esx-02    esxi_build
   ...
 ```
 
 `--format json` 返回 `{"violations": [...], "coverage": {...}}`，MCP 工具返回同样的
 `coverage` 块——所以 agent 读到 `violations: 0` 也不能据此判定合规。v1.9.0 之前，
-这些规则匹配 0 行并被静默算作通过，详见 RELEASE_NOTES.md。
+「无人采集」那类规则匹配 0 行并被静默算作通过；v1.10.0 之前，「按节点缺数据」那类同样如此。
+详见 RELEASE_NOTES.md。
+
+两份清单对应的处理动作不同：前者等采集器补齐，后者查那台节点的连通性与扫描账号权限。
 
 
 ## 只读设计

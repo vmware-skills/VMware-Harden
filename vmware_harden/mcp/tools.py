@@ -147,8 +147,8 @@ def list_violations(
                 }
             )
         # Same reason as scan_target: an empty (or short) violations list is not
-        # evidence of compliance when most rules never ran, and the agent has no
-        # other way to learn that.
+        # evidence of compliance when most rules never ran — or ran but found no
+        # data on half the hosts — and the agent has no other way to learn that.
         cov = coverage_for(twin, latest["id"])
         return {
             "violations": out,
@@ -248,9 +248,14 @@ def scan_target(
     """[READ] Run a scan for `target` against `baseline`. Returns counts.
 
     `violations` alone does not say whether the estate is compliant — read
-    `coverage` with it. When `coverage.complete` is false, some rules could not
-    be evaluated because nothing collects the data they check, and their result
-    is unknown rather than passing.
+    `coverage` with it. When `coverage.complete` is false, part of the baseline
+    reached no verdict, and that part is unknown rather than passing. Two
+    distinct causes, both reported: `coverage.undetermined` rules were never run
+    because nothing collects the data they check, and
+    `coverage.node_checks_undetermined` per-node checks were skipped because a
+    rule that did run found no value on that node (unreachable host,
+    insufficient privilege). Report both to the user; do not describe an estate
+    as compliant while either is above zero.
     """
     from vmware_harden.checks.coverage import coverage_for
     from vmware_harden.cli.runner import run_scan

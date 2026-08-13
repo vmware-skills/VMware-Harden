@@ -33,6 +33,13 @@ class Evaluability:
     reason: str = ""
     #: The attributes that blocked evaluation, for machine consumers.
     blocking_attributes: tuple[str, ...] = ()
+    #: The node type the rule is scoped to, and every attribute its SQL reads.
+    #: Empty when the SQL could not be introspected at all. Carried here so the
+    #: caller can do per-node coverage without parsing the same SQL a second
+    #: time — and, more to the point, without a second parse that could reach a
+    #: different answer than the one this verdict was based on.
+    node_type: str = ""
+    attributes: tuple[str, ...] = ()
 
 
 def classify(rule: Rule) -> Evaluability:
@@ -63,7 +70,7 @@ def classify(rule: Rule) -> Evaluability:
             pending.append(attr)
 
     if not pending and not unknown:
-        return Evaluability(True)
+        return Evaluability(True, node_type=node_type, attributes=tuple(attrs))
 
     # Name the attributes and nothing else. Why an unevaluated rule is not a
     # pass belongs in the report's one-line summary, not repeated verbatim on
@@ -78,4 +85,10 @@ def classify(rule: Rule) -> Evaluability:
             f"{', '.join(f'{node_type}.{a}' for a in unknown)} "
             f"not declared in vocabulary.py"
         )
-    return Evaluability(False, "; ".join(parts), tuple(pending + unknown))
+    return Evaluability(
+        False,
+        "; ".join(parts),
+        tuple(pending + unknown),
+        node_type=node_type,
+        attributes=tuple(attrs),
+    )

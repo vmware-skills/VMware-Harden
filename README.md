@@ -44,25 +44,37 @@ vmware-harden web --port 8080  # → http://127.0.0.1:8080
 
 ### Reading a result: violations alone are not a verdict
 
-A rule can only judge configuration some collector actually gathers. Rules whose
-data is not collected are **not executed** — they are reported as *undetermined*,
-never as passing. Every surface says so:
+A rule can only judge configuration that was actually gathered, and that fails
+in two independent ways. A rule whose attribute **no collector produces** is not
+executed at all. A rule that *does* run can still learn nothing about one
+particular host, because there the value came back absent or as the `N/A`
+sentinel — an unreachable host, an account without the privilege, a setting the
+ESXi build does not have. Neither is reported as passing:
 
 ```
 $ vmware-harden report
-No violations among the rules that could be evaluated.
+No violations among the checks that could be made.
 
 16 of 20 rules could not be evaluated — no collector provides the data they
-check, so their result is unknown, not compliant.
+check, so their result is unknown, not compliant. 6 of 8 per-node checks could
+not be made across 2 node(s): the rules ran, but the values they read were
+missing on those nodes, so those nodes are unknown rather than compliant.
 Not evaluated:
   cis-esxi-2.1.1   no collector writes host.ntp_enabled
+  ...
+Not judged on these nodes (data missing):
+  cis-esxi-2.2.1   esx-02    esxi_build
   ...
 ```
 
 `--format json` returns `{"violations": [...], "coverage": {...}}`, and the MCP
 tools return the same `coverage` block, so an agent reading `violations: 0`
-cannot conclude "compliant" on its own. Before v1.9.0 those rules matched zero
-rows and were silently counted as passes; see RELEASE_NOTES.md.
+cannot conclude "compliant" on its own. Before v1.9.0 the uncollected-attribute
+rules matched zero rows and were silently counted as passes; before v1.10.0 the
+per-node case was, too. See RELEASE_NOTES.md.
+
+The two lists call for different work: the first is waiting on a collector, the
+second on that node's reachability and the scanning account's privileges.
 
 
 ### Offline / Air-Gapped Install (from source)
@@ -122,7 +134,7 @@ two v9 aliases, which carry no rules of their own and resolve to their v8 parent
 
 The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0-subset` and `vsphere-scg-v9-subset` ship today as `extends:` aliases of their v8 parents — same rules, a v9-named ID to scan and report under. Rules specific to 9.x will be added to them as Broadcom publishes the v9 guides.
 
-`vsphere-stig-v9-subset` is a rule-bearing STIG-aligned baseline: 12 host advanced-setting controls (account lockout, password policy, DCUI access, shell/DCUI timeouts, MOB, guest BPDU, remote syslog) mapped to the official open-source vSphere STIG content (MITRE InSpec / Cinc Auditor). **Status: experimental — collector pending real-hardware verification.** Its checks read ESXi host advanced settings the host collector fetches via a `config.option` PropertyCollector pass, a path not yet verified end-to-end against a live vCenter/ESXi. Until it is, treat results as **non-authoritative**. Note the limit of the v1.9.0 undetermined mechanism here: it refuses a rule when *no collector declares* the attribute, which is a static check against the vocabulary. These STIG attributes *are* declared, so their rules do run — if the real PropertyCollector pass comes back empty on live hardware, the attribute is simply absent and the rule again matches zero rows. Runtime data gaps are not yet distinguished from real passes; only undeclared attributes are. The baseline's `status` field is surfaced by `list_baselines` and `describe_stig_content_sync` so a scan self-declares this caveat. It is a **content sync**, not an API wrapper — VCF Operations 9.1 Automated Configuration Compliance (ACC) / Security Posture Management (SPM) is UI- and schedule-driven and exposes **no public compliance REST API**. For continuous, fleet-wide enforcement and automated remediation, use **VCF Operations SPM/ACC (UI)**; vmware-harden is the API-scriptable, DuckDB-persisted, cross-target point-in-time scanner. See [references/stig-content-sync.md](skills/vmware-harden/references/stig-content-sync.md) and inspect the catalog with `vmware-harden stig controls`.
+`vsphere-stig-v9-subset` is a rule-bearing STIG-aligned baseline: 12 host advanced-setting controls (account lockout, password policy, DCUI access, shell/DCUI timeouts, MOB, guest BPDU, remote syslog) mapped to the official open-source vSphere STIG content (MITRE InSpec / Cinc Auditor). **Status: experimental — collector pending real-hardware verification.** Its checks read ESXi host advanced settings the host collector fetches via a `config.option` PropertyCollector pass, a path not yet verified end-to-end against a live vCenter/ESXi. Until it is, treat results as **non-authoritative**. The v1.9.0 undetermined mechanism does not cover this on its own: it refuses a rule when *no collector declares* the attribute, a static check against the vocabulary, and these STIG attributes *are* declared, so their rules do run. If the real PropertyCollector pass comes back empty on live hardware, the attribute is simply absent and the rule again matches zero rows. **v1.10.0 catches that case** — such a host is recorded as a per-node gap (`coverage.undetermined_node_checks`) rather than a pass, so an unverified collector shows up as unjudged hosts instead of a clean report. What remains unverified is whether the pass returns the *right* values, which no coverage mechanism can tell you. The baseline's `status` field is surfaced by `list_baselines` and `describe_stig_content_sync` so a scan self-declares this caveat. It is a **content sync**, not an API wrapper — VCF Operations 9.1 Automated Configuration Compliance (ACC) / Security Posture Management (SPM) is UI- and schedule-driven and exposes **no public compliance REST API**. For continuous, fleet-wide enforcement and automated remediation, use **VCF Operations SPM/ACC (UI)**; vmware-harden is the API-scriptable, DuckDB-persisted, cross-target point-in-time scanner. See [references/stig-content-sync.md](skills/vmware-harden/references/stig-content-sync.md) and inspect the catalog with `vmware-harden stig controls`.
 
 #### Official Broadcom References
 

@@ -104,6 +104,37 @@ DDL: list[str] = [
         evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    -- The node half of the same question. `rule_outcome` answers "could this
+    -- rule judge anything at all?"; this answers "which nodes did it actually
+    -- judge?".
+    --
+    -- A rule can pass the vocabulary check — every attribute it reads is
+    -- declared ACTIVE, some collector demonstrably writes it — and still learn
+    -- nothing about a particular host, because on THAT host the value came back
+    -- absent (permission denied, the API missing on that build,
+    -- PropertyCollector unable to read `config.option`) or as the `N/A`
+    -- sentinel `list_hosts` returns for an unreadable property. The rule
+    -- matches no row for that host, and no row is what the engine reports as a
+    -- pass. Same false-compliance shape as the one 1.9.0 fixed, one level down.
+    --
+    -- Only the gaps are stored, not every judged pair: a row per (rule, node)
+    -- across a large estate is tens of thousands of rows per scan that say
+    -- nothing the counts on `rule_outcome` do not already say. The
+    -- "was this even tracked?" question that argued for storing both outcomes
+    -- at rule level is answered there instead, by `nodes_in_scope` being NULL
+    -- on snapshots taken before this release.
+    CREATE TABLE IF NOT EXISTS rule_node_gap (
+        id VARCHAR PRIMARY KEY,
+        snapshot_id VARCHAR NOT NULL,
+        baseline_id VARCHAR NOT NULL,
+        rule_id VARCHAR NOT NULL,
+        node_id VARCHAR NOT NULL,
+        -- Comma-separated attribute names that were missing on this node.
+        missing_attributes VARCHAR NOT NULL,
+        detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
     # snapshot_id is the hot filter for list/report/diff; without these indexes
     # the violation table degrades to full scan as scans accumulate.
     "CREATE INDEX IF NOT EXISTS idx_violation_snapshot ON violation(snapshot_id)",
@@ -115,6 +146,26 @@ DDL: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_remediation_violation ON remediation(violation_id)",
     # Same hot filter as violation: every report scopes outcomes to one snapshot.
     "CREATE INDEX IF NOT EXISTS idx_rule_outcome_snapshot ON rule_outcome(snapshot_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rule_node_gap_snapshot ON rule_node_gap(snapshot_id)",
+]
+
+#: Columns added to an existing table after it first shipped. `CREATE TABLE IF
+#: NOT EXISTS` leaves an already-created table alone, so a user upgrading from
+#: 1.9.0 keeps the old `rule_outcome` shape until these run.
+#:
+#: NULL on the old rows is the intended value and is load-bearing: it is how a
+#: snapshot taken before per-node tracking stays distinguishable from one where
+#: every node was judged. Do not backfill it with 0.
+#:
+#: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` is deliberately not used — the
+#: floor in pyproject.toml is duckdb>=0.10 and the clause is not available
+#: across that whole range. Applied via an information_schema probe instead
+#: (see Twin.init_schema), which works on every version.
+ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    # (table, column, type) — how many nodes the rule was scoped over ...
+    ("rule_outcome", "nodes_in_scope", "INTEGER"),
+    # ... and how many of those it could not judge for lack of data.
+    ("rule_outcome", "nodes_undetermined", "INTEGER"),
 ]
 
 # Severity is stored as plain text; a bare `ORDER BY severity DESC` sorts

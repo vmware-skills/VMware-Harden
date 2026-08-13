@@ -7,6 +7,9 @@
   <div class="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded mb-4">
     <p class="font-medium">Partial coverage — this is not a clean bill of health.</p>
     <p class="text-sm">{{ coverage_note }}</p>
+    {# Guarded: coverage can be partial for node reasons alone, and an empty
+       "Rules that were not evaluated (0)" disclosure reads as a broken page. #}
+    {% if coverage.undetermined %}
     <details class="mt-2 text-sm">
       <summary class="cursor-pointer">Rules that were not evaluated
         ({{ coverage.undetermined }})</summary>
@@ -20,6 +23,26 @@
         {% endif %}
       </ul>
     </details>
+    {% endif %}
+    {# A separate disclosure, not more rows in the one above: these rules ran.
+       What to do about them is different — check the node's reachability and
+       the scanning account's privileges, rather than wait for a collector. #}
+    {% if coverage.undetermined_node_checks %}
+    <details class="mt-2 text-sm">
+      <summary class="cursor-pointer">Nodes a rule could not judge, for want of
+        data ({{ coverage.node_checks_undetermined }})</summary>
+      <ul class="mt-2 space-y-1">
+        {% for c in coverage.undetermined_node_checks %}
+        <li><code>{{ c.rule }}</code> on <code>{{ c.node }}</code> — missing
+          {{ c.missing }}</li>
+        {% endfor %}
+        {% if coverage.undetermined_node_checks_truncated %}
+        <li class="italic">… showing {{ coverage.undetermined_node_checks|length }}
+          of {{ coverage.node_checks_undetermined }}; the rest are not listed.</li>
+        {% endif %}
+      </ul>
+    </details>
+    {% endif %}
   </div>
 {% endif %}
 
@@ -28,9 +51,20 @@
     {# Never claim compliance on an incomplete scan: "no violations" only means
        "nothing found among the rules that ran". #}
     {% if coverage and not coverage.complete %}
-      <p class="font-medium">No violations among the rules that could be evaluated.</p>
-      <p class="text-sm">{{ coverage.undetermined }} of {{ coverage.total }} rules
-        were not evaluated — see above. Compliance is unknown, not confirmed.</p>
+      <p class="font-medium">No violations among the checks that could be made.</p>
+      {# Each figure only when it exists. An unmeasured snapshot has neither,
+         and printing "0 of 0 rules were not evaluated" beside a warning banner
+         states a fact where the truth is that nothing is known. #}
+      {% if coverage.undetermined %}
+      <p class="text-sm">{{ coverage.undetermined }} of {{ coverage.total }}
+        rules were not evaluated.</p>
+      {% endif %}
+      {% if coverage.node_checks_undetermined %}
+      <p class="text-sm">{{ coverage.node_checks_undetermined }} of
+        {{ coverage.node_checks_total }} per-node checks could not be made,
+        across {{ coverage.nodes_affected }} node(s).</p>
+      {% endif %}
+      <p class="text-sm">See above. Compliance is unknown, not confirmed.</p>
     {% else %}
       <p class="font-medium">No violations.</p>
       <p class="text-sm">Either no scans have run, or the estate is compliant

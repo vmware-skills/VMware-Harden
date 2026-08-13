@@ -7,7 +7,7 @@ from pathlib import Path
 
 import duckdb
 
-from vmware_harden.store.schema import DDL
+from vmware_harden.store.schema import ADDED_COLUMNS, DDL
 
 
 class Twin:
@@ -33,9 +33,26 @@ class Twin:
         return twin
 
     def init_schema(self) -> None:
-        """Create all tables if they don't exist (idempotent)."""
+        """Create all tables if they don't exist, then add any new columns.
+
+        Idempotent. The second half matters for an upgrade: `CREATE TABLE IF NOT
+        EXISTS` is a no-op on a table that already exists, so a column added to
+        a shipped table would never appear in a user's database and every read
+        of it would fail.
+        """
         for stmt in DDL:
             self.conn.execute(stmt)
+        for table, column, sql_type in ADDED_COLUMNS:
+            present = self.conn.execute(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = ? AND column_name = ?",
+                [table, column],
+            ).fetchone()
+            if present is None:
+                # Interpolated, not bound: DDL identifiers cannot be
+                # parameters. Every part comes from the ADDED_COLUMNS constant,
+                # never from a caller.
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
 
     def list_tables(self) -> list[str]:
         """Return names of all user tables in the database."""

@@ -1,3 +1,101 @@
+## v1.10.0 (2026-08-13) — 按节点判定：规则跑了，不等于每台主机都被判定了
+
+> **v1.9.0 修的是「没人采集这个属性」。这一版修的是「采集了，但这台主机上是空的」。**
+> 合规率会再降一次。同样是修正，不是回归。
+
+### 发生了什么
+
+v1.9.0 之后，一条规则只要它读的每个属性都有采集器声明产出，就会被执行，结果算数。
+**这个判定是规则级的。** 属性声明了、采集器也真跑了，但在**某一台**主机上取回空值时
+（主机失联、扫描账号权限不足、该 ESXi 版本没有这个设置），规则对那台主机匹配 0 行——
+而 0 行，还是被当作通过。
+
+和 v1.9.0 修掉的是同一个形态，低一层：
+
+```
+规则级（v1.9.0 修）  没有采集器产出 password_quality_control  → 规则不执行，记 undetermined
+节点级（本版修）      采集器产出了，但 esx-02 上取回 "N/A"     → 规则执行了，esx-02 静默通过
+```
+
+`list_hosts` 属性取不到时返回字符串 `"N/A"`。v1.9.0 把基线里 50 处 `CAST` 改成
+`TRY_CAST`，避免一台主机的 `"N/A"` 抛异常终止整次扫描——但改完之后那台主机的值变成
+NULL、规则不匹配，**它就静默通过了**。这一版补上的正是这半边。
+
+### 你会看到的变化
+
+```
+# 此前
+No violations among the rules that could be evaluated.
+16 of 20 rules could not be evaluated — ...
+
+# 现在
+No violations among the checks that could be made.
+
+16 of 20 rules could not be evaluated — ... 6 of 8 per-node checks could not be
+made across 2 node(s): the rules ran, but the values they read were missing on
+those nodes, so those nodes are unknown rather than compliant.
+Not evaluated:
+  cis-esxi-2.1.1   no collector writes host.ntp_enabled
+  ...
+Not judged on these nodes (data missing):
+  cis-esxi-2.2.1   esx-02    esxi_build
+  cis-esxi-3.1.1   esx-02    syslog_remote_host
+  ...
+```
+
+两份清单对应的处理动作不同，所以分开列：上面那份等采集器补齐，下面那份查那台节点的
+连通性与扫描账号权限。
+
+`coverage` 块新增字段（CLI JSON / MCP `list_violations` / `scan_target` / web 一致）：
+
+| 字段 | 含义 |
+|---|---|
+| `node_checks_evaluated` / `node_checks_undetermined` / `node_checks_total` | 按 `(规则, 节点)` 计的判定对数。一台主机缺一个属性、四条规则读它 = 4 对未判定 |
+| `nodes_affected` | 出现缺口的**不同节点**数（上面那三个是判定对数，不是主机数） |
+| `undetermined_node_checks` | `[{rule, node, missing}]`，分页，配 `undetermined_node_checks_truncated` |
+| `rules_without_targets` | 规则跑了、无违规、但它那个类型一个节点都没有——「0 违规」覆盖的是空集 |
+| `node_tracked` | `false` = 该快照由 1.10.0 之前的版本扫的，没量过按节点 |
+
+**`coverage.complete` 的含义变严**：现在还要求「每条跑了的规则在其作用域内的每个节点上
+都得出了结论」，且要求 `node_tracked`。1.9.0 扫出来的旧快照会显示为 not complete —— 那不是
+它变差了，是它从来没量过这一维度。重扫即可。
+
+### 判定规则（三条容易搞反的）
+
+- **空字符串不是缺失。** `syslog_remote_host = ''` 是采到的真值，含义是「没配远程 syslog」——
+  正是若干规则要抓的违规。按 falsy 判会把发现压掉，等于用一个假合规去修另一个假合规。
+- **已被判为违规的节点不算缺口。** 它的结论已经确定，缺别的属性改变不了这一点。
+- **不读任何属性的规则没有按节点缺口。** estate 级 absence check（`WHERE NOT EXISTS`）
+  断言的是「哪些行存在」，不是某一行的内容；它在空 estate 上 fire 也是判定了，不进
+  `rules_without_targets`。
+
+### 升级
+
+自动。首次以读写方式打开旧库时，`rule_outcome` 会补上两列
+（`nodes_in_scope` / `nodes_undetermined`），并建 `rule_node_gap` 表。旧行保持 NULL —— 这个
+NULL 是承重的，它把「没量过」和「量过、零缺口」区分开，**不要回填成 0**。
+web dashboard 以只读方式打开，无法迁移；它对未迁移的库如实报 `node_tracked: false`，
+而不是报「全覆盖」。
+
+### 这一版**不**保证的
+
+按节点判定回答的是「这台主机上，这条规则读的值存在吗」，**不**回答值是否正确。
+STIG 那 12 个 advanced setting 的真机验证仍然必须（BACKLOG `[BV-harden]`）——本版保证的是
+采集路径回空时会显示为「未判定的主机」而不是一份干净报告。
+
+### 变更清单
+
+- 新增 `vmware_harden/checks/nodescope.py`；新增 `rule_node_gap` 表 + 索引；
+  `rule_outcome` 加 `nodes_in_scope` / `nodes_undetermined`（带 `information_schema` 探测迁移）
+- `Evaluability` 携带已解析的 node type 与属性集，运行器不再二次解析同一段 SQL
+- `Coverage` 增加节点维度；`complete` 加两个条件；`summary_line()` 由一句变为按需分句
+- 呈现面：CLI `scan` / `report`（text + json）、MCP `list_violations` / `scan_target`、
+  web summary + violations 页
+- 测试：新增 `tests/eval/regression/test_node_level_outcomes.py`（16 例），全仓 480 passed；
+  9 个缺陷注入变异测试全部变红；ruff 零新增；bandit 0 Medium+
+
+---
+
 ## v1.9.0 (2026-08-12) — 合规判定诚实化：76/99 条规则此前静默报「合规」
 
 > **⚠️ 升级后你的合规率会下降。这是修正，不是回归——此前的高合规率是假的。**

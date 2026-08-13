@@ -34,9 +34,40 @@ class Coverage:
     #: baselines.
     undetermined_rules_truncated: bool = False
 
+    # --- the node dimension ------------------------------------------------
+    # A rule can clear the vocabulary check and still judge nothing about a
+    # particular host, because the value it reads arrived empty there. The
+    # counts below are (rule, node) judgements, not nodes: one host missing one
+    # attribute that four rules read is four judgements not made.
+
+    #: (rule, node) pairs where the rule reached a verdict.
+    node_checks_evaluated: int = 0
+    #: (rule, node) pairs where the data the rule reads was missing on the node.
+    node_checks_undetermined: int = 0
+    #: ``(rule_id, node_id, missing_attributes)`` for those pairs, capped.
+    undetermined_node_checks: tuple[tuple[str, str, str], ...] = field(
+        default_factory=tuple
+    )
+    #: True when :attr:`undetermined_node_checks` is a page rather than the lot.
+    undetermined_node_checks_truncated: bool = False
+    #: Distinct nodes appearing in the gaps — the "how many hosts" figure, which
+    #: is what a reader wants and what the judgement counts above are not.
+    nodes_affected: int = 0
+    #: Rules that ran, found no violation, and had no node of their type to look
+    #: at. Their "0 violations" is vacuous: the most complete form of the same
+    #: missing-data problem, usually a collector that returned nothing.
+    rules_without_targets: tuple[str, ...] = field(default_factory=tuple)
+    #: False for snapshots scanned before per-node outcomes were recorded — a
+    #: 1.9.0 database, where no gaps found means none were ever looked for.
+    node_tracked: bool = False
+
     @property
     def total(self) -> int:
         return self.evaluated + self.undetermined
+
+    @property
+    def node_checks_total(self) -> int:
+        return self.node_checks_evaluated + self.node_checks_undetermined
 
     @property
     def tracked(self) -> bool:
@@ -45,17 +76,34 @@ class Coverage:
 
     @property
     def complete(self) -> bool:
-        """True only when every rule in the scan was able to judge.
+        """True only when the scan judged every rule, on every node it covers.
 
         Requires ``tracked``. Without outcome rows there is nothing to conclude,
         and returning True there would announce full coverage for a scan that
         never measured any — the original false-compliance claim, one release
         later and harder to spot.
+
+        The node clauses are part of the same guarantee, not an extra: a scan
+        where every rule ran but four hosts had no readable data is not one that
+        checked the estate, and this property is what every surface consults
+        before it prints a bare "No violations."
+
+        ``node_tracked`` is required rather than assumed. Without it the node
+        counts are zero because nothing was measured, not because nothing was
+        missing, and treating that as full coverage would make an unavailable
+        measurement read as a clean one — which is the whole failure this class
+        exists to prevent, arriving through the back door.
         """
-        return self.tracked and self.undetermined == 0
+        return (
+            self.tracked
+            and self.undetermined == 0
+            and self.node_tracked
+            and self.node_checks_undetermined == 0
+            and not self.rules_without_targets
+        )
 
     def summary_line(self) -> str:
-        """One sentence for a human, or empty when there is nothing to warn about.
+        """A short paragraph for a human, empty when there is nothing to warn about.
 
         Deliberately empty when coverage is complete: a banner on every clean
         scan trains people to skip it, and then it goes unread on the scan that
@@ -66,13 +114,34 @@ class Coverage:
                 "This snapshot predates coverage tracking — how many of its "
                 "rules could actually be evaluated is unknown. Re-scan to find out."
             )
-        if self.complete:
-            return ""
-        return (
-            f"{self.undetermined} of {self.total} rules could not be evaluated "
-            f"— no collector provides the data they check, so their result is "
-            f"unknown, not compliant."
-        )
+        parts: list[str] = []
+        if not self.node_tracked:
+            parts.append(
+                "This snapshot records which rules could be evaluated but not "
+                "which nodes each rule could judge — it was scanned by a "
+                "release before that was measured. Re-scan to find out."
+            )
+        if self.undetermined:
+            parts.append(
+                f"{self.undetermined} of {self.total} rules could not be "
+                f"evaluated — no collector provides the data they check, so "
+                f"their result is unknown, not compliant."
+            )
+        if self.rules_without_targets:
+            parts.append(
+                f"{len(self.rules_without_targets)} rule(s) ran but found no "
+                f"node of the type they check, so they judged nothing: "
+                f"{', '.join(self.rules_without_targets)}."
+            )
+        if self.node_checks_undetermined:
+            parts.append(
+                f"{self.node_checks_undetermined} of {self.node_checks_total} "
+                f"per-node checks could not be made across "
+                f"{self.nodes_affected} node(s): the rules ran, but the values "
+                f"they read were missing on those nodes, so those nodes are "
+                f"unknown rather than compliant."
+            )
+        return " ".join(parts)
 
     def as_dict(self) -> dict:
         return {
@@ -86,6 +155,19 @@ class Coverage:
                 for rule_id, reason in self.undetermined_rules
             ],
             "undetermined_rules_truncated": self.undetermined_rules_truncated,
+            "node_checks_evaluated": self.node_checks_evaluated,
+            "node_checks_undetermined": self.node_checks_undetermined,
+            "node_checks_total": self.node_checks_total,
+            "nodes_affected": self.nodes_affected,
+            "node_tracked": self.node_tracked,
+            "undetermined_node_checks": [
+                {"rule": rule_id, "node": node_id, "missing": missing}
+                for rule_id, node_id, missing in self.undetermined_node_checks
+            ],
+            "undetermined_node_checks_truncated": (
+                self.undetermined_node_checks_truncated
+            ),
+            "rules_without_targets": list(self.rules_without_targets),
         }
 
 
@@ -126,9 +208,81 @@ def coverage_for(twin, snapshot_id: str, *, rule_limit: int = 100) -> Coverage:
         # answer the CLI gives for such a snapshot.
         return Coverage()
     truncated = len(rules) > rule_limit
+    node = _node_coverage(twin, snapshot_id, rule_limit=rule_limit)
     return Coverage(
         evaluated=counts.get("evaluated", 0),
         undetermined=counts.get("undetermined", 0),
         undetermined_rules=tuple((r[0], r[1] or "") for r in rules[:rule_limit]),
         undetermined_rules_truncated=truncated,
+        **node,
     )
+
+
+def _node_coverage(twin, snapshot_id: str, *, rule_limit: int) -> dict:
+    """The per-node half of a snapshot's coverage.
+
+    Separate query and separate failure handling from the rule-level tally
+    because the two can be present independently: a database written by 1.9.0
+    has rule outcomes but no node columns and no gap table, and a read-only
+    consumer (the web dashboard) cannot migrate it. Losing the rule-level
+    coverage because the node half is unavailable would trade one honest answer
+    for none.
+    """
+    empty = {"node_tracked": False}
+    try:
+        row = twin.conn.execute(
+            "SELECT SUM(nodes_in_scope), SUM(nodes_undetermined), "
+            "       COUNT(nodes_in_scope) "
+            "FROM rule_outcome WHERE snapshot_id = ? AND outcome = 'evaluated'",
+            [snapshot_id],
+        ).fetchone()
+        # A rule that ran, matched nothing, and had nothing of its type to look
+        # at asserted compliance over an empty set. `NOT EXISTS` rather than a
+        # join: an absence check ("no host has X") legitimately fires on an
+        # estate with zero hosts, and it has judged something.
+        vacuous = twin.conn.execute(
+            "SELECT rule_id FROM rule_outcome o "
+            "WHERE o.snapshot_id = ? AND o.outcome = 'evaluated' "
+            "  AND o.nodes_in_scope = 0 "
+            "  AND NOT EXISTS (SELECT 1 FROM violation v "
+            "                  WHERE v.snapshot_id = o.snapshot_id "
+            "                    AND v.rule_id = o.rule_id) "
+            "ORDER BY rule_id",
+            [snapshot_id],
+        ).fetchall()
+        gaps = twin.conn.execute(
+            "SELECT rule_id, node_id, missing_attributes FROM rule_node_gap "
+            "WHERE snapshot_id = ? ORDER BY node_id, rule_id LIMIT ?",
+            [snapshot_id, rule_limit + 1],
+        ).fetchall()
+        affected = twin.conn.execute(
+            "SELECT COUNT(DISTINCT node_id) FROM rule_node_gap "
+            "WHERE snapshot_id = ?",
+            [snapshot_id],
+        ).fetchone()
+    except (duckdb.CatalogException, duckdb.BinderException):
+        # CatalogException: the gap table is absent. BinderException: the table
+        # is there but `rule_outcome` predates the node columns. Both mean the
+        # same thing — this snapshot was never measured per node — and both are
+        # reachable on a read-only 1.9.0 database that the reader cannot migrate.
+        return empty
+
+    in_scope, undetermined, measured = (row or (None, None, 0))
+    if not measured:
+        # Rows exist but every `nodes_in_scope` is NULL: outcomes written by
+        # 1.9.0, which recorded no node dimension. Reporting 0 gaps here would
+        # state that nothing was missing, when in truth nothing was checked.
+        return empty
+    undetermined = int(undetermined or 0)
+    truncated = len(gaps) > rule_limit
+    return {
+        "node_tracked": True,
+        "node_checks_evaluated": int(in_scope or 0) - undetermined,
+        "node_checks_undetermined": undetermined,
+        "undetermined_node_checks": tuple(
+            (g[0], g[1], g[2] or "") for g in gaps[:rule_limit]
+        ),
+        "undetermined_node_checks_truncated": truncated,
+        "nodes_affected": int(affected[0]) if affected else 0,
+        "rules_without_targets": tuple(r[0] for r in vacuous),
+    }

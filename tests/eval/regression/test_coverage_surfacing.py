@@ -55,14 +55,16 @@ def test_untracked_snapshot_is_not_reported_as_complete():
 @pytest.mark.unit
 def test_complete_coverage_says_nothing():
     """No banner when every rule ran — a warning on every clean scan goes unread."""
-    cov = Coverage(evaluated=20, undetermined=0)
+    cov = Coverage(
+        evaluated=20, undetermined=0, node_tracked=True, node_checks_evaluated=60
+    )
     assert cov.complete is True
     assert cov.summary_line() == ""
 
 
 @pytest.mark.unit
 def test_partial_coverage_states_the_ratio_and_refuses_the_word_compliant():
-    cov = Coverage(evaluated=4, undetermined=16)
+    cov = Coverage(evaluated=4, undetermined=16, node_tracked=True)
     line = cov.summary_line()
     assert "16 of 20" in line
     assert "not compliant" in line
@@ -92,7 +94,7 @@ def test_text_report_never_says_bare_no_violations_on_partial_coverage(
     out = capsys.readouterr().out
 
     assert "No violations." not in out
-    assert "No violations among the rules that could be evaluated." in out
+    assert "No violations among the checks that could be made." in out
     assert "Not evaluated:" in out
     assert "no collector writes host.ntp_enabled" in out
 

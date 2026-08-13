@@ -118,7 +118,9 @@ def run_scan(target: str, baseline: str, db: str) -> str:
         cov = coverage_for(twin, snap_id)
         if not cov.complete:
             typer.echo(f"  {cov.summary_line()}")
-            typer.echo("  Run `vmware-harden report` to see which rules and why.")
+            typer.echo(
+                "  Run `vmware-harden report` to see which rules and nodes, and why."
+            )
         return snap_id
     finally:
         twin.close()
@@ -191,10 +193,12 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                 )
         else:
             if not rows:
-                # Never a bare "No violations." when rules were skipped: that
-                # sentence is the false-compliance claim in three words.
+                # Never a bare "No violations." when part of the scan reached no
+                # verdict: that sentence is the false-compliance claim in three
+                # words. "checks", not "rules" — a rule that ran can still have
+                # judged nothing about a host whose data was missing.
                 typer.echo(
-                    "No violations among the rules that could be evaluated."
+                    "No violations among the checks that could be made."
                     if not cov.complete else "No violations."
                 )
             else:
@@ -226,6 +230,21 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                         typer.echo(
                             f"  ... and more; showing "
                             f"{len(cov.undetermined_rules)} of {cov.undetermined}."
+                        )
+                # Separate heading from the one above: these rules DID run. The
+                # actionable fix is different too — not "wait for a collector"
+                # but "check that node's reachability and the account's
+                # privileges", so conflating the two lists would send the reader
+                # after the wrong thing.
+                if cov.undetermined_node_checks:
+                    typer.echo("Not judged on these nodes (data missing):")
+                    for rule_id, node_id, missing in cov.undetermined_node_checks:
+                        typer.echo(f"  {rule_id:30s} {node_id:24s} {missing}")
+                    if cov.undetermined_node_checks_truncated:
+                        typer.echo(
+                            f"  ... and more; showing "
+                            f"{len(cov.undetermined_node_checks)} of "
+                            f"{cov.node_checks_undetermined}."
                         )
     finally:
         twin.close()

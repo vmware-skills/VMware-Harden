@@ -90,7 +90,7 @@ Use vmware-harden when the user needs to:
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
-5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard). The JSON is an object — `{"violations": [...], "coverage": {...}}` — read `coverage` before reporting a result; an empty `violations` list only means nothing was found among the rules that could be evaluated.
+5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard). The JSON is an object — `{"violations": [...], "coverage": {...}}` — read `coverage` before reporting a result; an empty `violations` list only means nothing was found among the checks that could be made.
 
    **Failure branch**: If you see `ConnectError: vmware-aiops target not found`, the aiops side is not configured. Run `vmware-aiops init` first; harden cannot scan without a working collector.
 
@@ -139,7 +139,12 @@ All 8 tools are **read-only** with respect to vSphere/NSX. Writes to the local T
 
 **List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
 
-**An empty violation list is not a compliance verdict.** A rule can only judge configuration some collector actually gathers; rules whose data is not collected are not executed and are reported as undetermined, never as passing. `list_violations` and `scan_target` therefore also return `coverage` (`{evaluated, undetermined, total, tracked, complete, undetermined_rules}`) and a one-sentence `note`. Read it before summarising: report "no violations among the N of M rules that could be evaluated" when `complete` is false, and never call an estate compliant or clean on a partial scan. When `tracked` is false the snapshot predates coverage tracking — re-scan rather than assume.
+**An empty violation list is not a compliance verdict.** A rule can only judge configuration that was actually gathered, and that fails two independent ways — both reported, neither as passing:
+
+- **No collector produces the attribute**, so the rule was never run → `coverage.undetermined` with `undetermined_rules` naming the attribute. Collector work.
+- **The rule ran but found no value on a given node** (host unreachable, account lacks the privilege, setting absent on that build) → `coverage.node_checks_undetermined` with `undetermined_node_checks` naming the rule, node and missing attribute. Access work. A rule that found no node of its type at all is listed in `coverage.rules_without_targets`.
+
+`list_violations` and `scan_target` return the full `coverage` block (`{evaluated, undetermined, total, tracked, complete, undetermined_rules, node_checks_evaluated, node_checks_undetermined, node_checks_total, nodes_affected, node_tracked, undetermined_node_checks, rules_without_targets}`) plus a `note` summarising it. Read it before summarising: when `complete` is false, say what was not checked and never call the estate compliant or clean. `tracked: false` means the snapshot predates coverage tracking; `node_tracked: false` means it predates per-node tracking (pre-v1.10.0) — re-scan rather than assume either.
 
 ## CLI Quick Reference
 
@@ -181,7 +186,7 @@ This avoids `uvx` re-resolving PyPI through the corporate MitM proxy. The legacy
 Run at least one scan first: `vmware-harden scan --baseline cis-vmware-esxi-8.0-subset --target <t>`. The DuckDB file is created on first scan at `~/.vmware-harden/twin.duckdb` (override with `VMWARE_HARDEN_DB`).
 
 ### 等保 baseline reports most rules as not evaluated
-Two different causes, and the report distinguishes them. A rule whose attribute no collector produces is recorded `undetermined` with the reason naming that attribute — see `coverage.undetermined_rules`; those are collector work, tracked in RELEASE_NOTES. Separately, the 等保 baseline spans several collectors (vCenter advanced settings + NSX DFW), so if only the vCenter collector ran, the DFW rules have no nodes to match. Run a scan with all collectors installed, or pick a baseline whose `applies_to` matches what you have.
+Three different causes, and the report distinguishes them. A rule whose attribute no collector produces is recorded `undetermined` with the reason naming that attribute — see `coverage.undetermined_rules`; those are collector work, tracked in RELEASE_NOTES. Separately, the 等保 baseline spans several collectors (vCenter advanced settings + NSX DFW), so if only the vCenter collector ran, the DFW rules have no nodes to match — they appear in `coverage.rules_without_targets`, not as passes. Third, individual hosts missing a value show up in `coverage.undetermined_node_checks`; that one is usually privilege or reachability, not a missing collector. Run a scan with all collectors installed, or pick a baseline whose `applies_to` matches what you have.
 
 ### Web dashboard shows 0 violations even after a scan
 Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in your shell but not in the systemd/launchd unit running `vmware-harden web`, the web server reads the default `~/.vmware-harden/twin.duckdb` while your scans wrote elsewhere.
