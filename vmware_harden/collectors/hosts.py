@@ -72,8 +72,11 @@ def _fetch_advanced_settings(si: object) -> dict[str, dict]:
     """Fetch each host's STIG-relevant advanced settings, keyed by host name.
 
     REAL-HARDWARE-GATED: this path is only exercised against a live
-    vCenter/ESXi and is NOT verified here (see the collector-pending caveat on
-    the vsphere-stig-v9-subset baseline). One batched PropertyCollector pass
+    vCenter/ESXi, so no test here covers it. It was verified by hand on
+    2026-08-13 against a standalone ESXi 8.0.3 (build 24280767): all 12 attrs in
+    STIG_ADVANCED_SETTING_ATTRS came back populated. ESXi 9.x — what the STIG
+    baseline actually targets — and vCenter-managed multi-host inventories
+    remain unverified. One batched PropertyCollector pass
     pulls every host's ``config.option`` (its full advanced-setting list)
     alongside its name — a single server-side call for the whole fleet rather
     than an ``OptionManager.QueryOptions`` round-trip per host (踩坑 #31). The

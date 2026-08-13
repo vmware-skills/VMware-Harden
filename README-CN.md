@@ -93,7 +93,7 @@ VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/
 | `pci-dss-4.0-vmware` | 10 | host, dfw_rule | PCI-DSS v4.0 |
 | `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 指令（第 21/23 条，附件 I） |
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz（OPS.1.1.4 + SYS.1.1） |
-| `vsphere-stig-v9-subset` ⚠️ *实验性* | 12 | host | vSphere 9 STIG 对齐的主机高级设置（[DoD/DISA STIG 内容](https://github.com/vmware/dod-compliance-and-automation)）—— 采集路径待真机验证 |
+| `vsphere-stig-v9-subset` ⚠️ *实验性* | 12 | host | vSphere 9 STIG 对齐的主机高级设置（[DoD/DISA STIG 内容](https://github.com/vmware/dod-compliance-and-automation)）—— 采集路径已在 ESXi 8.0.3 真机验证；9.x 尚未跑过 |
 | `cis-vmware-esxi-9.0-subset` | 20 | host | 通过 `extends:` 继承 `cis-vmware-esxi-8.0-subset` |
 | `vsphere-scg-v9-subset` | 15 | host, vm | 通过 `extends:` 继承 `vsphere-scg-v8-subset` |
 

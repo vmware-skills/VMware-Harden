@@ -38,14 +38,21 @@
 #   same convention. The rule->key parity is enforced by
 #   tests/eval/regression/test_stig_baseline.py.
 #
-#   ⚠ EXPERIMENTAL — COLLECTOR PENDING REAL-HARDWARE VERIFICATION.
+#   ⚠ EXPERIMENTAL — VERIFIED ON ESXi 8.0.3, NOT ON 9.x.
 #   The advanced-settings fetch is REAL-HARDWARE-GATED: it runs one
-#   PropertyCollector pass for `config.option` per host against a live
-#   vCenter/ESXi and has NOT been verified end-to-end here. Until it is, treat
-#   results as NON-AUTHORITATIVE: if a setting is not collected (older ESXi
-#   without the key, a permissions/version gap, or the fetch not yet run on real
-#   hardware) the rule's SQL matches zero rows and the host reports COMPLIANT for
-#   that control. In other words, a green result may be a data gap, not a pass.
+#   PropertyCollector pass for `config.option` per host, so no test in this repo
+#   covers it. It was verified by hand on 2026-08-13 against a standalone ESXi
+#   8.0.3 (build 24280767) — all 12 attributes came back populated. What keeps
+#   the status experimental is that ESXi 9.x, which this baseline actually
+#   targets, and vCenter-managed multi-host inventories have not been run.
+#
+#   Superseded as of v1.10.0: this note used to warn that an uncollected setting
+#   made the rule match zero rows and the host report COMPLIANT — "a green
+#   result may be a data gap, not a pass". Per-node outcomes closed that. A host
+#   missing one of these settings is now recorded as an undetermined per-node
+#   check (coverage.undetermined_node_checks) naming the attribute, not as a
+#   pass. What a coverage mechanism still cannot tell you is whether a collected
+#   value is the RIGHT one, so treat 9.x results as non-authoritative until run.
 #   The `status:` field below is surfaced by list_baselines /
 #   describe_stig_content_sync so a scan self-declares this caveat.
 #
