@@ -12,6 +12,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from vmware_policy import sanitize, set_environment_resolver
 
+from vmware_harden import __version__
 from vmware_harden.mcp import stig as t_stig
 from vmware_harden.mcp import tools as t
 
@@ -190,6 +191,11 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     """Construct and configure the MCP server."""
     t._DB_PATH = Path(os.path.expanduser(str(db_path)))
     server = FastMCP("vmware-harden")
+
+    # FastMCP takes no version argument and leaves the lowlevel server's at
+    # None, which makes `initialize` answer with the MCP SDK's version rather
+    # than ours. Set it so a client can tell which release it is talking to.
+    server._mcp_server.version = __version__
 
     @server.tool(name="list_baselines", annotations=_READ_LOCAL)
     def _list_baselines_impl() -> dict:
