@@ -54,7 +54,7 @@ dev = [
 ]
 
 [project.scripts]
-vmware-harden = "vmware_harden.cli.main:app"
+vmware-harden = "vmware_harden.cli.main:main"
 vmware-harden-mcp = "vmware_harden.mcp_server.server:main"
 
 [build-system]

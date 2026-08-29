@@ -54,5 +54,36 @@ def mcp_cmd() -> None:
     _mcp_main()
 
 
+def main() -> None:
+    """Console-script entry point.
+
+    Exists so this package has one place to turn a domain error into a sentence.
+    The console script used to be ``app`` itself, so an exception from the ops
+    layer reached the terminal as a Rich traceback — including
+    ``CollectorDependencyError``, whose message names the missing package, the
+    install command, and the fact that the snapshot was marked failed so it
+    cannot be mistaken for a clean scan. That text is the useful part, and it
+    was arriving underneath a stack trace.
+
+    Only errors this package raises on purpose are translated. A ``NameError``
+    here is a bug in this codebase, and dressing it up as user-facing advice
+    would hide it — so anything else propagates untouched.
+    """
+    import sys
+
+    from vmware_harden.collectors.base import CollectorDependencyError, CollectorError
+
+    try:
+        app()
+    except KeyboardInterrupt:
+        # A scan can run for minutes. Interrupting one is a decision, not a
+        # crash. 130 is the conventional shell code for SIGINT.
+        print("\nInterrupted.", file=sys.stderr)
+        raise SystemExit(130) from None
+    except (CollectorError, CollectorDependencyError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
     app()
