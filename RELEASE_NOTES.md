@@ -1,3 +1,21 @@
+## v1.10.1 — teaching messages arrived under a stack trace
+
+`vmware-harden scan` against a host missing a collector dependency printed a
+Rich traceback, with the useful part underneath it: which package is missing,
+the command to install it, and the fact that the snapshot was marked failed and
+excluded from reports so it cannot be mistaken for a clean scan.
+
+Nine of the family's fifteen repos wrap their CLI so a domain error prints as
+one line. This one exposed the Typer app directly as its console script, so
+there was nowhere for that to happen. Adds a `main()` wrapper.
+
+Only `CollectorError` and `CollectorDependencyError` are translated — a
+`NameError` is a bug in this codebase and dressing it up as user-facing advice
+would hide it. `KeyboardInterrupt` exits 130 with one line: a scan runs for
+minutes, and interrupting one is a decision, not a crash.
+
+Found by running a real compliance scan against a live vCenter.
+
 ## v1.10.0 (2026-08-13) — 按节点判定：规则跑了，不等于每台主机都被判定了
 
 > **v1.9.0 修的是「没人采集这个属性」。这一版修的是「采集了，但这台主机上是空的」。**
