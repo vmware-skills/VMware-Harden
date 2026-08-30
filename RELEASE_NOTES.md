@@ -1,3 +1,26 @@
+## v1.10.5 — the doctor counted baselines it had never opened
+
+Baselines are read as UTF-8, and the doctor counts the ones that parse. On a
+cp936 host all nine shipped baselines failed to load — including the 等保 2.0
+baseline, the one that exists for that locale — while `doctor` reported "9
+loaded", because it was counting filenames it had never opened.
+
+**The `vmware-policy` floor moves to >=1.11.0.** Policy 1.11.0 stops the engine
+failing open: on a host whose locale is not UTF-8, reading `rules.yaml` raised a
+decode error that was swallowed, and a `freeze-production-writes` rule came back
+ALLOW. No new API is used here, so the floor could have stayed — it is raised
+because leaving it low means a user resolving 1.10.0 keeps the permissive engine
+and the fix never reaches them. One behaviour travels with it: on a host whose
+rules file cannot be read, operations move from all-allowed to all-denied.
+`VMWARE_POLICY_DISABLED=1` is checked above the rules, so the escape hatch does
+not itself depend on them loading.
+
+Also in this release: the suite no longer appends to the operator's real
+`~/.vmware/audit.db`. It held over 30,000 rows dominated by tool names nobody
+had invoked, including 1,400 entries for a destructive operation that never
+happened — an audit trail carrying test fiction cannot answer the question it is
+kept for.
+
 ## v1.10.4 — the schema an agent reads now carries the descriptions
 
 Parameter descriptions reach the JSON schema for the first time. An MCP client
