@@ -72,16 +72,35 @@ def _check_module(
 
 
 def _check_baselines() -> DiagnosticResult:
-    from vmware_harden.baselines.loader import list_builtins
+    """Report the baselines this install can actually parse.
 
-    names = list_builtins()
-    if len(names) < 4:
+    It used to count ``*.yaml`` filenames and call the number "loaded". On a
+    cp936 (GBK) Windows host that printed "9 loaded" while every one of the nine
+    failed to decode and 5 of the 8 MCP tools died — a health report for files
+    the diagnostic had never opened (CLAUDE.md 形态 #4).
+
+    So it loads them. "N loaded" now means N were parsed here, in this process,
+    a moment ago; anything that would not parse is named with its reason instead
+    of being silently counted in.
+    """
+    from vmware_harden.baselines.loader import load_all_baselines
+
+    loaded, failures = load_all_baselines()
+
+    if failures:
         return DiagnosticResult(
             "Built-in baselines",
             "error",
-            f"only {len(names)} found, expected >=4",
+            f"{len(loaded)} of {len(loaded) + len(failures)} loaded; "
+            + "; ".join(failures),
         )
-    return DiagnosticResult("Built-in baselines", "ok", f"{len(names)} loaded")
+    if len(loaded) < 4:
+        return DiagnosticResult(
+            "Built-in baselines",
+            "error",
+            f"only {len(loaded)} found, expected >=4",
+        )
+    return DiagnosticResult("Built-in baselines", "ok", f"{len(loaded)} loaded")
 
 
 def _check_anthropic_key() -> DiagnosticResult:
