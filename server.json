@@ -13,6 +13,15 @@
       "registryType": "pypi",
       "identifier": "vmware-harden",
       "version": "1.10.2",
+      "runtimeHint": "uvx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "subcommand",
+          "value": "mcp",
+          "description": "Starts the stdio MCP server. Without it the console script runs the human CLI and exits."
+        }
+      ],
       "transport": {
         "type": "stdio"
       }
