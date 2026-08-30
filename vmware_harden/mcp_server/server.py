@@ -222,11 +222,8 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         severity: Optional[str] = None, limit: int = 50, offset: int = 0
     ) -> dict:
         """[READ] List compliance violations recorded by the most recent scan
-        snapshot in the local twin DB (~/.vmware-harden/twin.duckdb). severity
-        (optional string): filter to exactly one of 'critical', 'high', 'medium',
-        'low', 'info'; omit to return all severities. limit (optional int, default
-        50): max rows returned; offset (optional int, default 0): rows to skip for
-        paging. Returns an envelope {violations: [...], total, limit, offset,
+        snapshot in the local twin DB (~/.vmware-harden/twin.duckdb).
+        Returns an envelope {violations: [...], total, limit, offset,
         has_more, coverage, note}; each violation is {id, rule_id, node_id,
         severity, baseline_id, evidence}, sorted severity-descending then rule_id.
         `total` is the full matching count (unbounded by limit) so nothing is
@@ -240,7 +237,20 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         rather than assume. `note` states the same in one sentence, or null when
         coverage is complete. Empty envelope (total 0) when no scan exists — run
         scan_target first. Read-only local DB query, no network calls. Pass a
-        row's 'id' to get_remediation for a fix plan."""
+        row's 'id' to get_remediation for a fix plan.
+
+        Args:
+            severity: Return only violations of exactly this severity. One of
+                'critical', 'high', 'medium', 'low', 'info' — lowercase, matched
+                exactly; anything else is refused with a ValueError naming the
+                five. Omit to return every severity (the default).
+            limit: Maximum rows in this page, must be >= 1 (default 50). It
+                bounds the rows serialized, not the 'total' count, so a small
+                limit never hides how much there is.
+            offset: Rows to skip before the page starts, must be >= 0 (default
+                0 = first page). Page by raising it by 'limit' while the
+                envelope's has_more is true.
+        """
         try:
             return t.list_violations(severity, limit=limit, offset=offset)
         except Exception as e:
@@ -249,14 +259,20 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     @server.tool(name="get_remediation", annotations=_READ_LOCAL)
     def _get_remediation_impl(violation_id: str) -> Optional[dict]:
         """[READ] Fetch the persisted LLM-generated remediation Suggestion for one
-        violation. violation_id (required string): the 'id' field of a row
-        returned by list_violations. Returns {summary, execution_plan.steps,
+        violation. Returns {summary, execution_plan.steps,
         impact_prediction (workload impact, maintenance window, rollback plan),
         confidence (0.0-1.0), human_review_required}, or None when no advisor
         suggestion has been generated for that violation yet (generate one via
         the vmware-harden CLI advisor). Read-only lookup in the local twin DB
         (~/.vmware-harden/twin.duckdb); no network calls and nothing is executed
-        — suggestions are advisory only."""
+        — suggestions are advisory only.
+
+        Args:
+            violation_id: The 'id' field of a row returned by list_violations
+                (the violation's own id, not its rule_id or node_id). An id with
+                no stored suggestion returns None rather than an error, so None
+                means "not generated yet", not "not found".
+        """
         try:
             return t.get_remediation(violation_id)
         except Exception as e:
@@ -266,8 +282,7 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     def _list_drift_events_impl(limit: int = 50) -> dict:
         """[READ] List configuration drift events from the most recent scan
         snapshot — fields whose values changed since the prior scan of the same
-        target. limit (optional int, default 50): maximum rows returned, ordered
-        by node_id then field; no offset/cursor. Returns the family list envelope
+        target. Returns the family list envelope
         {items, returned, limit, total, truncated, hint}; each item is {node_id,
         field, old_value, new_value, detected_at}. total is the snapshot's exact
         change-event count, so truncated tells you definitively whether rows were
@@ -275,7 +290,14 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         (total 0) when no snapshot exists or there was no prior snapshot to diff
         against (a target must be scanned at least twice). Read-only query of the
         local twin DB (~/.vmware-harden/twin.duckdb); no network calls. Use for
-        change tracking; use list_violations for compliance failures."""
+        change tracking; use list_violations for compliance failures.
+
+        Args:
+            limit: Maximum rows returned, ordered by node_id then field (default
+                50). There is no offset or cursor here — this tool cannot page,
+                so when the envelope's 'truncated' is true the only way to see
+                the rest is to re-call with a larger limit.
+        """
         try:
             return t.list_drift_events(limit)
         except Exception as e:
@@ -283,16 +305,22 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
 
     @server.tool(name="get_baseline_rules", annotations=_READ_LOCAL)
     def _get_baseline_rules_impl(baseline_id: str) -> dict:
-        """[READ] Return every rule in one compliance baseline. baseline_id
-        (required string): a baseline id exactly as returned by list_baselines,
-        e.g. 'cis-vmware-esxi-8.0-subset'; unknown ids raise a not-found error.
+        """[READ] Return every rule in one compliance baseline.
         Returns the family list envelope {items, returned, limit, total,
         truncated, hint}; each item is {id, title, severity, category}, where
         severity is one of 'critical', 'high', 'medium', 'low', 'info'. The whole
         baseline is returned, so truncated is always false and total is the exact
         rule count. Read-only — parses local baseline YAML only, no database or
         network access. Use after list_baselines to preview what scan_target will
-        check; use list_violations for actual scan findings."""
+        check; use list_violations for actual scan findings.
+
+        Args:
+            baseline_id: A baseline id exactly as returned by list_baselines —
+                e.g. 'cis-vmware-esxi-8.0-subset', 'vsphere-stig-v9-subset' —
+                not the baseline's display name. Unknown ids raise a not-found
+                error; re-run list_baselines for the valid set, which includes
+                any YAML you dropped in ~/.vmware-harden/baselines/.
+        """
         try:
             return t.get_baseline_rules(baseline_id)
         except Exception as e:
@@ -306,10 +334,7 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         target: str, baseline: str = "cis-vmware-esxi-8.0-subset"
     ) -> dict:
         """[READ] Run a compliance scan of a vCenter target against a baseline and
-        persist results locally. target (required string): a vCenter target name
-        as configured in vmware-aiops. baseline (optional string, default
-        'cis-vmware-esxi-8.0-subset'): a baseline id from list_baselines. Makes
-        read-only vCenter API calls (inventory collection only — never modifies
+        persist results locally. Makes read-only vCenter API calls (inventory collection only — never modifies
         VMware infrastructure) and writes a new snapshot, violations, and drift
         events (vs the prior scan of the same target) to the local twin DB
         (~/.vmware-harden/twin.duckdb). Returns summary counts {snapshot_id,
@@ -319,7 +344,19 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         executed and count as undetermined, never as passing, so violations=0 is
         not by itself evidence of compliance. When coverage.complete is false,
         report how many rules were evaluated out of how many instead of calling
-        the estate compliant. May take minutes on large inventories."""
+        the estate compliant. May take minutes on large inventories.
+
+        Args:
+            target: A vCenter target name as configured in vmware-aiops
+                (~/.vmware-aiops/config.yaml) — this skill has no target config
+                of its own and borrows aiops' connection manager. Use the
+                config's target key, not a hostname or IP.
+            baseline: A baseline id from list_baselines (default
+                'cis-vmware-esxi-8.0-subset'). Which baseline you pick decides
+                which rules can reach a verdict at all: a baseline whose rules
+                need data no collector gathers reports them as undetermined,
+                which is why coverage must be read alongside the violation count.
+        """
         try:
             return t.scan_target(target, baseline)
         except Exception as e:
@@ -328,9 +365,8 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     @server.tool(name="list_stig_controls", annotations=_READ_LOCAL)
     def _list_stig_controls_impl(limit: int = 50, offset: int = 0) -> dict:
         """[READ] List the built-in vSphere 9 / VCF 9 STIG-aligned host baseline's
-        controls (baseline id 'vsphere-stig-v9-subset'). limit (optional int,
-        default 50): max rows returned; offset (optional int, default 0): rows to
-        skip for paging. Returns the family list envelope {items, returned, limit,
+        controls (baseline id 'vsphere-stig-v9-subset').
+        Returns the family list envelope {items, returned, limit,
         total, truncated, hint}; each item is {id, title, severity (one of
         critical/high/medium/low/info), category, advanced_setting} where
         advanced_setting names the ESXi advanced setting the control governs
@@ -339,7 +375,15 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
         parses local baseline YAML only, no database, network, or compliance API
         (VCF Operations ACC/SPM has none). Use scan_target with baseline
         'vsphere-stig-v9-subset' to evaluate these controls against a target; use
-        describe_stig_content_sync for how this catalog is kept in sync."""
+        describe_stig_content_sync for how this catalog is kept in sync.
+
+        Args:
+            limit: Maximum rows in this page, must be >= 1 (default 50). The
+                whole catalog is loaded and paged locally, so 'total' stays
+                exact whatever you pass.
+            offset: Rows to skip before the page starts, must be >= 0 (default
+                0 = first page). Raise it by 'limit' while 'truncated' is true.
+        """
         try:
             return t_stig.list_stig_controls(limit=limit, offset=offset)
         except Exception as e:
