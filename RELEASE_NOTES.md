@@ -1,3 +1,53 @@
+## v1.10.3 — a compliance report that certified four machines it could not talk to
+
+Found against a real VCF 9.1 estate where four of eight ESXi hosts were
+`notResponding`.
+
+**The STIG/BSI scan reported 8 HIGH violations that were never observed.**
+vCenter answers `config.option`, `config.service` and `config.product` for a
+host it has lost contact with, out of its own cache, with no error and no
+marker — so the collector wrote last-known values into `nodes.attrs`, the
+baseline SQL read them as measurements, and the same host appeared in both the
+violations list and the missing-data list at once. A compliance report's whole
+claim is that it looked.
+
+The engine already knew the right answer — a node whose attributes are absent is
+a gap, not a pass — and it never fired, because the attributes were not absent,
+they were stale. Unreachable hosts now keep only their identity and their
+connection state. That alone moves the phantom rather than removing it
+(`syslog_remote_host IS NULL` fires on a host with no data at all), so such a
+node is marked unmeasured and the runner refuses findings against it — unless
+every attribute the rule reads is one the record still carries. "This host is
+not responding" is a real finding about an unmeasured host; "this host has no
+remote syslog" is not. Twelve violations became six, all on the reachable host,
+which has the identical configuration and is still flagged.
+
+**`scan_target` wrote six lines of progress to stdout**, which under MCP stdio
+is the exclusive JSON-RPC channel — protocol frames were being corrupted in a
+real session. Progress now goes to a caller-supplied sink: the CLI passes its
+echo, the MCP path passes nothing, and the *default is silence*, because
+forgetting on a terminal loses text while forgetting on the MCP surface breaks
+the protocol. The guard captures file descriptor 1 around a real dispatch of
+every tool, so a C-level write counts too.
+
+**`doctor` checked none of the things it was offered as the remedy for.** Seven
+messages point at it, several reached by a scan that failed on connectivity,
+credentials or a wrong target name — and it checked no target, no connectivity
+and no authentication, then printed "All checks passed". It now lists the
+configured targets and logs into every one of them, with `--target` to check
+just one.
+
+**The collector install instruction did not work when followed.** The error said
+`uv tool install vmware-aiops`, which creates a separate environment harden
+cannot import from — so following it failed identically. Every remedy now says
+`uv tool install "vmware-harden[collectors]"` and explains why, verified in a
+sandboxed tool directory. The commands live in one module so the regression ties
+each *printed* remedy to the extras in the built metadata.
+
+Also: two lab-marked integration tests carried stale assertions (a singular
+collector label, and a JSON report that has been an object since v1.9.0), both
+reproduced at unmodified HEAD against a live vCenter before being rewritten.
+
 ## v1.10.2 — NTP, SSH and firewall are collected now, so their rules are judged
 
 A real compliance scan reported "16 of 20 rules could not be evaluated", each
