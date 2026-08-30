@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
-from vmware_policy import sanitize, set_environment_resolver
+from vmware_policy import describe_tool_parameters, sanitize, set_environment_resolver
 
 from vmware_harden import __version__
 from vmware_harden.mcp import stig as t_stig
@@ -408,10 +408,11 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
                 "error": _safe_error(e, "describe_stig_content_sync"),
                 "hint": _HINT_STIG,
             }
+    # The docstrings above are the schema — see describe_tool_parameters.
+    describe_tool_parameters(server._tool_manager._tools)
+
 
     return server
-
-
 def main() -> None:
     """Entry point for `vmware-harden-mcp` (stdio transport)."""
     server = build_server()
