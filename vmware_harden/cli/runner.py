@@ -236,6 +236,14 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                 # but "check that node's reachability and the account's
                 # privileges", so conflating the two lists would send the reader
                 # after the wrong thing.
+                # Ahead of the per-rule list, because it explains a whole run
+                # of its lines at once: eight rules "missing data" on one host
+                # is one fact, not eight, and the reader who cannot see that
+                # goes looking for eight collectors.
+                if cov.unmeasured_nodes:
+                    typer.echo("Never measured (no rule judged them, either way):")
+                    for node_id, why in cov.unmeasured_nodes:
+                        typer.echo(f"  {node_id:24s} {why}")
                 if cov.undetermined_node_checks:
                     typer.echo("Not judged on these nodes (data missing):")
                     for rule_id, node_id, missing in cov.undetermined_node_checks:

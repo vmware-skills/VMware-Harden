@@ -8,7 +8,12 @@ import uuid
 
 from vmware_harden.baselines.model import Baseline, QueryCheck
 from vmware_harden.checks.evaluability import classify
-from vmware_harden.checks.nodescope import load_snapshot_nodes, scope_for_rule
+from vmware_harden.checks.nodescope import (
+    load_snapshot_nodes,
+    missing_attributes,
+    scope_for_rule,
+    unmeasured_node_ids,
+)
 from vmware_harden.checks.query import execute_query_check
 from vmware_harden.store.twin import Twin
 
@@ -56,6 +61,20 @@ class CheckRunner:
         # Node attributes for this snapshot, keyed by node type. Loaded once and
         # shared by every rule's per-node gap analysis below.
         nodes_by_type = load_snapshot_nodes(self.twin, snapshot_id)
+        # Nodes whose collector said the record is not a measurement (an ESXi
+        # host vCenter cannot reach, whose configuration it answers from cache).
+        # A rule must not raise a finding against one of them, in either
+        # direction: the stale values are not observations, and their absence is
+        # not a configuration. Both mistakes were live at once against a VCF 9.1
+        # estate on 2026-08-30 — 8 HIGH violations off cached settings, plus a
+        # "no remote syslog" violation for a host whose syslog setting simply
+        # was not there to read.
+        unmeasured = unmeasured_node_ids(nodes_by_type)
+        attrs_by_node = {
+            node_id: attrs
+            for nodes in nodes_by_type.values()
+            for node_id, attrs in nodes
+        }
         insert_rows: list[list] = []
         outcome_rows: list[list] = []
         gap_rows: list[list] = []
@@ -81,6 +100,16 @@ class CheckRunner:
                     if node_id is None:
                         continue
                     if node_id not in snapshot_node_ids and node_id in real_node_ids:
+                        continue
+                    # An unmeasured node can still be judged — but only by a
+                    # rule every one of whose attributes it actually carries.
+                    # "This host is not responding" is a real finding about a
+                    # host nobody measured; "this host has no remote syslog" is
+                    # not. The distinction is which values the rule read, so it
+                    # is drawn from those rather than from the node type.
+                    if node_id in unmeasured and missing_attributes(
+                        attrs_by_node.get(node_id, {}), set(verdict.attributes)
+                    ):
                         continue
                     # Carry rule metadata in evidence so consumers (web
                     # dashboard category chart) don't need a rule lookup.

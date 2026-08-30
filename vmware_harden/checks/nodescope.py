@@ -40,6 +40,31 @@ from dataclasses import dataclass
 #: matches nothing, and without this module that host quietly passes.
 UNREADABLE_SENTINEL = "N/A"
 
+#: Attribute a collector sets to ``False`` to say: *nothing in this record was
+#: read off the thing itself.* An ESXi host vCenter has lost contact with is the
+#: case it was added for — vCenter keeps answering every property out of cache,
+#: so the record arrives full and current-looking, and only the collector knows
+#: it is a memory of a machine rather than a measurement.
+#:
+#: Absent means measured, so every existing collector and every snapshot taken
+#: before this flag existed keeps its present meaning.
+MEASURED_ATTR = "measured"
+
+
+def is_unmeasured(attrs: dict) -> bool:
+    """Did the collector declare this node's record to be unmeasured?"""
+    return attrs.get(MEASURED_ATTR) is False
+
+
+def unmeasured_node_ids(nodes_by_type: dict) -> frozenset[str]:
+    """Every node in a snapshot whose collector declared it unmeasured."""
+    return frozenset(
+        node_id
+        for nodes in nodes_by_type.values()
+        for node_id, attrs in nodes
+        if is_unmeasured(attrs)
+    )
+
 
 @dataclass(frozen=True)
 class NodeScope:

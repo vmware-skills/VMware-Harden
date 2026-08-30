@@ -191,6 +191,14 @@ _ENTRIES: tuple[Attribute, ...] = (
     _a("host", _HOST, "esxi_build", "ESXi build 号（字符串，比较前须 CAST）",
        "HostSystem.config.product.build",
        probe_values=("20000000", "23305545", "23305546", "24853646")),
+    # Declared so a baseline can ask the one question an unreachable host can
+    # still answer. Every other attribute on such a host is dropped by the
+    # collector (its values are vCenter's cache, not the machine), and the check
+    # runner refuses to raise findings against it — but a rule reading only this
+    # key is judging what the record does carry, and still fires.
+    _a("host", _HOST, "connection_state", "vCenter 与主机的连接状态",
+       "HostSystem.runtime.connectionState",
+       probe_values=("connected", "disconnected", "notResponding")),
 
     # --- host: PENDING — access control --------------------------------------
     # value_domain omitted on purpose: the collector is unwritten, so whether it

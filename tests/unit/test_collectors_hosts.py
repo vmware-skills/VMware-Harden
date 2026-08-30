@@ -169,8 +169,15 @@ def test_shape_host_merges_advanced_settings():
     STIG SQL can read them; without the merge every STIG rule matches 0 rows."""
     from vmware_harden.collectors.hosts import _shape_host
 
+    # ``connection_state`` is now load-bearing and every ``list_hosts`` record
+    # carries it: without it the record is treated as coming from a host vCenter
+    # cannot reach, whose cached settings are dropped rather than merged.
     rec = _shape_host(
-        {"name": "esx01.lab", "esxi_version": "9.0.0"},
+        {
+            "name": "esx01.lab",
+            "connection_state": "connected",
+            "esxi_version": "9.0.0",
+        },
         {"dcui_access": "root", "account_lock_failures": 3},
     )
     assert rec["id"] == "esx01.lab"
@@ -178,4 +185,7 @@ def test_shape_host_merges_advanced_settings():
     assert rec["account_lock_failures"] == 3
     assert rec["esxi_version"] == "9.0.0"  # base record preserved
     # Backwards-compatible single-arg call still works (advanced optional).
-    assert _shape_host({"name": "esx02.lab"})["id"] == "esx02.lab"
+    assert (
+        _shape_host({"name": "esx02.lab", "connection_state": "connected"})["id"]
+        == "esx02.lab"
+    )

@@ -24,7 +24,15 @@ class TestReshapeStampsIdAndName:
     full sibling payload the baselines read."""
 
     def test_host_id_is_its_name(self):
-        rec = _shape_host({"name": "esx01.lab", "esxi_version": "8.0.3"})
+        rec = _shape_host(
+            {
+                "name": "esx01.lab",
+                # Load-bearing: a record without it is read as a host vCenter
+                # cannot reach, and its configuration is dropped as stale.
+                "connection_state": "connected",
+                "esxi_version": "8.0.3",
+            }
+        )
         assert rec["id"] == "esx01.lab"
         assert rec["name"] == "esx01.lab"
         assert rec["esxi_version"] == "8.0.3"  # full record preserved

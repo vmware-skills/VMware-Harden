@@ -60,6 +60,11 @@ class Coverage:
     #: False for snapshots scanned before per-node outcomes were recorded — a
     #: 1.9.0 database, where no gaps found means none were ever looked for.
     node_tracked: bool = False
+    #: ``(node_id, why)`` for nodes whose collector said nothing in the record
+    #: was read off the thing itself. They account for a run of gap lines that
+    #: otherwise look like eight unrelated problems, so they are reported once,
+    #: ahead of those lines, with the single reason behind all of them.
+    unmeasured_nodes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     @property
     def total(self) -> int:
@@ -133,6 +138,13 @@ class Coverage:
                 f"node of the type they check, so they judged nothing: "
                 f"{', '.join(self.rules_without_targets)}."
             )
+        if self.unmeasured_nodes:
+            parts.append(
+                f"{len(self.unmeasured_nodes)} node(s) supplied no measurement "
+                f"at all — nothing about them was read off the thing itself, so "
+                f"no rule judged them in either direction: "
+                f"{', '.join(f'{n} ({why})' for n, why in self.unmeasured_nodes)}."
+            )
         if self.node_checks_undetermined:
             parts.append(
                 f"{self.node_checks_undetermined} of {self.node_checks_total} "
@@ -168,6 +180,9 @@ class Coverage:
                 self.undetermined_node_checks_truncated
             ),
             "rules_without_targets": list(self.rules_without_targets),
+            "unmeasured_nodes": [
+                {"node": node_id, "why": why} for node_id, why in self.unmeasured_nodes
+            ],
         }
 
 
@@ -260,6 +275,19 @@ def _node_coverage(twin, snapshot_id: str, *, rule_limit: int) -> dict:
             "WHERE snapshot_id = ?",
             [snapshot_id],
         ).fetchone()
+        # Nodes the collector declared unmeasured. Read from `nodes.attrs`, the
+        # same copy the rules query, so the report cannot disagree with what was
+        # judged. `connection_state` is the reason for the case this was built
+        # for; a collector marking a node unmeasured for some other reason still
+        # gets listed, just without one.
+        unmeasured = twin.conn.execute(
+            "SELECT n.id, json_extract_string(n.attrs, '$.connection_state') "
+            "FROM nodes n JOIN node_state ns ON ns.node_id = n.id "
+            "WHERE ns.snapshot_id = ? "
+            "  AND json_extract_string(n.attrs, '$.measured') = 'false' "
+            "ORDER BY n.id",
+            [snapshot_id],
+        ).fetchall()
     except (duckdb.CatalogException, duckdb.BinderException):
         # CatalogException: the gap table is absent. BinderException: the table
         # is there but `rule_outcome` predates the node columns. Both mean the
@@ -285,4 +313,8 @@ def _node_coverage(twin, snapshot_id: str, *, rule_limit: int) -> dict:
         "undetermined_node_checks_truncated": truncated,
         "nodes_affected": int(affected[0]) if affected else 0,
         "rules_without_targets": tuple(r[0] for r in vacuous),
+        "unmeasured_nodes": tuple(
+            (u[0], f"connection_state={u[1]}" if u[1] else "reason not recorded")
+            for u in unmeasured
+        ),
     }

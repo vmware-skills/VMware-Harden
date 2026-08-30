@@ -1,4 +1,5 @@
 """Host inventory collector. Pulls ESXi host data via vmware-aiops."""
+from vmware_harden.checks.nodescope import MEASURED_ATTR
 from vmware_harden.collectors.base import Collector
 
 #: ESXi advanced-setting name -> the snake_case ``nodes.attrs`` key the STIG
@@ -208,6 +209,18 @@ def _fetch_hosts(target: str) -> list[dict]:
     return [_shape_host(host, advanced.get(host.get("name", ""), {})) for host in hosts]
 
 
+#: ``runtime.connectionState`` value for a host vCenter is actually talking to.
+#: Anything else — ``notResponding``, ``disconnected``, or the ``N/A`` that
+#: ``list_hosts`` writes when it could not read the state at all — means the
+#: configuration vCenter reports is its own last-known copy.
+_CONNECTED = "connected"
+
+#: The only keys that survive an unreachable host: who it is, and the fact that
+#: it could not be reached. Both are answered by vCenter about itself, not read
+#: off the machine, so both are current.
+_LIVE_HOST_KEYS: frozenset[str] = frozenset({"name", "connection_state"})
+
+
 def _shape_host(host: dict, advanced: dict | None = None) -> dict:
     """Stamp a host record with a stable ``id`` and merge advanced settings.
 
@@ -215,7 +228,33 @@ def _shape_host(host: dict, advanced: dict | None = None) -> dict:
     doubles as the stable identity the Twin namespaces per target. The full
     sibling record (esxi_version, cpu, memory, …) is preserved for the baselines,
     with the STIG advanced settings (``advanced``) merged in when collected.
+
+    **Except when vCenter cannot reach the host.** It still answers every
+    property for such a host — ``config.option``, ``config.service``,
+    ``config.product`` — out of cache, with no error and no marker, so the
+    record arrives looking exactly like a measurement. Against a VCF 9.1 estate
+    with four ``notResponding`` hosts this produced 8 HIGH violations that were
+    never observed (2026-08-30). Those keys are dropped here, which leaves the
+    rules reading nothing on that host and
+    :mod:`vmware_harden.checks.nodescope` recording it as unjudged — the answer
+    the engine already knew how to give, and could not reach because stale data
+    is not missing data.
+
+    Dropped rather than kept-and-flagged so that no rule can read them: a marker
+    every baseline would have to remember to consult is a marker some baseline
+    will not.
     """
+    if str(host.get("connection_state", "")) != _CONNECTED:
+        return {
+            **{k: v for k, v in host.items() if k in _LIVE_HOST_KEYS},
+            "id": host.get("name", ""),
+            # Says so out loud, because the absence left behind is itself
+            # readable as a configuration: a rule flagging "no remote syslog
+            # server" fires on a host that simply had no syslog setting to
+            # read. The engine drops findings against a node marked this way
+            # (:mod:`vmware_harden.checks.nodescope`).
+            MEASURED_ATTR: False,
+        }
     return {**host, **(advanced or {}), "id": host.get("name", "")}
 
 
