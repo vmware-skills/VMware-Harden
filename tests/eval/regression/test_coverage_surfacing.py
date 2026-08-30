@@ -81,7 +81,7 @@ def test_scan_output_reports_partial_coverage(tmp_path: Path, capsys):
         run_scan(target="prod", baseline=_CIS, db=db)
     out = capsys.readouterr().out
     assert "Found 0 violations" in out
-    assert "16 of 20 rules could not be evaluated" in out
+    assert "12 of 20 rules could not be evaluated" in out
 
 
 @pytest.mark.integration
@@ -96,7 +96,8 @@ def test_text_report_never_says_bare_no_violations_on_partial_coverage(
     assert "No violations." not in out
     assert "No violations among the checks that could be made." in out
     assert "Not evaluated:" in out
-    assert "no collector writes host.ntp_enabled" in out
+    # NTP is collected now; a still-uncollected fact stands in for it.
+    assert "no collector writes host." in out
 
 
 @pytest.mark.integration
@@ -108,11 +109,12 @@ def test_json_report_is_an_object_carrying_coverage(tmp_path: Path, capsys):
 
     assert isinstance(payload, dict)
     assert payload["violations"] == []
-    assert payload["coverage"]["evaluated"] == 4
-    assert payload["coverage"]["undetermined"] == 16
+    assert payload["coverage"]["evaluated"] == 8
+    assert payload["coverage"]["undetermined"] == 12
     assert payload["coverage"]["complete"] is False
     blocked = {r["rule"] for r in payload["coverage"]["undetermined_rules"]}
-    assert "cis-esxi-2.1.1" in blocked
+    # 2.1.1 used to be here; NTP is collected now, so it is judged instead.
+    assert "cis-esxi-2.1.1" not in blocked
 
 
 # --- MCP --------------------------------------------------------------------
@@ -131,7 +133,7 @@ def test_mcp_surfaces_coverage_next_to_the_violation_count(tmp_path: Path, capsy
         srv._DB_PATH = old
 
     assert listed["violations"] == []
-    assert listed["coverage"]["undetermined"] == 16
+    assert listed["coverage"]["undetermined"] == 12
     assert listed["coverage"]["complete"] is False
     assert "not compliant" in listed["note"]
 
@@ -263,7 +265,7 @@ def test_scan_target_also_carries_coverage(tmp_path: Path, capsys):
     capsys.readouterr()
 
     assert out["violations"] == 0
-    assert out["coverage"]["undetermined"] == 16
+    assert out["coverage"]["undetermined"] == 12
     assert out["coverage"]["complete"] is False
     assert "not compliant" in out["note"]
 

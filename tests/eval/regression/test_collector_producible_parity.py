@@ -126,9 +126,13 @@ def test_host_declared_output_matches_its_two_sources():
     from a second ``OptionManager`` pass in this repo. Both halves are checked,
     so neither can grow a name nothing writes.
     """
+    import types
+
     from vmware_harden.collectors.hosts import (
         _BASE_HOST_ATTRS,
+        _SERVICE_TIME_ATTRS,
         STIG_ADVANCED_SETTING_ATTRS,
+        _service_and_time_attrs,
     )
 
     source = _FAMILY / "VMware-AIops" / "vmware_aiops/ops/inventory.py"
@@ -137,7 +141,32 @@ def test_host_declared_output_matches_its_two_sources():
 
     assert _entry_keys(source, "list_hosts") == set(_BASE_HOST_ATTRS)
     assert PRODUCIBLE_HOST_ATTRS == (
-        set(_BASE_HOST_ATTRS) | set(STIG_ADVANCED_SETTING_ATTRS.values()) | {"id"}
+        set(_BASE_HOST_ATTRS)
+        | set(STIG_ADVANCED_SETTING_ATTRS.values())
+        | set(_SERVICE_TIME_ATTRS)
+        | {"id"}
+    )
+
+    # The third source is checked by RUNNING it, not by trusting its declaration.
+    # A key listed in _SERVICE_TIME_ATTRS that the reducer never emits would be a
+    # name nothing writes — exactly what this file exists to prevent — and a
+    # declaration compared only against itself could not catch it.
+    everything = _service_and_time_attrs({
+        "config.service": types.SimpleNamespace(service=[
+            types.SimpleNamespace(key=k, running=True, policy="on")
+            for k in ("ntpd", "TSM-SSH")
+        ]),
+        "config.dateTimeInfo": types.SimpleNamespace(
+            ntpConfig=types.SimpleNamespace(server=["10.0.0.1"])
+        ),
+        "config.firewall": types.SimpleNamespace(
+            defaultPolicy=types.SimpleNamespace(incomingBlocked=True)
+        ),
+    })
+    assert set(everything) == set(_SERVICE_TIME_ATTRS), (
+        f"declared vs emitted disagree: declared-only "
+        f"{set(_SERVICE_TIME_ATTRS) - set(everything)}, emitted-only "
+        f"{set(everything) - set(_SERVICE_TIME_ATTRS)}"
     )
 
 

@@ -173,8 +173,11 @@ def probe_results(tmp_path_factory) -> dict:
 def test_the_probe_covers_every_runnable_rule(probe_results):
     """Guard the guard: a probe that silently covers nothing still reports green."""
     assert probe_results, "no evaluable rules were probed"
-    assert len(probe_results) == 29, (
-        f"expected 29 evaluable builtin rules, probed {len(probe_results)} — "
+    # 29 -> 38 when the service/time/firewall collector landed: six host
+    # attributes became collectable and nine rules across the builtin baselines
+    # went from unevaluatable to judged.
+    assert len(probe_results) == 38, (
+        f"expected 38 evaluable builtin rules, probed {len(probe_results)} — "
         "update this count deliberately when a collector batch lands"
     )
 

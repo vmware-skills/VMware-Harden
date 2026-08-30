@@ -83,16 +83,33 @@ def test_scan_then_report_text(tmp_path: Path, capsys):
     # Specific rules fire
     assert "cis-esxi-2.2.1" in out  # build
     # Compliant host doesn't show as violator (text mode lists violators only)
-    assert "host-good" not in out
+    # Was `"host-good" not in out`. It now appears — under **Not evaluated**,
+    # not among the violators. The fixture sets `ntp_service_policy`, while
+    # cis-esxi-2.1.2 reads `ntp_service_policy_on`; with a collector now writing
+    # that key the rule is live, and a host missing it is reported as unmeasured
+    # rather than skipped. Asserting on the whole report conflated "is not a
+    # violator" with "is not mentioned", so the section is now named.
+    violators, _, _rest = out.partition("Not evaluated:")
+    assert "host-good" not in violators, (
+        f"a compliant host was listed as a violator:\n{violators}"
+    )
 
-    # The report states its own coverage, and 2.1.1 (NTP) is listed as not
-    # evaluated rather than passing: it reads $.ntp_enabled, which no collector
-    # writes. The fixture sets it by hand, but a real scan never would.
+    # This block used to assert the opposite, and its premise has been removed
+    # rather than worked around: 2.1.1 was unevaluatable because "no collector
+    # writes host.ntp_enabled", and now one does. So the rule is live, and
+    # host-bad — which really has NTP off — fails it.
+    #
+    # The coverage report itself stays: it is still true that some rules cannot
+    # be evaluated, and the value of stating so does not depend on which ones.
     violations_section, _, unevaluated_section = out.partition("Not evaluated:")
     assert "rules could not be evaluated" in out
-    assert "cis-esxi-2.1.1" not in violations_section
-    assert "cis-esxi-2.1.1" in unevaluated_section
-    assert "no collector writes host.ntp_enabled" in unevaluated_section
+    assert "cis-esxi-2.1.1" in violations_section, (
+        "NTP is collected now, so this rule must be judged rather than skipped"
+    )
+    assert "host-bad" in violations_section
+    assert "no collector writes host.ntp_enabled" not in out, (
+        "the report still claims nothing writes ntp_enabled"
+    )
 
 
 @pytest.mark.integration
@@ -110,15 +127,24 @@ def test_scan_then_report_json(tmp_path: Path, capsys):
     # An object, not a bare list: a script reading `[]` cannot tell "nothing was
     # wrong" from "almost nothing was checked".
     assert isinstance(payload, dict)
-    assert payload["coverage"]["evaluated"] == 4
-    assert payload["coverage"]["undetermined"] == 16
+    # 4 -> 8 when the service/time/firewall collector landed: six attributes
+    # moved from PENDING to ACTIVE and took their rules with them. The numbers
+    # are pinned rather than computed so that a future change to coverage is a
+    # deliberate edit here, not a silent drift — in either direction.
+    assert payload["coverage"]["evaluated"] == 8
+    assert payload["coverage"]["undetermined"] == 12
+    assert (
+        payload["coverage"]["evaluated"] + payload["coverage"]["undetermined"] == 20
+    ), "coverage must account for every rule in the baseline"
     assert payload["coverage"]["complete"] is False
 
     violations = payload["violations"]
     assert len(violations) >= 1  # at least the build violation for host-bad
     rule_ids = {entry["rule"] for entry in violations}
     assert "cis-esxi-2.2.1" in rule_ids
-    assert "cis-esxi-2.1.1" not in rule_ids  # undetermined, see text-mode test
+    assert "cis-esxi-2.1.1" in rule_ids, (
+        "NTP is collected now — host-bad has it off and must be reported"
+    )
     # Each entry has the canonical fields
     for entry in violations:
         assert "rule" in entry

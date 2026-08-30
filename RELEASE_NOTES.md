@@ -1,3 +1,34 @@
+## v1.10.2 — NTP, SSH and firewall are collected now, so their rules are judged
+
+A real compliance scan reported "16 of 20 rules could not be evaluated", each
+naming the fact it wanted: `no collector writes host.ntp_enabled`,
+`host.ssh_running`, `host.firewall_enabled`. The baselines already declared where
+each comes from — `baselines/vocabulary.py` names
+`HostServiceSystem.serviceInfo.service[ntpd].running` and its siblings — so what
+was missing was the collector, not the design.
+
+Six attributes now come from the same batched PropertyCollector pass that
+already fetched the STIG advanced settings, so this costs no extra round trip:
+`ntp_enabled`, `ntp_service_policy_on`, `ntp_servers`, `ssh_running`,
+`ssh_enabled`, `firewall_enabled`.
+
+Nine rules across five frameworks moved from "cannot be evaluated" to judged —
+CIS ESXi 8.0, BSI IT-Grundschutz, 等保 2.0 level 3, and PCI-DSS 4.0. On the CIS
+subset that is 16 unevaluated down to 12; across all builtin baselines, 29
+evaluable rules up to 38.
+
+**A fact that could not be read is still omitted, never defaulted.** ESXi reports
+the services it has, and a build without ntpd simply omits it; writing
+`ntp_enabled: false` there would report a violation for something nobody
+measured, which is the defect v1.9.0 was released to remove. `ntp_servers` is
+the one place empty means something — time sync configured with nothing to sync
+to is a finding — so `[]` is recorded and only an unreadable `dateTimeInfo` is
+omitted.
+
+Verified against a live vCenter 8.0.3: all six facts populated from the real
+host (NTP running against 192.168.60.74, SSH stopped, firewall on), and the four
+newly-live CIS rules judged against that data rather than against nothing.
+
 ## v1.10.1 — teaching messages arrived under a stack trace
 
 `vmware-harden scan` against a host missing a collector dependency printed a

@@ -211,10 +211,12 @@ _ENTRIES: tuple[Attribute, ...] = (
        "HostLocalAccountManager（待核实）"),
 
     # --- host: PENDING — remote access ---------------------------------------
-    _p("host", "ssh_enabled", "SSH 服务是否设为随主机启动",
-       f"{_SVC}[TSM-SSH].policy"),
-    _p("host", "ssh_running", "SSH 服务当前是否运行",
-       f"{_SVC}[TSM-SSH].running"),
+    _a("host", _HOST, "ssh_enabled", "SSH 服务是否设为随主机启动",
+       f"{_SVC}[TSM-SSH].policy",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "ssh_running", "SSH 服务当前是否运行",
+       f"{_SVC}[TSM-SSH].running",
+       value_domain=("true", "false")),
     _p("host", "root_ssh_enabled", "是否允许 root 直接 SSH 登录",
        "sshd_config PermitRootLogin（无公开 API，待核实采集方式）"),
     _p("host", "root_ssh_key_auth", "root 是否配置了 SSH 公钥认证",
@@ -224,10 +226,12 @@ _ENTRIES: tuple[Attribute, ...] = (
        "见 root_ssh_key_auth"),
 
     # --- host: PENDING — time, logging, audit --------------------------------
-    _p("host", "ntp_enabled", "NTP 服务是否运行", f"{_SVC}[ntpd].running"),
-    _p("host", "ntp_service_policy_on", "NTP 服务是否随主机启动",
-       f"{_SVC}[ntpd].policy"),
-    _p("host", "ntp_servers", "已配置的 NTP 服务器列表",
+    _a("host", _HOST, "ntp_enabled", "NTP 服务是否运行", f"{_SVC}[ntpd].running",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "ntp_service_policy_on", "NTP 服务是否随主机启动",
+       f"{_SVC}[ntpd].policy",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "ntp_servers", "已配置的 NTP 服务器列表",
        "HostSystem.config.dateTimeInfo.ntpConfig.server"),
     _p("host", "persistent_logs", "日志是否落到持久存储",
        f"{_ADV} Syslog.global.logDir（判非 scratch）"),
@@ -282,8 +286,9 @@ _ENTRIES: tuple[Attribute, ...] = (
     _p("host", "mac_address_changes", "标准 vSwitch MAC 变更", f"{_VSW}.macChanges"),
     _p("host", "standard_vswitch_count", "标准 vSwitch 数量",
        "len(HostSystem.config.network.vswitch)"),
-    _p("host", "firewall_enabled", "ESXi 防火墙默认策略是否启用",
-       "HostSystem.config.firewall.defaultPolicy"),
+    _a("host", _HOST, "firewall_enabled", "ESXi 防火墙默认策略是否启用",
+       "HostSystem.config.firewall.defaultPolicy（incomingBlocked）",
+       value_domain=("true", "false")),
 
     # --- host: PENDING — not a vSphere fact ----------------------------------
     _p("host", "console_keyboard", "DCUI 键盘布局",

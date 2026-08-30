@@ -196,7 +196,10 @@ def test_builtin_cis_scan_reports_most_rules_undetermined(tmp_path: Path):
         "SELECT outcome, COUNT(*) FROM rule_outcome WHERE snapshot_id = ? GROUP BY outcome",
         [snap_id],
     ).fetchall())
-    assert counts == {"evaluated": 4, "undetermined": 16}
+    # 4/16 before the service/time/firewall collector landed. Six attributes
+    # became collectable and took four more rules with them.
+    assert counts == {"evaluated": 8, "undetermined": 12}
+    assert sum(counts.values()) == 20, "every rule must land in exactly one bucket"
     twin.close()
 
 
@@ -245,8 +248,33 @@ def test_a_second_baseline_on_one_snapshot_adds_its_own_rules(tmp_path: Path):
     twin.close()
 
 
+#: An attribute no collector writes, taken from the vocabulary rather than
+#: written down here.
+#:
+#: This file used ``ssh_enabled`` for that role until a collector started
+#: writing it, at which point eleven tests failed for a reason unrelated to what
+#: they check — the example had become collectable, not the machinery broken.
+#: Deriving it means the next attribute to be promoted cannot do the same.
+def _an_uncollected_host_attr() -> str:
+    from vmware_harden.baselines import vocabulary as _v
+    from vmware_harden.baselines.vocabulary import Status
+
+    for attr in _v._ENTRIES:
+        if attr.node_type == "host" and attr.status is Status.PENDING:
+            return attr.name
+    raise AssertionError(
+        "every host attribute is collected — this file needs a different way "
+        "to construct an unevaluable rule"
+    )
+
+
+UNCOLLECTED = _an_uncollected_host_attr()
+
+
 @pytest.mark.unit
-@pytest.mark.parametrize("path", ["ssh_enabled", "$.ssh_enabled", '$."ssh_enabled"'])
+@pytest.mark.parametrize(
+    "path", [UNCOLLECTED, f"$.{UNCOLLECTED}", f'$."{UNCOLLECTED}"']
+)
 def test_every_path_spelling_duckdb_accepts_is_checked(path):
     """DuckDB reads a bare key exactly as it reads ``$.key``.
 
@@ -261,7 +289,7 @@ def test_every_path_spelling_duckdb_accepts_is_checked(path):
         f"AND json_extract_string(attrs, '{path}') = 'true'",
     ))
     assert not verdict.evaluable
-    assert "ssh_enabled" in verdict.reason
+    assert UNCOLLECTED in verdict.reason
 
 
 @pytest.mark.unit
@@ -270,7 +298,7 @@ def test_table_qualified_attrs_read_is_checked():
     verdict = classify(_rule(
         "qualified",
         "SELECT n.id, n.name FROM nodes n WHERE n.type = 'host' "
-        "AND json_extract_string(n.attrs, '$.ssh_enabled') = 'true'",
+        "AND json_extract_string(n.attrs, '$.{}'.format(UNCOLLECTED)) = 'true'",
     ))
     assert not verdict.evaluable
 
@@ -303,26 +331,26 @@ def test_unparseable_attrs_path_is_undetermined_not_ignored():
 #: These are the forms that inversion has to keep catching.
 _BYPASS_SQL = {
     "space-after-function-name":
-        "json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+        "json_extract_string (attrs, '$.{}'.format(UNCOLLECTED)) = 'true'",
     "inline-comment-between-args":
-        "json_extract_string(attrs/*c*/, '$.ssh_enabled') = 'true'",
+        "json_extract_string(attrs/*c*/, '$.{}'.format(UNCOLLECTED)) = 'true'",
     "line-comment":
         "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL --x\n"
-        "  AND json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+        "  AND json_extract_string (attrs, '$.{}'.format(UNCOLLECTED)) = 'true'",
     "quoted-identifier":
-        "json_extract_string(\"attrs\", '$.ssh_enabled') = 'true'",
+        f"json_extract_string(\"attrs\", '$.{UNCOLLECTED}') = 'true'",
     "cast-between-column-and-comma":
-        "json_extract_string(attrs::JSON, '$.ssh_enabled') = 'true'",
+        f"json_extract_string(attrs::JSON, '$.{UNCOLLECTED}') = 'true'",
     "concatenated-path":
-        "json_extract_string(attrs, '$.' || 'ssh_enabled') = 'true'",
+        f"json_extract_string(attrs, '$.' || '{UNCOLLECTED}') = 'true'",
     "arrow-operator":
-        "attrs->>'$.ssh_enabled' = 'true'",
+        f"attrs->>'$.{UNCOLLECTED}' = 'true'",
     "bare-column-predicate":
         "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL "
         "AND attrs LIKE '%ssh%'",
     "decoy-active-attribute-plus-smuggled-read":
         "json_extract_string(attrs, '$.mob_enabled') IS NOT NULL "
-        "AND json_extract_string (attrs, '$.ssh_enabled') = 'true'",
+        "AND json_extract_string (attrs, '$.{}'.format(UNCOLLECTED)) = 'true'",
 }
 
 
@@ -387,10 +415,10 @@ def test_a_comment_neither_hides_a_read_nor_blocks_a_valid_rule(comment):
     hidden = classify(_rule(
         "commented-smuggle",
         f"SELECT id, name FROM nodes WHERE type = 'host' {comment}"
-        f"AND json_extract_string(attrs, '$.ssh_enabled') = 'true'",
+        f"AND json_extract_string(attrs, '$.{UNCOLLECTED}') = 'true'",
     ))
     assert not hidden.evaluable
-    assert "ssh_enabled" in hidden.reason
+    assert UNCOLLECTED in hidden.reason
 
 
 @pytest.mark.unit
@@ -417,7 +445,7 @@ def test_a_subquery_cannot_smuggle_a_second_scope():
 def test_a_computed_path_is_refused_not_silently_dropped():
     """The extraction is recognised; the attribute it names is not.
 
-    ``json_extract_string(attrs, '$.' || 'ssh_enabled')`` is a read the parser
+    ``json_extract_string(attrs, '$.' || '<attr>')`` is a read the parser
     sees — so the column reference is accounted for and the stray check is
     satisfied — while the path is assembled at runtime. Dropping it would leave
     the rule citing nothing, which the caller reads as safe to run.
@@ -425,7 +453,7 @@ def test_a_computed_path_is_refused_not_silently_dropped():
     verdict = classify(_rule(
         "computed-path",
         "SELECT id, name FROM nodes WHERE type = 'host' "
-        "AND json_extract_string(attrs, '$.' || 'ssh_enabled') = 'true'",
+        f"AND json_extract_string(attrs, '$.' || '{UNCOLLECTED}') = 'true'",
     ))
     assert not verdict.evaluable
     assert "computed path" in verdict.reason

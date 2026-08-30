@@ -22,6 +22,19 @@ STIG_ADVANCED_SETTING_ATTRS: dict[str, str] = {
     "Syslog.global.logHost": "syslog_remote_host",
 }
 
+#: Keys ``_service_and_time_attrs`` can populate. Declared beside the advanced
+#: settings so the collector's full output surface is readable in one place.
+_SERVICE_TIME_ATTRS: frozenset[str] = frozenset(
+    {
+        "ntp_enabled",
+        "ntp_service_policy_on",
+        "ntp_servers",
+        "ssh_running",
+        "ssh_enabled",
+        "firewall_enabled",
+    }
+)
+
 #: Base inventory keys ``vmware_aiops.ops.inventory.list_hosts`` always returns.
 _BASE_HOST_ATTRS: frozenset[str] = frozenset(
     {
@@ -39,10 +52,15 @@ _BASE_HOST_ATTRS: frozenset[str] = frozenset(
 )
 
 #: Every ``nodes.attrs`` key the host collector can populate = base inventory +
-#: the STIG advanced settings it fetches + the stamped ``id``. The parity
-#: regression asserts no builtin baseline SQL reads a host key outside this set.
+#: the STIG advanced settings + the service/time/firewall facts + the stamped
+#: ``id``. The parity regression asserts no builtin baseline SQL reads a host key
+#: outside this set — and, read the other way, this set is what the "could not be
+#: evaluated" report subtracts from, so growing it is how that report shrinks.
 PRODUCIBLE_HOST_ATTRS: frozenset[str] = (
-    _BASE_HOST_ATTRS | frozenset(STIG_ADVANCED_SETTING_ATTRS.values()) | {"id"}
+    _BASE_HOST_ATTRS
+    | frozenset(STIG_ADVANCED_SETTING_ATTRS.values())
+    | _SERVICE_TIME_ATTRS
+    | {"id"}
 )
 
 
@@ -68,6 +86,66 @@ def _advanced_settings_to_attrs(options: object) -> dict:
     return attrs
 
 
+#: ESXi service key -> the ``nodes.attrs`` keys it answers. `running` and
+#: `policy` are separate facts: a service can be running with policy "off"
+#: (started by hand, gone after reboot), which several baselines fail on.
+_SERVICE_ATTRS: dict[str, tuple[str, str]] = {
+    "ntpd": ("ntp_enabled", "ntp_service_policy_on"),
+    "TSM-SSH": ("ssh_running", "ssh_enabled"),
+}
+
+#: ESXi service policy values that mean "starts on its own". `automatic` starts
+#: the service with its firewall port, so it is not "off".
+_POLICY_ON = frozenset({"on", "automatic"})
+
+
+def _service_and_time_attrs(props: dict) -> dict:
+    """Reduce one host's service/time/firewall properties to baseline attrs.
+
+    Answers six keys the baselines already declare in ``baselines/vocabulary.py``
+    and that nothing wrote: a real scan reported "no collector writes
+    host.ntp_enabled" and five siblings, so the design existed and the collector
+    did not.
+
+    **A fact that could not be read is omitted, never defaulted.** ESXi reports
+    the services it has; a build without ntpd simply omits it, and writing
+    ``ntp_enabled: false`` there would report a compliance failure for something
+    nobody measured — the exact defect v1.9.0 was released to remove. An absent
+    key leaves its rules "not evaluated", which is the honest answer.
+
+    ``ntp_servers`` is the one place empty means something: time sync configured
+    with nothing to sync to is a finding, so ``[]`` is recorded and only an
+    unreadable ``dateTimeInfo`` is omitted.
+    """
+    attrs: dict = {}
+
+    service_info = props.get("config.service")
+    for svc in getattr(service_info, "service", None) or []:
+        names = _SERVICE_ATTRS.get(getattr(svc, "key", None))
+        if names is None:
+            continue
+        running_key, policy_key = names
+        running = getattr(svc, "running", None)
+        if running is not None:
+            attrs[running_key] = bool(running)
+        policy = getattr(svc, "policy", None)
+        if policy is not None:
+            attrs[policy_key] = str(policy).lower() in _POLICY_ON
+
+    dt = props.get("config.dateTimeInfo")
+    servers = getattr(getattr(dt, "ntpConfig", None), "server", None)
+    if servers is not None:
+        attrs["ntp_servers"] = list(servers)
+
+    firewall = props.get("config.firewall")
+    default_policy = getattr(firewall, "defaultPolicy", None)
+    blocked = getattr(default_policy, "incomingBlocked", None)
+    if blocked is not None:
+        attrs["firewall_enabled"] = bool(blocked)
+
+    return attrs
+
+
 def _fetch_advanced_settings(si: object) -> dict[str, dict]:
     """Fetch each host's STIG-relevant advanced settings, keyed by host name.
 
@@ -88,10 +166,23 @@ def _fetch_advanced_settings(si: object) -> dict[str, dict]:
     # dependency stays vmware-aiops — no direct pyVmomi distribution to declare.
     from vmware_aiops.ops.inventory import _collect, vim
 
+    # One pass for everything: the advanced settings AND the service/time/
+    # firewall properties. Two passes would double the round trips for facts
+    # that arrive from the same managed object (踩坑 #31).
+    paths = [
+        "name",
+        "config.option",
+        "config.service",
+        "config.dateTimeInfo",
+        "config.firewall",
+    ]
     settings: dict[str, dict] = {}
-    for _obj, props in _collect(si, [vim.HostSystem], ["name", "config.option"]):
+    for _obj, props in _collect(si, [vim.HostSystem], paths):
         name = props.get("name", "")
-        settings[name] = _advanced_settings_to_attrs(props.get("config.option"))
+        settings[name] = {
+            **_advanced_settings_to_attrs(props.get("config.option")),
+            **_service_and_time_attrs(props),
+        }
     return settings
 
 
