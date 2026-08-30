@@ -91,7 +91,115 @@ def _check_audit_db_writable() -> DiagnosticResult:
     return DiagnosticResult("Audit DB dir", "error", f"{path} not writable")
 
 
-def run_diagnostics() -> list[DiagnosticResult]:
+def _check_scan_targets(target: str | None = None) -> list[DiagnosticResult]:
+    """Can this skill actually reach and log into the vCenter(s) it scans?
+
+    Seven places in this repo offer ``vmware-harden doctor`` as the remedy, and
+    several of them are reached by a scan that failed on connectivity,
+    credentials or a wrong target name — none of which the doctor could see. It
+    printed "All checks passed" and the user went round again (2026-08-30).
+
+    The indirection is what made it easy to miss: harden owns no credentials. It
+    borrows vmware-aiops' ConnectionManager and its ``~/.vmware-aiops/
+    config.yaml``, so *which* vCenter a scan will reach, and whether it will get
+    in, are questions about a config file this repo never opens.
+
+    Every configured target is tried, not just the default. A user with five
+    targets and three wrong passwords was told everything passed, because the
+    check that existed elsewhere in the family only ever authenticated the
+    first one.
+
+    Args:
+        target: Check only this target. Given after a failure on one vCenter,
+            it avoids spending a connection attempt — and a timeout — on every
+            other one.
+    """
+    try:
+        from vmware_aiops.config import load_config
+        from vmware_aiops.connection import ConnectionManager
+    except ImportError as exc:
+        # A legitimate state: the collectors are an optional extra. But "could
+        # not check" must not be rendered the same as "checked, fine" — that is
+        # the whole defect, arriving one level up (形态 #1).
+        return [
+            DiagnosticResult(
+                "Scan targets",
+                "warn",
+                f"could not check — vmware-aiops is not importable ({exc}); "
+                f"scanning needs it. Install with `uv tool install vmware-aiops`, "
+                f"then re-run doctor.",
+            )
+        ]
+
+    try:
+        config = load_config()
+    except Exception as exc:
+        return [
+            DiagnosticResult(
+                "Scan targets",
+                "error",
+                f"vmware-aiops config unreadable: {exc}. Scans read their "
+                f"targets and credentials from it — run `vmware-aiops init`.",
+            )
+        ]
+
+    names = [t.name for t in getattr(config, "targets", ()) or ()]
+    if not names:
+        return [
+            DiagnosticResult(
+                "Scan targets",
+                "warn",
+                "no target is configured in the vmware-aiops config, so "
+                "`vmware-harden scan --target <name>` has nothing to reach. "
+                "Run `vmware-aiops init`.",
+            )
+        ]
+    if target is not None and target not in names:
+        return [
+            DiagnosticResult(
+                "Scan targets",
+                "error",
+                f"no target named {target!r}. Configured: {', '.join(names)}.",
+            )
+        ]
+
+    scope = [target] if target is not None else names
+    results = [
+        DiagnosticResult(
+            "Scan targets", "ok", f"{len(names)} configured: {', '.join(names)}"
+        )
+    ]
+    mgr = ConnectionManager.from_config(config)
+    try:
+        for name in scope:
+            try:
+                si = mgr.connect(name)
+                version = si.content.about.version
+                results.append(
+                    DiagnosticResult(f"Scan target ({name})", "ok", f"reachable, v{version}")
+                )
+            except Exception as exc:
+                # Reported per target rather than aborting: one bad credential
+                # must not hide the state of the other four.
+                results.append(
+                    DiagnosticResult(
+                        f"Scan target ({name})",
+                        "error",
+                        f"{exc} — check the host, and the password in "
+                        f"~/.vmware-aiops/.env.",
+                    )
+                )
+    finally:
+        # Best effort: a doctor that raises while tidying up reports nothing at
+        # all, which is worse than a leaked session in a one-shot command.
+        try:
+            mgr.disconnect_all()
+        except Exception:  # noqa: BLE001 - see above
+            pass
+    return results
+
+
+def run_diagnostics(target: str | None = None) -> list[DiagnosticResult]:
     return [
         _check_python_version(),
         _check_twin_db(),
@@ -125,4 +233,5 @@ def run_diagnostics() -> list[DiagnosticResult]:
             absent_hint="optional — `vmware-harden apply --pilot real` requires it",
         ),
         _check_audit_db_writable(),
+        *_check_scan_targets(target),
     ]

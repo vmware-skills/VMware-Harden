@@ -86,8 +86,10 @@ _HINT_BASELINE_RULES = (
     "baseline id."
 )
 _HINT_SCAN = (
-    "Verify the target name and vCenter credentials with `vmware-harden "
-    "doctor`, and copy a valid baseline id from list_baselines."
+    "Verify the target name and vCenter credentials with `vmware-harden doctor "
+    "--target <name>` — it lists the configured targets and logs into each one, "
+    "so a wrong name or a bad password shows up there. Copy a valid baseline id "
+    "from list_baselines."
 )
 _HINT_STIG = (
     "STIG controls are parsed from the local vsphere-stig-v9-subset baseline "

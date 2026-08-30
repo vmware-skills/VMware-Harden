@@ -24,7 +24,11 @@ app.add_typer(drift_cmd.app, name="drift", help="Show drift between snapshots.")
 app.add_typer(web_cmd.app, name="web", help="Start the web dashboard.")
 app.add_typer(advise_cmd.app, name="advise", help="Generate LLM remediation suggestions.")
 app.add_typer(apply_cmd.app, name="apply", help="Submit a Suggestion for execution via vmware-pilot.")
-app.add_typer(doctor_cmd.app, name="doctor", help="Run environment diagnostics.")
+app.add_typer(
+    doctor_cmd.app,
+    name="doctor",
+    help="Diagnose the environment and log into every configured scan target.",
+)
 
 
 @app.command("mcp")

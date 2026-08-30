@@ -16,9 +16,20 @@ _COLOR = {
 
 
 @app.callback(invoke_without_command=True)
-def doctor() -> None:
-    """Run environment diagnostics."""
-    results = run_diagnostics()
+def doctor(
+    target: str = typer.Option(
+        None,
+        "--target",
+        help=(
+            "Check only this scan target. Without it every configured target is "
+            "connected to and authenticated, which is what you want before a "
+            "first scan; name one when you already know which vCenter failed "
+            "and do not want to wait on timeouts from the others."
+        ),
+    ),
+) -> None:
+    """Run environment diagnostics, including reachability of every scan target."""
+    results = run_diagnostics(target=target)
     errors = sum(1 for r in results if r.status == "error")
     warns = sum(1 for r in results if r.status == "warn")
 
