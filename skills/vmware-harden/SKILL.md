@@ -43,9 +43,11 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 ## Quick Install
 
 ```bash
-uv tool install vmware-harden
+uv tool install "vmware-harden[collectors]"
 vmware-harden baseline list
 ```
+
+The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden` is enough to report on an existing twin DB.
 
 For first-time use, ensure a vmware-aiops target is configured (harden uses aiops collectors) and optionally set `ANTHROPIC_API_KEY` for live remediation advice.
 
@@ -86,7 +88,7 @@ Use vmware-harden when the user needs to:
 
 ### 1. First-time scan with 等保 2.0 三级
 
-1. Install: `uv tool install vmware-harden`
+1. Install: `uv tool install "vmware-harden[collectors]"` (the extra carries the inventory collectors `scan` reads through)
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`

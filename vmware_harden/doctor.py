@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from vmware_harden.install import (
+    COLLECTORS_EXTRA,
+    collector_remedy,
+    install_extra,
+    reinstall_remedy,
+    remediation_remedy,
+)
+
 Status = Literal["ok", "warn", "error", "info"]
 
 
@@ -43,16 +51,24 @@ def _check_twin_db() -> DiagnosticResult:
 def _check_module(
     modname: str,
     label: str,
+    absent_hint: str,
     *,
     severity: Status = "warn",
-    absent_hint: str = "",
 ) -> DiagnosticResult:
+    """Report whether ``modname`` imports, and how to get it if it does not.
+
+    ``absent_hint`` is required rather than defaulted. The default used to be
+    ``uv tool install <the missing package>``, which is the instruction that
+    cannot work: it builds a second tool environment harden does not import
+    from. There is no generic correct answer here — how a package gets into
+    harden's environment depends on which extra carries it — so the caller has
+    to say, and cannot silently get a wrong one.
+    """
     try:
         importlib.import_module(modname)
         return DiagnosticResult(label, "ok", f"{modname} available")
     except ImportError:
-        hint = absent_hint or f"install with `uv tool install {modname.replace('_', '-')}`"
-        return DiagnosticResult(label, severity, hint)
+        return DiagnosticResult(label, severity, absent_hint)
 
 
 def _check_baselines() -> DiagnosticResult:
@@ -126,7 +142,7 @@ def _check_scan_targets(target: str | None = None) -> list[DiagnosticResult]:
                 "Scan targets",
                 "warn",
                 f"could not check — vmware-aiops is not importable ({exc}); "
-                f"scanning needs it. Install with `uv tool install vmware-aiops`, "
+                f"scanning needs it. Run: {install_extra(COLLECTORS_EXTRA)}, "
                 f"then re-run doctor.",
             )
         ]
@@ -207,30 +223,30 @@ def run_diagnostics(target: str | None = None) -> list[DiagnosticResult]:
         _check_module(
             "vmware_aiops",
             "vmware-aiops",
-            absent_hint="install: `uv tool install vmware-aiops` (host/VM collectors)",
+            collector_remedy("host and VM collectors"),
         ),
         _check_module(
             "vmware_storage",
             "vmware-storage",
-            absent_hint="install: `uv tool install vmware-storage` (datastore collector)",
+            collector_remedy("datastore collector"),
         ),
         _check_module(
             "vmware_nsx_security",
             "vmware-nsx-security",
-            absent_hint="install: `uv tool install vmware-nsx-security` (DFW collector)",
+            collector_remedy("DFW collector"),
         ),
         _check_module(
             "vmware_policy",
             "vmware-policy",
+            reinstall_remedy("the audit decorator every tool call goes through"),
             severity="error",
-            absent_hint="install: `uv tool install vmware-policy` (REQUIRED — audit decorator)",
         ),
         _check_anthropic_key(),
         _check_module(
             "vmware_pilot",
             "vmware-pilot",
+            remediation_remedy(),
             severity="info",
-            absent_hint="optional — `vmware-harden apply --pilot real` requires it",
         ),
         _check_audit_db_writable(),
         *_check_scan_targets(target),

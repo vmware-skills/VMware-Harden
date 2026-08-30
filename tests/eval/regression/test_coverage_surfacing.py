@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
+import typer
 
 from vmware_harden.checks.coverage import Coverage, coverage_for
 from vmware_harden.cli.runner import run_report, run_scan
@@ -78,7 +79,11 @@ def test_scan_output_reports_partial_coverage(tmp_path: Path, capsys):
 
     db = str(tmp_path / "t.duckdb")
     with patch("vmware_harden.collectors.hosts._fetch_hosts", return_value=[_CLEAN_HOST]):
-        run_scan(target="prod", baseline=_CIS, db=db)
+        # The sink is what `vmware-harden scan` passes. run_scan is silent
+        # without one, because its other caller is the MCP tool and stdout
+        # there is the JSON-RPC channel — this test is about the text a CLI
+        # user reads, so it asks for that text explicitly.
+        run_scan(target="prod", baseline=_CIS, db=db, progress=typer.echo)
     out = capsys.readouterr().out
     assert "Found 0 violations" in out
     assert "12 of 20 rules could not be evaluated" in out

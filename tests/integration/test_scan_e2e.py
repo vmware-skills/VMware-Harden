@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 
 from vmware_harden.cli.runner import run_report, run_scan
 
@@ -247,7 +248,15 @@ def test_scan_dispatches_multiple_collectors_for_dengbao(tmp_path: Path, capsys)
          patch("vmware_harden.collectors.datastores._fetch_datastores",
                return_value=one_ds), \
          patch("vmware_harden.collectors.dfw._fetch_dfw", return_value=one_dfw):
-        run_scan(target="lab", baseline="dengbao-2.0-level3-vmware", db=db)
+        # progress= is what the CLI passes; run_scan says nothing without it
+        # (the MCP caller's stdout is the JSON-RPC channel), and this test is
+        # about the per-collector lines a CLI user sees.
+        run_scan(
+            target="lab",
+            baseline="dengbao-2.0-level3-vmware",
+            db=db,
+            progress=typer.echo,
+        )
 
     out = capsys.readouterr().out
     # All 4 collector summaries should appear

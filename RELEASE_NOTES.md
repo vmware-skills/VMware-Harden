@@ -29,6 +29,33 @@ Verified against a live vCenter 8.0.3: all six facts populated from the real
 host (NTP running against 192.168.60.74, SSH stopped, firewall on), and the four
 newly-live CIS rules judged against that data rather than against nothing.
 
+### Also in v1.10.2 — three findings from the MCP-side hardware round
+
+- **`scan_target` no longer writes to stdout.** Under the MCP stdio transport
+  stdout is the JSON-RPC channel, and the scan's six progress lines were landing
+  inside protocol frames — reproduced as frame corruption in a real session.
+  Progress now goes to a caller-supplied sink: `vmware-harden scan` passes one
+  and prints exactly what it always printed, the MCP tool passes none and is
+  silent. All eight tools are swept by a test that captures file descriptor 1.
+- **Install instructions name `vmware-harden[collectors]`.** Every message that
+  told a user to run `uv tool install vmware-aiops` was an instruction that
+  fails when followed: `uv tool install` isolates each tool's environment, so
+  the collector landed where harden cannot import it from. The doctor, the
+  scan's `CollectorDependencyError`, the pilot client, both READMEs, SKILL.md
+  and the setup guide now name the extra that installs into harden's own
+  environment.
+- **`vmware-harden doctor` stops calling it a pass while a collector is
+  missing.** "All checks passed (5 warning(s))" is now "No errors. 5 warning(s)
+  above — each names something harden cannot do until it is resolved." Exit code
+  is unchanged (0 unless there is an error).
+
+The two `lab`-marked regressions, which only run against a real vCenter, were
+themselves stale and failed on the estate: the scan progress line says
+"Collected 1 host entities" (singular) where the test looked for `hosts`, and
+the JSON report has been `{"violations": …, "coverage": …}` since v1.9.0 where
+the test still required a bare list. Both now assert what the code does, and
+pass against a live vCenter 8.0.3 and a standalone ESXi.
+
 ## v1.10.1 — teaching messages arrived under a stack trace
 
 `vmware-harden scan` against a host missing a collector dependency printed a

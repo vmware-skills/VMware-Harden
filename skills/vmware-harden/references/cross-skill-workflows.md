@@ -64,7 +64,7 @@ for the actual write.
 
 | Failure | Where it surfaces | Recovery |
 |---------|-------------------|----------|
-| sibling skill not installed | `harden apply` returns PilotSubmissionError | install with `uv tool install vmware-<sibling>` |
+| sibling skill not installed | `harden apply` returns PilotSubmissionError | `uv tool install "vmware-harden[remediation]"` — installing the sibling on its own lands in a separate tool env harden cannot import from |
 | sibling skill API drift | pilot dispatch fails mid-workflow | pilot's rollback runs; harden marks remediation as failed |
 | baseline references unknown mcp_tool | harden advise produces Suggestion that pilot can't dispatch | edit baseline YAML's `remediation.mcp_tool` to a real tool name |
 | harden Twin DB stale vs vCenter | re-run `harden scan --target ...` to refresh |

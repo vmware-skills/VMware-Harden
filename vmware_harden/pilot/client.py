@@ -14,6 +14,7 @@ from typing import Any, Callable, Protocol
 from uuid import uuid4
 
 from vmware_harden.baselines.model import Suggestion
+from vmware_harden.install import REMEDIATION_EXTRA, install_extra
 
 
 class PilotSubmissionError(Exception):
@@ -88,10 +89,12 @@ class RealPilotClient:
         except ImportError as e:
             raise PilotSubmissionError(
                 "vmware-harden delegates every write to vmware-pilot, which is "
-                "not importable. Install it with `uv tool install vmware-pilot` "
-                "and retry, or pass MockPilotClient for offline testing. If "
-                "pilot is already installed, the import names a symbol a newer "
-                "version moved — upgrade with `uv tool upgrade vmware-pilot`. "
+                f"not importable. Run: {install_extra(REMEDIATION_EXTRA)} and "
+                "retry, or pass MockPilotClient for offline testing. Installing "
+                "vmware-pilot as a tool of its own does not help — it lands in a "
+                "separate environment harden cannot import from. If pilot is "
+                "already in harden's environment, the import names a symbol a "
+                "newer version moved: `uv tool upgrade vmware-harden`. "
                 f"Import error: {e}"
             ) from e
 

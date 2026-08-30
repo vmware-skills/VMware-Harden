@@ -19,7 +19,14 @@ Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0
 ## Quickstart
 
 ```bash
-uv tool install vmware-harden
+# The collectors extra is what makes `scan` work: harden reads inventory
+# through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool
+# install` gives each tool its own environment — installing them separately
+# puts them where harden cannot import them from.
+uv tool install "vmware-harden[collectors]"
+
+# Reporting on an existing twin DB needs no collectors:
+#   uv tool install vmware-harden
 
 # List built-in baselines
 vmware-harden baseline list

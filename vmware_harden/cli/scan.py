@@ -22,4 +22,6 @@ def run(
     """Scan estate against baseline."""
     from vmware_harden.cli.runner import run_scan
 
-    run_scan(target=target, baseline=baseline, db=db)
+    # The progress sink is passed here and nowhere else: this is the one caller
+    # whose stdout is a terminal rather than the MCP JSON-RPC channel.
+    run_scan(target=target, baseline=baseline, db=db, progress=typer.echo)

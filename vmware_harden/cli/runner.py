@@ -1,6 +1,7 @@
 """End-to-end scan + report orchestration."""
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import typer
@@ -14,6 +15,7 @@ from vmware_harden.collectors.datastores import DatastoreCollector
 from vmware_harden.collectors.dfw import DFWCollector
 from vmware_harden.collectors.hosts import HostCollector
 from vmware_harden.collectors.vms import VMCollector
+from vmware_harden.install import COLLECTORS_EXTRA, ISOLATION_NOTE, install_extra
 from vmware_harden.store.twin import Twin
 
 
@@ -27,6 +29,37 @@ _COLLECTOR_MAP: dict[str, type[Collector]] = {
     "dfw_rule": DFWCollector,
     "dfw_section": DFWCollector,  # same collector handles both
 }
+
+
+#: Where a scan's progress lines go. ``run_scan`` is shared by two callers with
+#: opposite requirements: `vmware-harden scan` wants the lines on stdout, and
+#: the ``scan_target`` MCP tool must not put a byte there — under the stdio
+#: transport stdout is the JSON-RPC channel, and a progress line lands inside a
+#: protocol frame (observed corrupting a real session, 2026-08-30).
+#:
+#: A sink resolves that without either caller compromising: the CLI passes
+#: ``typer.echo``, the MCP path passes nothing. The two alternatives were
+#: weighed and rejected:
+#:
+#: * Move the lines to stderr. Legal under the transport, but it changes the
+#:   CLI's output channel for every existing user and script, to fix a problem
+#:   the CLI does not have.
+#: * Wrap the MCP tool in ``contextlib.redirect_stdout``. That rebinds
+#:   ``sys.stdout`` process-wide, not per call. FastMCP runs sync tools in a
+#:   worker thread while the event loop writes JSON-RPC responses to the real
+#:   stdout, so a concurrent response would be redirected away mid-run — a
+#:   guard that loses frames instead of corrupting them.
+ProgressSink = Callable[[str], None]
+
+
+def _silent(message: str) -> None:
+    """Default sink: say nothing.
+
+    Silent rather than ``typer.echo`` on purpose. The dangerous direction is a
+    caller that forgets, and a caller that forgets on the MCP surface breaks
+    the protocol, while one that forgets on a terminal merely loses progress
+    text. Default to the failure nobody has to debug.
+    """
 
 
 def _resolve_db_path(db: str) -> Path:
@@ -52,24 +85,40 @@ def _required_collectors(baseline: Baseline) -> list[type[Collector]]:
     return result
 
 
-def run_scan(target: str, baseline: str, db: str) -> str:
+def run_scan(
+    target: str,
+    baseline: str,
+    db: str,
+    progress: ProgressSink | None = None,
+) -> str:
     """Scan target vCenter against the named baseline, persist to Twin.
 
     Returns the snapshot id. On any failure the snapshot is marked
     status='failed' (so it never becomes the "latest" snapshot for reports)
     and the error is re-raised.
+
+    Args:
+        progress: Called with each progress line. Omit it and the scan runs
+            silently — the only correct behaviour for a caller whose stdout is
+            a protocol channel. `vmware-harden scan` passes ``typer.echo``.
+            See :data:`ProgressSink`.
+
+    Note the one line this still writes without asking: the failure notice
+    below goes to **stderr**, which the MCP stdio transport reserves for
+    exactly that and never parses. Only stdout is off limits.
     """
+    say = progress or _silent
     twin = _open_twin(db)
     try:
         snap_id = twin.start_snapshot(target)
-        typer.echo(f"Snapshot {snap_id} started against {target}")
+        say(f"Snapshot {snap_id} started against {target}")
 
         try:
             b = load_builtin(baseline)
             for collector_cls in _required_collectors(b):
                 n = collector_cls(twin).collect(snap_id, target)
                 label = collector_cls.__name__.replace("Collector", "").lower()
-                typer.echo(f"  Collected {n} {label} entities")
+                say(f"  Collected {n} {label} entities")
 
             violations = CheckRunner(twin).run_baseline(snap_id, b)
 
@@ -84,7 +133,7 @@ def run_scan(target: str, baseline: str, db: str) -> str:
                 from vmware_harden.drift.diff import diff_snapshots
                 events = diff_snapshots(twin, prior_row[0], snap_id, persist=True)
                 if events:
-                    typer.echo(f"  Detected {len(events)} drift events from prior scan")
+                    say(f"  Detected {len(events)} drift events from prior scan")
 
             twin.finish_snapshot(snap_id)
         except ModuleNotFoundError as e:
@@ -95,12 +144,16 @@ def run_scan(target: str, baseline: str, db: str) -> str:
             # allowlist, so raising one here reduced the whole instruction to
             # "RuntimeError: operation failed." on the scan_target surface.
             raise CollectorDependencyError(
-                f"{pkg} not installed — install it with `uv tool install {pkg}` "
-                f"(collector dependency for baseline {baseline!r}). "
-                f"Snapshot {snap_id} was marked 'failed' and is excluded from "
-                f"reports. After installing, re-run `vmware-harden scan "
-                f"--target {target}`; run `vmware-harden doctor` to see which "
-                "collector dependencies are present."
+                # Order and length are both load-bearing: the MCP surface caps
+                # this at 500 characters and truncates silently, and two of the
+                # substrings (target, baseline id) are the caller's. Remedy
+                # first, expendable evidence last, and short enough that a long
+                # vCenter FQDN cannot push the remedy out.
+                f"{pkg} not installed — run: {install_extra(COLLECTORS_EXTRA)}, "
+                f"then re-run `vmware-harden scan --target {target}`. "
+                f"{ISOLATION_NOTE} "
+                f"Baseline {baseline!r} needs that collector. Snapshot "
+                f"{snap_id} was marked 'failed' and is excluded from reports."
             ) from e
         except Exception as e:
             twin.finish_snapshot(snap_id, status="failed")
@@ -111,14 +164,14 @@ def run_scan(target: str, baseline: str, db: str) -> str:
             )
             raise
 
-        typer.echo(f"Found {len(violations)} violations against {b.id}")
+        say(f"Found {len(violations)} violations against {b.id}")
         # A violation count on its own reads as a verdict. Say in the same
         # breath how much of the baseline actually ran, or "0 violations"
         # against a mostly-unevaluated baseline reads as "compliant".
         cov = coverage_for(twin, snap_id)
         if not cov.complete:
-            typer.echo(f"  {cov.summary_line()}")
-            typer.echo(
+            say(f"  {cov.summary_line()}")
+            say(
                 "  Run `vmware-harden report` to see which rules and nodes, and why."
             )
         return snap_id
@@ -131,6 +184,14 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
 
     At most `limit` rows are printed (default 500); a truncation note tells the
     user the true total so a huge estate can't silently flood stdout/JSON.
+
+    **Writes to stdout, so no MCP tool may call this.** It is a CLI renderer,
+    reached only from ``cli/report.py``; the agent-facing equivalent is
+    ``mcp.tools.list_violations``, which returns the same rows as data. If a
+    tool ever does need this, give it a sink the way ``run_scan`` has one —
+    stdout is the JSON-RPC channel under the stdio transport, and
+    ``tests/eval/regression/test_mcp_tools_write_nothing_to_stdout.py`` will
+    fail the moment a registered tool writes there.
     """
     from vmware_harden.store.schema import SEVERITY_RANK_SQL
 

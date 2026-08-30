@@ -262,14 +262,14 @@ Source of truth: `vmware_harden/doctor.py::run_diagnostics`.
   ✓ Twin DB                         /Users/me/.vmware-harden/twin.duckdb
   ✓ Built-in baselines              6 loaded
   ✓ vmware-aiops                    vmware_aiops available
-  ⚠ vmware-storage                  install: `uv tool install vmware-storage` (datastore collector)
-  ⚠ vmware-nsx-security             install: `uv tool install vmware-nsx-security` (DFW collector)
+  ⚠ vmware-storage                  not importable — run: uv tool install "vmware-harden[collectors]" (datastore collector). Installing it as a tool of its own puts it in a separate environment vmware-harden cannot import from.
+  ⚠ vmware-nsx-security             not importable — run: uv tool install "vmware-harden[collectors]" (DFW collector). Installing it as a tool of its own puts it in a separate environment vmware-harden cannot import from.
   ✓ vmware-policy                   vmware_policy available
   ⚠ ANTHROPIC_API_KEY               unset — Advisor will use MockProvider
-  i vmware-pilot                    optional — `vmware-harden apply --pilot real` requires it
+  i vmware-pilot                    optional — `vmware-harden apply --pilot real` needs it: uv tool install "vmware-harden[remediation]"
   ✓ Audit DB dir                    /Users/me/.vmware
 
-  All checks passed (3 warning(s))
+  No errors. 3 warning(s) above — each names something harden cannot do until it is resolved.
 ```
 
 ### Exit codes

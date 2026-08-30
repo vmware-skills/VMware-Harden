@@ -48,8 +48,20 @@ def doctor(
             bold=True,
         )
         raise typer.Exit(code=1)
-    typer.secho(
-        f"  All checks passed ({warns} warning(s))",
-        fg=typer.colors.GREEN,
-        bold=True,
-    )
+    if warns:
+        # "All checks passed (2 warning(s))" contradicts itself in seven words,
+        # and the summary is the line a hurried reader takes away. A user whose
+        # collectors were missing was told it passed, then watched every scan
+        # fail on the thing the ⚠ lines named (2026-08-30).
+        #
+        # Exit code stays 0: a warning is a state this command reports, not a
+        # failure of the command, and scripts that gate on the exit code are
+        # asking about errors.
+        typer.secho(
+            f"  No errors. {warns} warning(s) above — each names something "
+            "harden cannot do until it is resolved.",
+            fg=typer.colors.YELLOW,
+            bold=True,
+        )
+        return
+    typer.secho("  All checks passed", fg=typer.colors.GREEN, bold=True)

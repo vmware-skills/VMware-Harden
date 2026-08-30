@@ -105,7 +105,7 @@
               "names_input",
               "states_remedy"
             ],
-            "where": "client.py:40"
+            "where": "client.py:41"
           }
         ],
         "per_dimension_pct": {
@@ -192,10 +192,10 @@
           "introspect.py:251",
           "loader.py:71",
           "vocabulary.py:109",
-          "runner.py:97",
           "stig.py:23",
           "stig.py:28",
-          "tools.py:26"
+          "tools.py:26",
+          "tools.py:85"
         ]
       },
       "maximum": 23,

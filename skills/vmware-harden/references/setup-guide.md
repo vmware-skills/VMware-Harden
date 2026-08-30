@@ -30,13 +30,17 @@ How to install, configure, and wire `vmware-harden` into your AI agent.
 ### Recommended: PyPI via `uv tool install`
 
 ```bash
-uv tool install vmware-harden
+uv tool install "vmware-harden[collectors]"
 vmware-harden --help
 vmware-harden mcp --help   # MCP server (CLI subcommand — recommended)
 ```
 
 This installs `vmware-harden` into a single isolated venv that `uv tool`
-manages. The MCP stdio server is the `vmware-harden mcp` subcommand; the
+manages. That isolation is why the `[collectors]` extra is named here rather
+than installed beside it: `scan` imports vmware-aiops, vmware-storage and
+vmware-nsx-security, and `uv tool install vmware-aiops` would build a *second*
+venv that harden cannot import from. Omit the extra only if this host will
+report on an existing twin DB rather than scan. The MCP stdio server is the `vmware-harden mcp` subcommand; the
 standalone `vmware-harden-mcp` console script is also installed and remains
 supported for backward compatibility.
 
