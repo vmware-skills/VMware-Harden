@@ -191,5 +191,5 @@ def test_no_phantom_compliance_api_in_package():
         text = path.read_text(encoding="utf-8")
         hits = [m for m in spec.FORBIDDEN_COMPLIANCE_API_MARKERS if m in text]
         if hits:
-            offenders[str(path.relative_to(pkg_root))] = hits
+            offenders[path.relative_to(pkg_root).as_posix()] = hits
     assert not offenders, f"phantom compliance API path fragments found: {offenders}"
