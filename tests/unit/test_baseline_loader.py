@@ -52,7 +52,7 @@ rules:
     remediation:
       summary: y
 """.lstrip()
-    )
+    , encoding="utf-8")
     b = load_baseline(p)
     assert b.id == "test-custom"
     assert len(b.rules) == 1
@@ -89,6 +89,6 @@ rules:
     remediation:
       summary: y
 """.lstrip()
-    )
+    , encoding="utf-8")
     with pytest.raises(NotImplementedError, match="script checks reserved for v2"):
         load_baseline(p)

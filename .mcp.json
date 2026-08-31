@@ -5,7 +5,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "vmware-harden==1.10.5",
+        "vmware-harden==1.10.6",
         "vmware-harden-mcp"
       ]
     }

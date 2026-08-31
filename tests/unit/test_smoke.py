@@ -15,7 +15,7 @@ def test_package_imports():
     assert re.fullmatch(r"\d+\.\d+\.\d+", vmware_harden.__version__)
     import tomllib
     pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
-    assert vmware_harden.__version__ == tomllib.loads(pyproject.read_text())["project"]["version"]
+    assert vmware_harden.__version__ == tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
 
 
 @pytest.mark.unit

@@ -85,7 +85,7 @@ def _run_under_ascii_locale() -> dict:
     proc = subprocess.run(
         [sys.executable, "-c", _CHILD],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8",
         env=env,
         cwd=str(REPO_ROOT),
     )

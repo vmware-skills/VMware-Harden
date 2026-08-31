@@ -204,7 +204,7 @@ def _pre_1_9_database(tmp_path: Path) -> Path:
 
     src = subprocess.run(
         ["git", "show", "v1.8.9:vmware_harden/store/schema.py"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", check=True,
     ).stdout
     ns: dict = {}
     exec(src, ns)  # noqa: S102 - our own tagged source, not user input

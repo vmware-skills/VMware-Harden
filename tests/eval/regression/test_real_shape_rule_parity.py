@@ -235,7 +235,7 @@ def test_no_builtin_rule_uses_a_bare_cast():
     """
     offenders = []
     for path in sorted(_BUILTIN_DIR.glob("*.yaml")):
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"(?<!TRY_)\bCAST\s*\(", line):
                 offenders.append(f"  {path.name}:{lineno} {line.strip()}")
     assert not offenders, (

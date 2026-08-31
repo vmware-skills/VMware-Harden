@@ -28,7 +28,7 @@ def test_extends_merges_parent_rules(tmp_path: Path):
               summary: never fires
     """).strip()
     p = tmp_path / "child.yaml"
-    p.write_text(child_yaml)
+    p.write_text(child_yaml, encoding="utf-8")
 
     merged = load_baseline(p)
     rule_ids = {r.id for r in merged.rules}
@@ -59,7 +59,7 @@ def test_extends_child_overrides_parent_rule(tmp_path: Path):
               summary: replaced
     """).strip()
     p = tmp_path / "override.yaml"
-    p.write_text(child_yaml)
+    p.write_text(child_yaml, encoding="utf-8")
 
     merged = load_baseline(p)
     matching = [r for r in merged.rules if r.id == "cis-esxi-2.1.1"]
@@ -81,7 +81,7 @@ def test_extends_unknown_parent_raises(tmp_path: Path):
         rules: []
     """).strip()
     p = tmp_path / "orphan.yaml"
-    p.write_text(child_yaml)
+    p.write_text(child_yaml, encoding="utf-8")
 
     with pytest.raises(FileNotFoundError):
         load_baseline(p)
@@ -99,7 +99,7 @@ def test_extends_preserves_child_metadata(tmp_path: Path):
         rules: []
     """).strip()
     p = tmp_path / "c.yaml"
-    p.write_text(child_yaml)
+    p.write_text(child_yaml, encoding="utf-8")
 
     merged = load_baseline(p)
     assert merged.id == "my-id"

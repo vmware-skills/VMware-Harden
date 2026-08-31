@@ -340,7 +340,7 @@ def test_the_install_docs_offer_the_command_that_makes_a_scan_work(doc: str) -> 
     root = Path(__file__).resolve().parents[3]
     path = root / doc
     assert path.exists(), f"{doc} does not exist — this check verifies nothing"
-    assert install_extra(COLLECTORS_EXTRA) in path.read_text(), (
+    assert install_extra(COLLECTORS_EXTRA) in path.read_text(encoding="utf-8"), (
         f"{doc} never shows `{install_extra(COLLECTORS_EXTRA)}`, so a reader "
         "who follows it installs harden without the collectors every scan "
         "needs and the first scan fails"

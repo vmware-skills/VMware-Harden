@@ -11,6 +11,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 from vmware_policy import describe_tool_parameters, sanitize, set_environment_resolver
+from vmware_policy import skill_name
 
 from vmware_harden import __version__
 from vmware_harden.mcp import stig as t_stig
@@ -186,7 +187,12 @@ def _environment_for(target: Optional[str]) -> str:
 # Registered at import time rather than inside build_server(): the resolver is
 # process-global state in vmware_policy, not per-server-instance, and every
 # build_server() call would otherwise re-register the same constant.
-set_environment_resolver(_environment_for)
+# Keyed by skill: the registry used to be one process-global slot, and a
+# bare `import` of any sibling's server module replaced whichever resolver
+# was there -- measured turning a freeze-production-writes rule from DENY
+# to ALLOW. Keyed, a resolver only ever answers for its own skill, so
+# registering at import time is safe again.
+set_environment_resolver(_environment_for, skill=skill_name(__name__))
 
 
 def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMCP:

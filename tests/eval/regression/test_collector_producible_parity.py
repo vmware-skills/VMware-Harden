@@ -73,7 +73,7 @@ def _entry_keys(source: Path, function: str) -> set[str]:
     regex over source would go stale against a formatting change without saying
     so.
     """
-    tree = ast.parse(source.read_text())
+    tree = ast.parse(source.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == function:
             best: set[str] | None = None

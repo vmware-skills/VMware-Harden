@@ -17,7 +17,7 @@ def test_list_builtins_includes_user_dir(tmp_path: Path, monkeypatch):
         version: 1.0.0
         applies_to: [host]
         rules: []
-    """).strip())
+    """).strip(), encoding="utf-8")
 
     monkeypatch.setattr(loader, "USER_DIR", user_dir)
 
@@ -36,7 +36,7 @@ def test_load_builtin_finds_user_baseline(tmp_path: Path, monkeypatch):
         version: 1.0.0
         applies_to: [host]
         rules: []
-    """).strip())
+    """).strip(), encoding="utf-8")
 
     monkeypatch.setattr(loader, "USER_DIR", user_dir)
 
@@ -55,7 +55,7 @@ def test_user_dir_overrides_builtin(tmp_path: Path, monkeypatch):
         version: 9.9.9
         applies_to: [host]
         rules: []
-    """).strip())
+    """).strip(), encoding="utf-8")
 
     monkeypatch.setattr(loader, "USER_DIR", user_dir)
 

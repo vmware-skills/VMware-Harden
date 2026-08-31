@@ -26,7 +26,7 @@ def good_yaml(tmp_path: Path) -> Path:
             category: x
             check: {type: query, sql: "SELECT 1"}
             remediation: {summary: y}
-    """).strip())
+    """).strip(), encoding="utf-8")
     return p
 
 
@@ -45,7 +45,7 @@ def bad_yaml(tmp_path: Path) -> Path:
             category: x
             check: {type: query, sql: "SELECT 1"}
             remediation: {summary: y}
-    """).strip())
+    """).strip(), encoding="utf-8")
     return p
 
 

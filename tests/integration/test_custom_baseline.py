@@ -67,7 +67,7 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
                        OR json_extract_string(attrs, '$.managed_by') = '')
             remediation:
               summary: Tag hosts with managed_by
-    """).strip())
+    """).strip(), encoding="utf-8")
 
     # 3. Import via CLI (use --name so destination stem matches baseline id for lookup)
     result = cli.invoke(
@@ -152,7 +152,7 @@ def test_custom_baseline_validate_then_import(tmp_path: Path, monkeypatch):
             category: x
             check: {type: query, sql: "SELECT 1"}
             remediation: {summary: y}
-    """).strip())
+    """).strip(), encoding="utf-8")
 
     # 1. validate succeeds
     result = cli.invoke(app, ["baseline", "validate", str(yaml_path)])
