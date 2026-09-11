@@ -1810,7 +1810,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.40,<1.0" },
+    { name = "anthropic", specifier = ">=0.40,<2.0" },
     { name = "duckdb", specifier = ">=0.10,<2.0" },
     { name = "fastapi", specifier = ">=0.110,<1.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
