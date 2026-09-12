@@ -1,0 +1,24 @@
+{
+  "id": "vmware-harden",
+  "name": "VMware Harden",
+  "description": "VMware compliance scanning (CIS, vSphere SCG, GB/T 22239, PCI-DSS) with drift detection.",
+  "skills": [
+    "./skills"
+  ],
+  "mcpServers": {
+    "vmware-harden": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "vmware-harden[collectors]==1.10.7",
+        "vmware-harden-mcp"
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
