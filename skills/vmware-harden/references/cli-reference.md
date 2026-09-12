@@ -257,6 +257,7 @@ Source of truth: `vmware_harden/doctor.py::run_diagnostics`.
 
 ### Example output
 
+<!-- install-pin: program-output -->
 ```
   ✓ Python version                  Python 3.12.7
   ✓ Twin DB                         /Users/me/.vmware-harden/twin.duckdb

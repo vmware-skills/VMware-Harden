@@ -10,7 +10,7 @@ app = typer.Typer()
 @app.callback(invoke_without_command=True)
 def show(
     db: str = typer.Option(
-        "~/.vmware-harden/twin.duckdb",
+        "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",
         help="Path to Twin database file.",
     ),
     format: str = typer.Option("text", help="Report format: text or json."),

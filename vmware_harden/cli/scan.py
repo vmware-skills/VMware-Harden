@@ -15,7 +15,7 @@ def run(
         help="Built-in baseline name to evaluate.",
     ),
     db: str = typer.Option(
-        "~/.vmware-harden/twin.duckdb",
+        "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",
         help="Path to Twin database file.",
     ),
 ) -> None:

@@ -47,7 +47,7 @@ def advise(
              "call). Caps serial fan-out; raise it deliberately for big estates.",
     ),
     db: str = typer.Option(
-        "~/.vmware-harden/twin.duckdb", help="Twin DB path."
+        "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB", help="Twin DB path."
     ),
 ) -> None:
     """Generate and persist LLM remediation suggestions."""

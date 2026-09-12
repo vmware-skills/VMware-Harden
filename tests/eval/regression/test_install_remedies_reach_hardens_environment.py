@@ -334,14 +334,27 @@ def test_the_install_docs_offer_the_command_that_makes_a_scan_work(doc: str) -> 
     ``install_extra(COLLECTORS_EXTRA)`` rather than a copied literal is the
     point: rename the extra and these documents fail rather than drift
     (recurring shape #6).
+
+    The skill's own documents ship inside the release, so the family gate
+    (install_commands_pinned) pins their install commands to that release:
+    ``"vmware-harden[collectors]==<this version>"``. That form is accepted;
+    a pin to any other version is not.
     """
+    import tomllib
+
     from vmware_harden.install import COLLECTORS_EXTRA, install_extra
 
     root = Path(__file__).resolve().parents[3]
     path = root / doc
     assert path.exists(), f"{doc} does not exist — this check verifies nothing"
-    assert install_extra(COLLECTORS_EXTRA) in path.read_text(encoding="utf-8"), (
-        f"{doc} never shows `{install_extra(COLLECTORS_EXTRA)}`, so a reader "
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    version = tomllib.loads(pyproject)["project"]["version"]
+    command = install_extra(COLLECTORS_EXTRA)
+    assert command.endswith('"'), command
+    pinned = f'{command[:-1]}=={version}"'
+    text = path.read_text(encoding="utf-8")
+    assert command in text or pinned in text, (
+        f"{doc} never shows `{command}` (or `{pinned}`), so a reader "
         "who follows it installs harden without the collectors every scan "
         "needs and the first scan fails"
     )

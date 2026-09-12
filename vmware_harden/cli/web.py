@@ -10,7 +10,7 @@ app = typer.Typer()
 @app.callback(invoke_without_command=True)
 def start(
     db: str = typer.Option(
-        "~/.vmware-harden/twin.duckdb",
+        "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",
         help="Path to Twin database file.",
     ),
     host: str = typer.Option("127.0.0.1", help="Bind host."),

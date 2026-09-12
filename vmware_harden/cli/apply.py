@@ -78,7 +78,7 @@ def _get_llm_provider():
 def apply(
     violation_id: str = typer.Option(..., "--violation-id", help="Violation id to remediate."),
     db: str = typer.Option(
-        "~/.vmware-harden/twin.duckdb", help="Twin DB path."
+        "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB", help="Twin DB path."
     ),
     auto_approve: bool = typer.Option(
         False, "--auto-approve", help="Skip y/N prompt for high-risk suggestions."

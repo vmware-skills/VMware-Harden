@@ -421,7 +421,9 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
     return server
 def main() -> None:
     """Entry point for `vmware-harden-mcp` (stdio transport)."""
-    server = build_server()
+    from vmware_harden.db_path import resolve_db_path
+
+    server = build_server(resolve_db_path())
     server.run()
 
 

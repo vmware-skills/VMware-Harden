@@ -10,8 +10,9 @@ COPY pyproject.toml README.md ./
 COPY vmware_harden/ vmware_harden/
 COPY examples/ examples/
 
-# Install dependencies
-RUN uv pip install --system --no-cache .
+# Install with the collectors extra: `scan` reads the estate through the
+# sibling skills it carries, and an image without them cannot scan anything.
+RUN uv pip install --system --no-cache ".[collectors]"
 
 # Config / DuckDB directory (mount at runtime)
 RUN mkdir -p /root/.vmware-harden

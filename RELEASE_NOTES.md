@@ -1,3 +1,36 @@
+## v1.10.7 — OpenClaw can load the skill, and every shipped launch can scan
+
+**The plugin, the uvx example and the container image could not scan.** `scan` reads the
+estate through sibling skills that only the `collectors` extra installs. The README's install
+command carries it; three launch paths did not — the Claude Code plugin's `.mcp.json`
+(`uvx --from vmware-harden==X`), `examples/mcp-configs/uvx-fallback.json`, and the `Dockerfile`
+(`uv pip install .` — the image the setup guide offers for container hosts such as Smithery). Each started a server whose first
+`scan_target` failed with `CollectorDependencyError`. All three now install
+`vmware-harden[collectors]`; a regression test pins each. The MCP Registry entry cannot name an
+extra, so a registry client still gets a server without collectors — the setup guide says what
+to do instead.
+
+**`VMWARE_HARDEN_DB` now does what the docs said.** SKILL.md, the setup guide, `smithery.yaml`,
+the Docker example and every MCP example config named it as the Twin database override, and no
+code read it: the MCP server, the CLI and `doctor` always used `~/.vmware-harden/twin.duckdb`, so a
+Smithery `db_path` or a container's `-e VMWARE_HARDEN_DB=…` was ignored without a word. Every
+reader now takes `--db`, then `VMWARE_HARDEN_DB`, then the default, with `~` expanded. If you set
+the variable and your scans landed in the default file, they will now go where you pointed.
+
+**The `anthropic` dependency ceiling is now `<2.0`** (was `<1.0`), so installs resolve alongside
+current SDK releases. The advisor's calls are unchanged.
+
+**OpenClaw could not show this skill to the model.** `metadata.openclaw.requires` listed
+config *file paths* under `requires.config`, which OpenClaw reads as `openclaw.json` keys that
+must be truthy — so the skill was "needs setup / not visible to the model" whatever was on disk
+(verified on OpenClaw 2026.6.35). `requires.env` named an optional override and `requires.bins`
+demanded a CLI that a plugin install (uvx) never has. `requires` is now `anyBins: [<cli>, "uvx"]`;
+the variables are still declared, under `optional.env`.
+
+**Install commands in the skill pin this release.** ClawHub reviews SKILL.md and references/,
+not the package they install, so an unpinned `uv tool install` vouched for code nobody reviewed.
+Every install command for this package in the skill now names this version.
+
 ## v1.10.6 — the test suite runs on a non-UTF-8 machine, and the guardrail tests with it
 
 

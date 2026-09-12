@@ -18,7 +18,7 @@ allowed-tools:
   - Bash
   - Read
   - Write
-metadata: {"openclaw":{"requires":{"env":["VMWARE_HARDEN_DB"],"bins":["vmware-harden"],"config":["~/.vmware-harden/twin.duckdb"]},"optional":{"env":["VMWARE_AUDIT_APPROVED_BY","VMWARE_AUDIT_RATIONALE","ANTHROPIC_API_KEY"],"bins":["vmware-policy"]},"primaryEnv":"VMWARE_HARDEN_DB","homepage":"https://github.com/vmware-skills/VMware-Harden","os":["macos","linux"]}}
+metadata: {"openclaw":{"requires":{"anyBins":["vmware-harden","uvx"]},"optional":{"env":["VMWARE_HARDEN_DB","VMWARE_AUDIT_APPROVED_BY","VMWARE_AUDIT_RATIONALE","ANTHROPIC_API_KEY"],"bins":["vmware-policy"]},"homepage":"https://github.com/vmware-skills/VMware-Harden","os":["macos","linux"]}}
 ---
 
 # VMware Harden (Compliance & Baseline)
@@ -43,11 +43,11 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 ## Quick Install
 
 ```bash
-uv tool install "vmware-harden[collectors]"
+uv tool install "vmware-harden[collectors]==1.10.7"
 vmware-harden baseline list
 ```
 
-The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden` is enough to report on an existing twin DB.
+The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.10.7` is enough to report on an existing twin DB.
 
 For first-time use, ensure a vmware-aiops target is configured (harden uses aiops collectors) and optionally set `ANTHROPIC_API_KEY` for live remediation advice.
 
@@ -88,7 +88,7 @@ Use vmware-harden when the user needs to:
 
 ### 1. First-time scan with 等保 2.0 三级
 
-1. Install: `uv tool install "vmware-harden[collectors]"` (the extra carries the inventory collectors `scan` reads through)
+1. Install: `uv tool install "vmware-harden[collectors]==1.10.7"` (the extra carries the inventory collectors `scan` reads through)
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`

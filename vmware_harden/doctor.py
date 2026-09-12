@@ -38,7 +38,9 @@ def _check_python_version() -> DiagnosticResult:
 
 
 def _check_twin_db() -> DiagnosticResult:
-    path = Path(os.path.expanduser("~/.vmware-harden/twin.duckdb"))
+    from vmware_harden.db_path import resolve_db_path
+
+    path = resolve_db_path()
     if not path.exists():
         return DiagnosticResult(
             "Twin DB",
