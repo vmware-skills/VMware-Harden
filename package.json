@@ -1,6 +1,6 @@
 {
   "name": "@zw008/vmware-harden",
-  "version": "1.10.7",
+  "version": "1.10.8",
   "description": "VMware compliance scanning (CIS, vSphere SCG, GB/T 22239, PCI-DSS) with drift detection.",
   "private": true,
   "license": "MIT",

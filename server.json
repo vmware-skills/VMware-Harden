@@ -7,12 +7,12 @@
     "url": "https://github.com/vmware-skills/VMware-Harden",
     "source": "github"
   },
-  "version": "1.10.7",
+  "version": "1.10.8",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "vmware-harden",
-      "version": "1.10.7",
+      "version": "1.10.8",
       "runtimeHint": "uvx",
       "packageArguments": [
         {

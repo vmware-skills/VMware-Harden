@@ -1,4 +1,4 @@
-## Unreleased
+## v1.10.8 — reports say which scan they read
 
 **Reports say which scan they read, and warn when later scans failed.** A failed scan is marked
 `failed` and kept out of reports — correctly — so `vmware-harden report` then shows the last scan
