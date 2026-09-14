@@ -88,7 +88,14 @@ instead of the metadata fields.
 list_violations(severity: str | None = None, limit: int = 50, offset: int = 0) -> dict
 ```
 
-Returns `{violations, total, limit, offset, has_more, coverage, note}`.
+Returns `{violations, total, limit, offset, has_more, coverage, note, snapshot}`.
+
+`snapshot` names the scan the rows come from: `{id, target, finished_at,
+later_unfinished, headline, note}`. Failed and running scans are never reported
+on, so the rows can be older than the scan just run — when later scans of the
+same target did not complete, `later_unfinished` counts them and `note` says so.
+Tell the user which scan the answer comes from whenever `note` is set. `snapshot`
+is `null` when no scan has completed.
 
 ### When to use
 
@@ -246,8 +253,10 @@ A `Suggestion` dict (Pydantic `model_dump(mode="json")`) or `None`:
 ### Signature
 
 ```python
-list_drift_events(limit: int = 50) -> dict   # family list envelope
+list_drift_events(limit: int = 50) -> dict   # family list envelope + snapshot
 ```
+
+The envelope carries the same `snapshot` block as `list_violations`.
 
 ### When to use
 

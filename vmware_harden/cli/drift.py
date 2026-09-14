@@ -38,6 +38,7 @@ def show(
             typer.echo("No completed scans yet. Run `vmware-harden scan --target <vc>` first.")
             return
         snap_id = latest["id"]
+        standing = twin.snapshot_standing(latest)
         total = twin.conn.execute(
             "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
             [snap_id],
@@ -62,6 +63,8 @@ def show(
                 for r in rows
             ]
             typer.echo(_json.dumps(out, indent=2, ensure_ascii=False))
+            if standing["note"]:
+                typer.echo(f"# {standing['headline']}. WARNING: {standing['note']}", err=True)
             if truncated:
                 typer.echo(
                     f"# Showing {len(rows)} of {total} drift events "
@@ -69,10 +72,13 @@ def show(
                     err=True,
                 )
         else:
+            typer.echo(standing["headline"])
+            if standing["note"]:
+                typer.echo(f"WARNING: {standing['note']}")
             if not rows:
                 typer.echo("No drift detected since previous snapshot.")
             else:
-                typer.echo(f"Drift events on snapshot {snap_id}:\n")
+                typer.echo("Drift events on this snapshot:\n")
                 for r in rows:
                     typer.echo(
                         f"  {r[0]:30s} {r[1]:25s} {r[2] or 'None':>15} → {r[3] or 'None'}"

@@ -1,3 +1,14 @@
+## Unreleased
+
+**Reports say which scan they read, and warn when later scans failed.** A failed scan is marked
+`failed` and kept out of reports — correctly — so `vmware-harden report` then shows the last scan
+that completed. It did not say which one: on the lab, two scans failed on 2026-09-14 and the report
+printed 2026-08-30's violations with no id, no date and no mention of the failures. The text report
+and the drift view now open with `Snapshot <id> · <target> · finished <time UTC>` and a `WARNING:`
+line when later scans of that target did not complete; the JSON report and the `list_violations` /
+`list_drift_events` MCP tools carry a `snapshot` block (`id`, `target`, `finished_at`,
+`later_unfinished`, `headline`, `note`). The JSON report gains a key; nothing is removed.
+
 ## v1.10.7 — OpenClaw can load the skill, and every shipped launch can scan
 
 **The plugin, the uvx example and the container image could not scan.** `scan` reads the

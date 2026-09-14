@@ -92,7 +92,7 @@ Use vmware-harden when the user needs to:
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
-5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard). The JSON is an object — `{"violations": [...], "coverage": {...}}` — read `coverage` before reporting a result; an empty `violations` list only means nothing was found among the checks that could be made.
+5. Report: `vmware-harden report --format json > violations.json` (or `vmware-harden web` for the rendered dashboard). The JSON is an object — `{"violations": [...], "coverage": {...}, "snapshot": {...}}` — read `coverage` before reporting a result, and `snapshot` to say which scan it is (a failed scan is excluded, so `snapshot.note` warns when the results predate later failed scans); an empty `violations` list only means nothing was found among the checks that could be made.
 
    **Failure branch**: If you see `ConnectError: vmware-aiops target not found`, the aiops side is not configured. Run `vmware-aiops init` first; harden cannot scan without a working collector.
 

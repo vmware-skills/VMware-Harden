@@ -10,6 +10,16 @@ import duckdb
 from vmware_harden.store.schema import ADDED_COLUMNS, DDL
 
 
+def _utc_label(value) -> str:
+    """A snapshot timestamp as ``YYYY-MM-DD HH:MM UTC``. Stored values are naive UTC."""
+    if value is None:
+        return "unknown time"
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc)
+        return value.strftime("%Y-%m-%d %H:%M UTC")
+    return f"{value} UTC"
+
 class Twin:
     """Single-file DuckDB-backed estate twin."""
 
@@ -101,6 +111,46 @@ class Twin:
             "scan_started_at": row[2],
             "scan_finished_at": row[3],
             "status": row[4],
+        }
+
+    def snapshot_standing(self, snapshot: dict) -> dict:
+        """Which snapshot a view reads, when it finished, and what came after it.
+
+        ``latest_snapshot`` rightly skips failed and running scans — but a report
+        that then prints that snapshot's results without naming it answers a
+        scan the user just ran (and that failed) with results from weeks earlier
+        (lab, 2026-09-14: two failed scans, report showed 2026-08-30's). So every
+        view says which snapshot it is and, when later scans of the same target
+        did not complete, says that too.
+
+        Returns ``{id, target, finished_at, later_unfinished, headline, note}``;
+        ``note`` is None when nothing later went wrong.
+        """
+        rows = self.conn.execute(
+            "SELECT status, scan_started_at FROM snapshots "
+            "WHERE target = ? AND scan_started_at > ? AND status != 'completed' "
+            "ORDER BY scan_started_at DESC",
+            [snapshot["target"], snapshot["scan_started_at"]],
+        ).fetchall()
+        finished = _utc_label(snapshot.get("scan_finished_at"))
+        headline = f"Snapshot {snapshot['id']} · {snapshot['target']} · finished {finished}"
+        note = None
+        if rows:
+            status, started = rows[0]
+            scans = "scan" if len(rows) == 1 else "scans"
+            state = "is still running" if status == "running" else str(status)
+            note = (
+                f"{len(rows)} later {scans} of {snapshot['target']} did not complete "
+                f"(the latest, started {_utc_label(started)}, {state}). These results "
+                f"are from the scan that finished {finished}."
+            )
+        return {
+            "id": snapshot["id"],
+            "target": snapshot["target"],
+            "finished_at": finished,
+            "later_unfinished": len(rows),
+            "headline": headline,
+            "note": note,
         }
 
     def write_node_state(

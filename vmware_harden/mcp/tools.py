@@ -106,6 +106,7 @@ def list_violations(
         "limit": limit,
         "offset": offset,
         "has_more": False,
+        "snapshot": None,
     }
     twin = Twin(_resolve_db())
     try:
@@ -158,6 +159,9 @@ def list_violations(
             "has_more": offset + len(out) < total,
             "coverage": cov.as_dict(),
             "note": cov.summary_line() or None,
+            # Which scan these rows come from, and whether later scans of the same
+            # target failed — failed scans are excluded, so the rows can be old.
+            "snapshot": twin.snapshot_standing(latest),
         }
     finally:
         twin.close()
@@ -193,7 +197,7 @@ def list_drift_events(limit: int = 50) -> dict:
     try:
         latest = twin.latest_snapshot()
         if latest is None:
-            return paginated([], limit=limit, total=0)
+            return paginated([], limit=limit, total=0, snapshot=None)
         total = twin.conn.execute(
             "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
             [latest["id"]],
@@ -214,7 +218,9 @@ def list_drift_events(limit: int = 50) -> dict:
             }
             for r in rows
         ]
-        return paginated(events, limit=limit, total=total)
+        return paginated(
+            events, limit=limit, total=total, snapshot=twin.snapshot_standing(latest)
+        )
     finally:
         twin.close()
 

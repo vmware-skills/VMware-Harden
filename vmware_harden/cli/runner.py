@@ -226,6 +226,7 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
         ).fetchall()
         truncated = total > len(rows)
         cov = coverage_for(twin, latest["id"])
+        standing = twin.snapshot_standing(latest)
 
         if format == "json":
             violations = [
@@ -243,7 +244,11 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
             # checked" — both are `[]`. Callers that iterated the top level need
             # to read ["violations"]; the release notes call this out.
             typer.echo(json.dumps(
-                {"violations": violations, "coverage": cov.as_dict()},
+                {
+                    "violations": violations,
+                    "coverage": cov.as_dict(),
+                    "snapshot": standing,
+                },
                 indent=2, ensure_ascii=False,
             ))
             if truncated:
@@ -253,6 +258,12 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                     err=True,
                 )
         else:
+            # Name the snapshot before anything else: a failed scan is kept out of
+            # reports, so these rows can be much older than the scan just run.
+            typer.echo(standing["headline"])
+            if standing["note"]:
+                typer.echo(f"WARNING: {standing['note']}")
+            typer.echo("")
             if not rows:
                 # Never a bare "No violations." when part of the scan reached no
                 # verdict: that sentence is the false-compliance claim in three
