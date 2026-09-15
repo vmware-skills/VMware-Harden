@@ -10,6 +10,7 @@ from vmware_harden.cli import report as report_cmd
 from vmware_harden.cli import scan as scan_cmd
 from vmware_harden.cli import stig as stig_cmd
 from vmware_harden.cli import web as web_cmd
+from vmware_policy import cli_local
 
 app = typer.Typer(
     name="vmware-harden",
@@ -32,6 +33,7 @@ app.add_typer(
 
 
 @app.command("mcp")
+@cli_local("starts the MCP server; its tools audit themselves")
 def mcp_cmd() -> None:
     """Start the MCP server (stdio transport).
 

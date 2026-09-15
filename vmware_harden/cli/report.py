@@ -3,11 +3,13 @@
 Stub for Task 9; full implementation lands in Task 10 via cli.runner.
 """
 import typer
+from vmware_policy import cli_local
 
 app = typer.Typer()
 
 
 @app.callback(invoke_without_command=True)
+@cli_local("reads violations from the local compliance database")
 def show(
     db: str = typer.Option(
         "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",

@@ -7,6 +7,7 @@ import typer
 from vmware_harden.advisor.advisor import Advisor, AdvisorError
 from vmware_harden.advisor.llm import AnthropicProvider, LLMProvider, MockProvider
 from vmware_harden.store.twin import Twin
+from vmware_policy import audited
 
 app = typer.Typer()
 
@@ -33,6 +34,7 @@ def _get_provider() -> LLMProvider:
 
 
 @app.callback(invoke_without_command=True)
+@audited("advise")
 def advise(
     violation_id: str | None = typer.Option(
         None, "--violation-id", help="Single violation id to advise on."

@@ -13,6 +13,7 @@ from vmware_harden.pilot.client import (
     RealPilotClient,
 )
 from vmware_harden.store.twin import Twin
+from vmware_policy import audited
 
 app = typer.Typer()
 
@@ -75,6 +76,7 @@ def _get_llm_provider():
 
 
 @app.callback(invoke_without_command=True)
+@audited("apply")
 def apply(
     violation_id: str = typer.Option(..., "--violation-id", help="Violation id to remediate."),
     db: str = typer.Option(

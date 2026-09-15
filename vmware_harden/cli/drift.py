@@ -6,11 +6,13 @@ from pathlib import Path
 import typer
 
 from vmware_harden.store.twin import Twin
+from vmware_policy import cli_local
 
 app = typer.Typer()
 
 
 @app.callback(invoke_without_command=True)
+@cli_local("reads drift from the local compliance database")
 def show(
     db: str = typer.Option(
         "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",

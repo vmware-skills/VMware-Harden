@@ -3,11 +3,13 @@
 Stub for Task 9; full implementation lands in Task 10 via cli.runner.
 """
 import typer
+from vmware_policy import audited
 
 app = typer.Typer()
 
 
 @app.callback(invoke_without_command=True)
+@audited("scan_target")
 def run(
     target: str = typer.Option(..., help="vCenter target name from upstream config."),
     baseline: str = typer.Option(

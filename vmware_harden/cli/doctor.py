@@ -2,6 +2,7 @@
 import typer
 
 from vmware_harden.doctor import run_diagnostics
+from vmware_policy import audited
 
 app = typer.Typer()
 
@@ -16,6 +17,7 @@ _COLOR = {
 
 
 @app.callback(invoke_without_command=True)
+@audited("doctor")
 def doctor(
     target: str = typer.Option(
         None,

@@ -3,11 +3,13 @@ import os
 from pathlib import Path
 
 import typer
+from vmware_policy import cli_local
 
 app = typer.Typer()
 
 
 @app.callback(invoke_without_command=True)
+@cli_local("serves the local compliance database on localhost")
 def start(
     db: str = typer.Option(
         "~/.vmware-harden/twin.duckdb", envvar="VMWARE_HARDEN_DB",

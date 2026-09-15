@@ -7,11 +7,13 @@ from pydantic import ValidationError
 
 from vmware_harden.baselines import loader
 from vmware_harden.baselines.loader import list_builtins, load_baseline
+from vmware_policy import cli_local
 
 app = typer.Typer()
 
 
 @app.command("list")
+@cli_local("lists local baseline files")
 def list_cmd() -> None:
     """List built-in (and imported) baseline names."""
     for name in list_builtins():
@@ -19,6 +21,7 @@ def list_cmd() -> None:
 
 
 @app.command("validate")
+@cli_local("validates a local baseline file")
 def validate_cmd(
     path: Path = typer.Argument(..., help="YAML file path"),
 ) -> None:
@@ -35,6 +38,7 @@ def validate_cmd(
 
 
 @app.command("import")
+@cli_local("copies a baseline file into the local baseline directory")
 def import_cmd(
     path: Path = typer.Argument(..., help="YAML file to import"),
     name: str = typer.Option(
