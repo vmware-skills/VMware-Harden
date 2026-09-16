@@ -88,6 +88,142 @@ class Twin:
             [datetime.now(timezone.utc), status, snapshot_id],
         )
 
+    def snapshot_row(self, snapshot_id: str) -> dict | None:
+        """``{id, target, scan_started_at, status}`` for one snapshot."""
+        row = self.conn.execute(
+            "SELECT id, target, scan_started_at, status FROM snapshots WHERE id = ?",
+            [snapshot_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return {"id": row[0], "target": row[1], "scan_started_at": row[2], "status": row[3]}
+
+    def completed_snapshots_before(
+        self, target: str, started_at, limit: int = 100, exclude_id: str = ""
+    ) -> list[str]:
+        """Completed snapshot ids for ``target`` at or before ``started_at``, newest first.
+
+        Drift walks this to find, per node type, the most recent scan that
+        actually collected that type. Comparing only against the immediately
+        prior snapshot meant a VM deleted across one narrower scan in between
+        was reported by nobody (independent review, 2026-09-16).
+        """
+        rows = self.conn.execute(
+            # `<=` with the snapshot itself excluded by id, not `<`: two scans can
+            # share a start timestamp (a fast pair, or a restored database), and
+            # a strict comparison then hid the only base there was — the query
+            # this replaced keyed on `id != ?` and did not have that hole
+            # (independent review, 2026-09-16). The id tie-break keeps the order
+            # total, so the walk is deterministic.
+            # A base must be an EARLIER observation of the estate, so the filter
+            # is on when a candidate finished, not only on when it started:
+            # ordering by `scan_finished_at DESC` among ties actively preferred
+            # a scan that finished after this one began, and drift was then
+            # measured against a later look at the estate (review, 2026-09-16).
+            "SELECT id FROM snapshots WHERE target = ? AND status = 'completed' "
+            "AND id != ? AND scan_started_at <= ? "
+            "AND (scan_finished_at IS NULL OR scan_finished_at <= ?) "
+            "ORDER BY scan_started_at DESC, scan_finished_at DESC, id DESC LIMIT ?",
+            [target, exclude_id, started_at, started_at, limit],
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def count_completed_snapshots_before(
+        self, target: str, started_at, exclude_id: str = ""
+    ) -> int:
+        """How many completed prior scans of ``target`` exist, ignoring any limit.
+
+        The search for a base is bounded, and "I ran out of window" is only true
+        when there are more priors than were looked at. Comparing the page size
+        against the limit could not tell a window that happened to be full from
+        one that was exhausted, and the note then asserted the wrong reason
+        (independent review, 2026-09-16).
+        """
+        return self.conn.execute(
+            # Same WHERE clause as the paged query, so "more priors than were
+            # searched" cannot be true for a reason the search never applied.
+            "SELECT COUNT(*) FROM snapshots WHERE target = ? AND status = 'completed' "
+            "AND id != ? AND scan_started_at <= ? "
+            "AND (scan_finished_at IS NULL OR scan_finished_at <= ?)",
+            [target, exclude_id, started_at, started_at],
+        ).fetchone()[0]
+
+    def record_diff_scope(self, snapshot_id: str, scope: dict) -> None:
+        """Store what this scan's drift compared, and what it could not."""
+        self.conn.execute(
+            "UPDATE snapshots SET diff_scope = ? WHERE id = ?",
+            [json.dumps(scope), snapshot_id],
+        )
+
+    def diff_scope_record(self, snapshot_id: str) -> dict | None:
+        """The stored drift scope, or None when unknown (older snapshot, or no diff)."""
+        try:
+            row = self.conn.execute(
+                "SELECT diff_scope FROM snapshots WHERE id = ?", [snapshot_id]
+            ).fetchone()
+        except duckdb.Error:
+            return None
+        return json.loads(row[0]) if row and row[0] else None
+
+    def collected_counts(self, snapshot_id: str) -> dict | None:
+        """``{node_type: rows written}``, or None when the scan predates the column."""
+        try:
+            row = self.conn.execute(
+                "SELECT collected_counts FROM snapshots WHERE id = ?", [snapshot_id]
+            ).fetchone()
+        except duckdb.Error:
+            return None
+        return json.loads(row[0]) if row and row[0] else None
+
+    def record_collection(
+        self,
+        snapshot_id: str,
+        covered_types: list[str],
+        failed: list[dict],
+        counts: dict | None = None,
+    ) -> None:
+        """Record which node types this scan collected, and which collectors failed.
+
+        Written even when nothing failed: the value that matters downstream is
+        the positive one. Drift compares only types both snapshots collected,
+        and without this it cannot tell "this baseline does not collect VMs"
+        from "the VMs are gone" — which reported 12 deleted VMs on a lab that
+        had lost none (2026-09-15).
+        """
+        self.conn.execute(
+            "UPDATE snapshots SET covered_types = ?, failed_collectors = ?, "
+            "collected_counts = ? WHERE id = ?",
+            [
+                json.dumps(sorted(set(covered_types))),
+                json.dumps(failed),
+                json.dumps(counts or {}),
+                snapshot_id,
+            ],
+        )
+
+    def collection_record(self, snapshot_id: str) -> tuple[list[str] | None, list[dict]]:
+        """``(covered_types, failed_collectors)`` for a snapshot.
+
+        ``covered_types`` is None when the scan predates this column — unknown,
+        not empty. An empty list would say "this scan collected nothing", which
+        is a different claim and the one that turns a missing node type into a
+        deletion.
+        """
+        try:
+            row = self.conn.execute(
+                "SELECT covered_types, failed_collectors FROM snapshots WHERE id = ?",
+                [snapshot_id],
+            ).fetchone()
+        except duckdb.Error:
+            # A database written before these columns existed, opened read-only:
+            # `Twin.open_readonly` skips schema init because DDL is a write, so a
+            # reader cannot migrate the file it was handed. Unknown, not empty —
+            # the same reason checks/coverage.py guards its own query.
+            return None, []
+        if row is None:
+            return None, []
+        return (json.loads(row[0]) if row[0] else None), (json.loads(row[1]) if row[1] else [])
+
     def latest_snapshot(self, completed_only: bool = True) -> dict | None:
         """Return the most recent snapshot as a dict, or None if there is none.
 

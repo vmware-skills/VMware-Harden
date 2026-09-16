@@ -24,8 +24,19 @@ class CheckRunner:
     def __init__(self, twin: Twin):
         self.twin = twin
 
-    def run_baseline(self, snapshot_id: str, baseline: Baseline) -> list[dict]:
-        """Run all rules; return list of violation dicts; persist to violation table."""
+    def run_baseline(
+        self,
+        snapshot_id: str,
+        baseline: Baseline,
+        uncollected: dict[str, str] | None = None,
+    ) -> list[dict]:
+        """Run all rules; return list of violation dicts; persist to violation table.
+
+        ``uncollected`` maps a node type to why its collector could not run.
+        Those rules are recorded undetermined before they execute: their SQL
+        would match zero rows, and zero rows here reads as "no violations" —
+        compliance asserted for a firewall nobody could reach.
+        """
         violations: list[dict] = []
         # Rule SQL runs verbatim against the cumulative `nodes` table, which
         # holds every target ever scanned plus decommissioned nodes. Scope
@@ -85,6 +96,18 @@ class CheckRunner:
                 # "no violations" — asserting compliance the scan never
                 # established. Recorded as undetermined instead.
                 verdict = classify(rule)
+                missing_collector = (uncollected or {}).get(verdict.node_type)
+                if missing_collector:
+                    outcome_rows.append(
+                        [
+                            str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                            "undetermined",
+                            f"{verdict.node_type} was not collected in this scan "
+                            f"({missing_collector}), so this rule was not evaluated",
+                            None, None,
+                        ]
+                    )
+                    continue
                 if not verdict.evaluable:
                     outcome_rows.append(
                         [

@@ -218,9 +218,29 @@ def list_drift_events(limit: int = 50) -> dict:
             }
             for r in rows
         ]
-        return paginated(
+        envelope = paginated(
             events, limit=limit, total=total, snapshot=twin.snapshot_standing(latest)
         )
+        # Drift is only as wide as the scan was. Saying which node types this
+        # snapshot collected stops "no drift" from being read as "nothing
+        # changed anywhere" when a baseline covered only hosts.
+        covered_types, uncollected = twin.collection_record(latest["id"])
+        envelope["collected_types"] = covered_types
+        # The note comes from the scope the scan recorded, not from the
+        # collectors that failed: in the case this exists for — a narrower
+        # baseline than last time — nothing fails, and deriving the note from
+        # failures left both surfaces silent (independent review, 2026-09-16).
+        scope = twin.diff_scope_record(latest["id"])
+        envelope["drift_scope"] = scope
+        note = (scope or {}).get("note")
+        if uncollected:
+            types = sorted({t for entry in uncollected for t in entry["node_types"]})
+            failure = (
+                f"Collector failure means {', '.join(types)} was not collected at all."
+            )
+            note = f"{note} {failure}" if note else failure
+        envelope["drift_note"] = note
+        return envelope
     finally:
         twin.close()
 
@@ -282,6 +302,25 @@ def scan_target(
         # compliant. Return alongside it how much of the baseline actually ran,
         # so that conclusion is only available when it is true.
         cov = coverage_for(twin, snap_id)
+        # A collector that could not run is not a smaller estate: the rules over
+        # its node types are undetermined, and the scan says so here rather than
+        # leaving "violations: 0" to be read as a clean firewall.
+        covered_types, uncollected = twin.collection_record(snap_id)
+        note = cov.summary_line() or None
+        # The agent that ran the scan is the one acting on it, so it gets the
+        # same drift scope `list_drift_events` reports — the release notes said
+        # so before the code did (independent review, 2026-09-16).
+        scope = twin.diff_scope_record(snap_id)
+        if scope and scope.get("note"):
+            note = f"{scope['note']} {note}" if note else scope["note"]
+        if uncollected:
+            types = sorted({t for entry in uncollected for t in entry["node_types"]})
+            gap = (
+                f"{', '.join(types)} was not collected "
+                f"({'; '.join(e['reason'] for e in uncollected)}), so every rule over "
+                f"those types is undetermined, not compliant."
+            )
+            note = f"{gap} {note}" if note else gap
         return {
             "snapshot_id": snap_id,
             "target": target,
@@ -289,7 +328,10 @@ def scan_target(
             "hosts": host_count,
             "violations": viol_count,
             "coverage": cov.as_dict(),
-            "note": cov.summary_line() or None,
+            "collected_types": covered_types,
+            "uncollected": uncollected,
+            "drift_scope": scope,
+            "note": note,
         }
     finally:
         twin.close()

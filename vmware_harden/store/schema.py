@@ -166,6 +166,22 @@ ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("rule_outcome", "nodes_in_scope", "INTEGER"),
     # ... and how many of those it could not judge for lack of data.
     ("rule_outcome", "nodes_undetermined", "INTEGER"),
+    # Which node types this scan actually collected (JSON array), and the
+    # collectors that failed, with the reason (JSON array of objects). NULL
+    # means a scan from before this was recorded: what it covered is unknown,
+    # and drift falls back to the types its own rows hold rather than reading
+    # the missing ones as deleted nodes.
+    ("snapshots", "covered_types", "VARCHAR"),
+    ("snapshots", "failed_collectors", "VARCHAR"),
+    # How many rows each collector actually wrote, as a JSON object keyed by node
+    # type. "Collected the type and got zero rows" is its own state: a
+    # permission-filtered read looks exactly like an empty estate, so drift
+    # reports it rather than concluding every node of that type was deleted.
+    ("snapshots", "collected_counts", "VARCHAR"),
+    # What the scan's own drift could and could not compare (JSON), computed once
+    # at scan time so every read surface says the same thing without recomputing
+    # which prior snapshot each type was compared against.
+    ("snapshots", "diff_scope", "VARCHAR"),
 ]
 
 # Severity is stored as plain text; a bare `ORDER BY severity DESC` sorts

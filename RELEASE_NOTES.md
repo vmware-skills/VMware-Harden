@@ -1,3 +1,89 @@
+## v1.10.10 — one collector failing no longer throws away the rest of the scan
+
+Both problems below were found in scenario tests against the lab on 2026-09-15/16.
+
+**A collector that cannot run costs its own node types, not the whole scan.** `scan_target` with
+`dengbao-2.0-level3-vmware` died with "Config file not found: ~/.vmware-nsx-security/config.yaml". That baseline's
+`applies_to` lists `dfw_rule`, so the DFW collector ran, could not reach NSX, and took the scan with it: no
+snapshot landed and the 17 host/vm/datastore rules never ran, on an estate where nothing about NSX was asked.
+
+* Each collector is now attempted on its own. A failure is recorded against the node types it would have read,
+  and the scan completes with the rest.
+* **The rules over those types are recorded `undetermined`, never compliant.** Their SQL would have matched zero
+  rows, and zero rows here reads as "no violations" — compliance asserted for a firewall nobody could reach.
+* `scan_target` returns `collected_types` and `uncollected` (node types, collector, reason), and its `note` says
+  the affected rules are undetermined. `vmware-harden scan` prints the same thing per collector.
+* A scan where *every* collector fails still fails, and still marks the snapshot 'failed'. Nothing was read; that
+  is not a scan with gaps.
+
+**Drift no longer reads "this baseline collects no VMs" as "the VMs are gone".** Scanning with a baseline that
+collects no VMs, after one that did, reported all 12 lab VMs deleted. The prior snapshot is chosen by target
+alone, never by baseline, and `node_state` holds only what that scan collected.
+
+* A snapshot now records which node types it collected (`covered_types`), and the diff compares only the types
+  **both** snapshots collected. The scan result and `list_drift_events` report what was compared, what was
+  not, and why (`drift_scope`).
+* `list_drift_events` and `vmware-harden drift` say when the scan did not collect a type, so an empty drift
+  list cannot be read as "nothing changed anywhere". Both CLI formats carry it: JSON puts the notes on stderr
+  as `#` comments, keeping stdout parseable.
+* A node of a compared type that really did go away is still reported `_removed`, and config drift on a compared
+  type is unaffected — both pinned by tests.
+* NULL `covered_types` (a snapshot from before this release) falls back to the types its own rows hold: unknown,
+  not empty.
+
+An independent review of that first draft found three more ways it fell short of its own claim. All three are
+fixed here, and each is now a test:
+
+* **The "not compared" note was derived from the collectors that FAILED** — but in the case this exists for, a
+  narrower baseline than last time, nothing fails. Both surfaces went silent about the VMs while the computed
+  scope was thrown away. Each scan now records the scope it actually achieved (`snapshots.diff_scope`), and
+  `list_drift_events`, `vmware-harden drift` and the scan's own output all read the note from it.
+* **A deletion straddling a narrower scan was reported by nobody, ever.** Drift compared only the immediately
+  prior snapshot, so scan 1 (with VMs) → scan 2 (host-only) → scan 3 (VMs, one genuinely gone) lost that
+  deletion permanently. Each node type is now compared against the most recent prior scan that actually
+  collected **that type**.
+* **`covered_types` came from the baseline's `applies_to`, not from what the collector wrote**, so a collector
+  answering with an empty list — a permission-filtered read is indistinguishable from an empty estate — still
+  turned last scan's VMs into deletions: the original symptom through a door the first fix left open. Row counts
+  are now recorded per type (`snapshots.collected_counts`); a type that came back with zero rows is
+  **not compared at all — `unconcluded`, in both directions, and said out loud**. (A first draft still listed
+  such a type as `compared` while silently dropping its events: one type in two buckets, caught by a seventh
+  review.)
+* A missing collector dependency keeps its remedy (`uv tool install "vmware-harden[collectors]"`) in the recorded
+  reason. Previously the teaching error survived only when *every* collector failed; a partial scan kept a bare
+  `ModuleNotFoundError: No module named 'pyVim'`.
+* `collection_record` answers "unknown" instead of raising on a database written before these columns existed and
+  opened read-only, the same guard `checks/coverage.py` already has.
+
+A third review found that the fix above had itself become the hole it closed. Also fixed here:
+
+* **A scan that read zero rows is never the scan a change is measured against.** It qualified as a base, and its
+  own removals were deliberately left unconcluded, so a VM deleted between the last real read and now escaped
+  both scans — the reported defect again, silent this time. The walk now skips such a scan and keeps going back.
+  This holds for **both** directions: an attempt to allow zero-row bases for additions only reported a surviving
+  VM as newly added, because the only evidence for "new" came from a read that measured nothing.
+* **After a zero-row read, the first scan that really reads the type claims no change.** It is the first
+  reliable read, not an estate that just gained nodes; the scope says so.
+* **Running out of the search window claims nothing about the estate.** The walk back is bounded (100 snapshots
+  of that target). Exhausting it without a base is reported as `no_base_in_window`, naming how many scans were
+  searched and saying that whether the type was never collected or last collected further back **cannot be told
+  from here**. Both of the confident labels were tried first and both were false in some case: "first scan to
+  collect" asserts a first collection an unread scan may contradict, and the first wording of this one implied
+  the opposite. "First scan to collect" is now used only when every prior scan was actually read.
+* **One reason per type, from one table.** Every type is in exactly one bucket — compared, unconcluded, or one
+  of the no-base labels (first collection / first read with rows / no base within the window), the last three
+  chosen by a single classifier with an asserted precedence, after four rounds in which patching the choice
+  inline produced a label that was false in some combination — including a type whose own row count was zero
+  being announced as "the first read with rows". A zero-row read outranks everything, window exhaustion
+  included: it concludes nothing an exhausted window could change.
+* An explicitly empty `covered_types` (`[]`) stays a recorded fact — "this scan collected nothing" — rather than
+  collapsing into the unknown case and being re-derived from whatever rows the snapshot holds.
+* The diff no longer carries an unconditional bypass for nodes it cannot type. That bypass existed only so unit
+  tests could seed `node_state` without a `nodes` row; those fixtures now write both, the way a collector does.
+* The per-type base search caches each snapshot's collected types and row counts for the duration of one diff;
+  it previously re-queried them per candidate per type (~200 queries a scan, each a JOIN on an upgraded
+  database).
+
 ## v1.10.9 — CLI reads are audited
 
 No CLI read wrote `~/.vmware/audit.db` — only MCP calls and CLI writes (`@guarded`) did. A live

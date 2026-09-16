@@ -7,7 +7,22 @@ from vmware_harden.drift.diff import ChangeEvent, diff_snapshots
 from vmware_harden.store.twin import Twin
 
 
-def _seed_node_state(twin: Twin, snap_id: str, node_id: str, state: dict) -> None:
+def _seed_node_state(
+    twin: Twin, snap_id: str, node_id: str, state: dict, node_type: str = "host"
+) -> None:
+    """Seed a node the way a collector does: a `nodes` row AND a `node_state` row.
+
+    These tests used to write only `node_state`, which left the diff engine with
+    node ids it could not type — and the engine carried an unconditional bypass
+    for exactly that, so a node of an uncollected type could slip through the
+    scoping in production to keep this fixture working (review, 2026-09-16).
+    A collector always writes both, in one transaction; so does this now.
+    """
+    twin.conn.execute(
+        "INSERT INTO nodes (id, type, target, name, attrs) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT (id) DO UPDATE SET type = excluded.type",
+        [node_id, node_type, "v.lab", node_id, "{}"],
+    )
     twin.write_node_state(snap_id, node_id, state)
 
 

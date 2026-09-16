@@ -5,19 +5,23 @@ from collections.abc import Callable
 from pathlib import Path
 
 import typer
+from vmware_policy import sanitize
 
 from vmware_harden.baselines.loader import load_builtin
 from vmware_harden.baselines.model import Baseline
 from vmware_harden.checks.coverage import coverage_for
 from vmware_harden.checks.runner import CheckRunner
-from vmware_harden.collectors.base import Collector, CollectorDependencyError
+from vmware_harden.collectors.base import (
+    Collector,
+    CollectorDependencyError,
+    CollectorError,
+)
 from vmware_harden.collectors.datastores import DatastoreCollector
 from vmware_harden.collectors.dfw import DFWCollector
 from vmware_harden.collectors.hosts import HostCollector
 from vmware_harden.collectors.vms import VMCollector
 from vmware_harden.install import COLLECTORS_EXTRA, ISOLATION_NOTE, install_extra
 from vmware_harden.store.twin import Twin
-
 
 # Map node_type → collector class. Each collector's `collect` writes the
 # corresponding type='X' rows. Some baselines reference both dfw_section
@@ -72,17 +76,48 @@ def _open_twin(db: str) -> Twin:
     return Twin(_resolve_db_path(db))
 
 
-def _required_collectors(baseline: Baseline) -> list[type[Collector]]:
-    """Deduplicate collectors needed for baseline.applies_to."""
-    seen: set[type[Collector]] = set()
-    result: list[type[Collector]] = []
+def _rows_written(twin: Twin, snapshot_id: str, node_type: str) -> int:
+    """How many nodes of ``node_type`` this snapshot actually holds.
+
+    Counted from the rows rather than taken from the collector's return value:
+    one collector writes several types (DFW writes sections and rules), so its
+    single total cannot say which type came back empty — and "came back empty"
+    is the state drift must not read as a deletion.
+    """
+    return twin.conn.execute(
+        "SELECT COUNT(*) FROM node_state ns JOIN nodes n ON n.id = ns.node_id "
+        "WHERE ns.snapshot_id = ? AND n.type = ?",
+        [snapshot_id, node_type],
+    ).fetchone()[0]
+
+
+def _types_with_rows(twin: Twin, snapshot_id: str) -> set[str]:
+    """Node types this snapshot actually holds rows for."""
+    return {
+        r[0]
+        for r in twin.conn.execute(
+            "SELECT DISTINCT n.type FROM nodes n JOIN node_state ns ON ns.node_id = n.id "
+            "WHERE ns.snapshot_id = ?",
+            [snapshot_id],
+        ).fetchall()
+    }
+
+
+def _collectors_with_types(baseline: Baseline) -> list[tuple[type[Collector], tuple[str, ...]]]:
+    """``(collector, node_types)`` for a baseline, each collector once.
+
+    The node types travel with the collector because a failure has to be
+    recorded against the types nobody could then read: one DFW collector covers
+    both ``dfw_section`` and ``dfw_rule``, and the rules over those types are
+    unknown afterwards rather than compliant.
+    """
+    by_class: dict[type[Collector], list[str]] = {}
     for node_type in baseline.applies_to:
         cls = _COLLECTOR_MAP.get(node_type)
-        if cls is None or cls in seen:
+        if cls is None:
             continue
-        seen.add(cls)
-        result.append(cls)
-    return result
+        by_class.setdefault(cls, []).append(node_type)
+    return [(cls, tuple(types)) for cls, types in by_class.items()]
 
 
 def run_scan(
@@ -115,25 +150,93 @@ def run_scan(
 
         try:
             b = load_builtin(baseline)
-            for collector_cls in _required_collectors(b):
-                n = collector_cls(twin).collect(snap_id, target)
+            # One collector failing used to take the whole scan with it: a
+            # baseline listing dfw_rule died on a missing NSX config, and the 17
+            # host/vm/datastore rules never ran (lab, 2026-09-16). Each
+            # collector is now attempted on its own and its failure recorded
+            # against the node types it would have read.
+            covered: list[str] = []
+            counts: dict[str, int] = {}
+            uncollected: dict[str, str] = {}
+            failed: list[dict] = []
+            first_error: Exception | None = None
+            for collector_cls, node_types in _collectors_with_types(b):
                 label = collector_cls.__name__.replace("Collector", "").lower()
+                try:
+                    n = collector_cls(twin).collect(snap_id, target)
+                except Exception as e:  # noqa: BLE001 — recorded below, never swallowed
+                    first_error = first_error or e
+                    # The exception text can carry a remote error body
+                    # (NSX/vCenter answer verbatim) and travels into MCP
+                    # results and the drift note — remote-controllable
+                    # text, so it goes through the family sanitizer
+                    # (control and Unicode-format chars stripped before
+                    # the 500-char cut; a private copy here was the 23rd
+                    # duplicate and weaker — reviews, 2026-09-16).
+                    reason = sanitize(f"{type(e).__name__}: {e}")
+                    if isinstance(e, ModuleNotFoundError):
+                        # The install command is the whole value of this error.
+                        # Recording only "No module named 'pyVim'" dropped the
+                        # remedy for every scan where another collector worked
+                        # (independent review, 2026-09-16).
+                        pkg = (e.name or "dependency").replace("_", "-")
+                        reason = (
+                            f"{pkg} not installed — run: "
+                            f"{install_extra(COLLECTORS_EXTRA)}. {ISOLATION_NOTE}"
+                        )
+                    failed.append(
+                        {
+                            "node_types": list(node_types),
+                            "collector": collector_cls.__name__,
+                            "reason": reason,
+                        }
+                    )
+                    uncollected.update({t: reason for t in node_types})
+                    say(f"  {label} collector FAILED — {reason}")
+                    say(
+                        f"    Rules over {', '.join(node_types)} are reported "
+                        "undetermined, not compliant."
+                    )
+                    continue
+                covered.extend(node_types)
                 say(f"  Collected {n} {label} entities")
+                if n == 0:
+                    say(
+                        f"    0 rows returned — an empty answer is not proof of an "
+                        f"empty estate; removals of {', '.join(node_types)} will not "
+                        f"be concluded from this scan."
+                    )
+            if not covered:
+                # Nothing was read at all. That is a failed scan, not a scan
+                # with gaps — the handlers below mark it failed and re-raise.
+                raise first_error if first_error is not None else CollectorError(
+                    f"No collector ran for baseline {b.id!r}: its applies_to "
+                    f"({', '.join(b.applies_to)}) names no collectable node type."
+                )
+            # What a collector WROTE, not only what the baseline declared. The
+            # DFW collector writes dfw_section rows for a baseline that lists
+            # only dfw_rule, and taking the type list from applies_to left those
+            # rows compared by nobody and named by nothing — a renamed or
+            # vanished firewall section vanished with them (independent review,
+            # 2026-09-16). Declared-but-empty types stay, at 0.
+            covered = sorted(set(covered) | _types_with_rows(twin, snap_id))
+            counts = {t: _rows_written(twin, snap_id, t) for t in covered}
+            twin.record_collection(snap_id, covered, failed, counts)
 
-            violations = CheckRunner(twin).run_baseline(snap_id, b)
+            violations = CheckRunner(twin).run_baseline(snap_id, b, uncollected=uncollected)
 
-            # Compute and persist drift from prior completed snapshot, if any.
-            prior_row = twin.conn.execute(
-                "SELECT id FROM snapshots "
-                "WHERE target = ? AND id != ? AND status = 'completed' "
-                "ORDER BY scan_started_at DESC LIMIT 1",
-                [target, snap_id],
-            ).fetchone()
-            if prior_row:
-                from vmware_harden.drift.diff import diff_snapshots
-                events = diff_snapshots(twin, prior_row[0], snap_id, persist=True)
-                if events:
-                    say(f"  Detected {len(events)} drift events from prior scan")
+            # Drift, per node type, against the most recent prior scan that
+            # collected that type — and a record of what could not be compared,
+            # so an empty drift list is never read as "nothing changed".
+            from vmware_harden.drift.diff import diff_since_prior, persist_events
+
+            events, scope = diff_since_prior(twin, snap_id)
+            persist_events(twin, snap_id, events)
+            twin.record_diff_scope(snap_id, scope.as_dict())
+            if events:
+                say(f"  Detected {len(events)} drift events from prior scans")
+            if scope.note:
+                say(f"  {scope.note}")
 
             twin.finish_snapshot(snap_id)
         except ModuleNotFoundError as e:

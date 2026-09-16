@@ -41,6 +41,12 @@ def show(
             return
         snap_id = latest["id"]
         standing = twin.snapshot_standing(latest)
+        # What this scan never looked at cannot appear as drift, in either
+        # direction — say it beside the events rather than let an empty list
+        # read as "nothing changed".
+        _, uncollected = twin.collection_record(snap_id)
+        uncollected_types = sorted({t for e in uncollected for t in e["node_types"]})
+        scope_note = (twin.diff_scope_record(snap_id) or {}).get("note")
         total = twin.conn.execute(
             "SELECT COUNT(*) FROM change_event WHERE snapshot_id = ?",
             [snap_id],
@@ -67,6 +73,18 @@ def show(
             typer.echo(_json.dumps(out, indent=2, ensure_ascii=False))
             if standing["note"]:
                 typer.echo(f"# {standing['headline']}. WARNING: {standing['note']}", err=True)
+            # The same two notes the text format prints: without them, an empty
+            # JSON list reads as "nothing changed anywhere" — the exact hole
+            # this release closes, left open on the machine-readable surface
+            # (independent review, 2026-09-16).
+            if scope_note:
+                typer.echo(f"# NOTE: {scope_note}", err=True)
+            if uncollected_types:
+                typer.echo(
+                    f"# NOTE: a collector failed, so "
+                    f"{', '.join(uncollected_types)} was not collected at all.",
+                    err=True,
+                )
             if truncated:
                 typer.echo(
                     f"# Showing {len(rows)} of {total} drift events "
@@ -77,6 +95,13 @@ def show(
             typer.echo(standing["headline"])
             if standing["note"]:
                 typer.echo(f"WARNING: {standing['note']}")
+            if scope_note:
+                typer.echo(f"NOTE: {scope_note}")
+            if uncollected_types:
+                typer.echo(
+                    f"NOTE: a collector failed, so "
+                    f"{', '.join(uncollected_types)} was not collected at all."
+                )
             if not rows:
                 typer.echo("No drift detected since previous snapshot.")
             else:
