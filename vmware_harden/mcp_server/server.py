@@ -195,10 +195,100 @@ def _environment_for(target: Optional[str]) -> str:
 set_environment_resolver(_environment_for, skill=skill_name(__name__))
 
 
+#: One sentence of what this surface is for, from this skill's own SKILL.md.
+_BASE_INSTRUCTIONS = (
+    "VMware compliance auditing and drift detection — read-only. Scan a vCenter "
+    "target against CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz "
+    "/ EU NIS2 / vSphere 9 STIG baselines, list violations and drift events, and "
+    "get remediation advice; execution goes through vmware-pilot."
+)
+
+_TARGET_RULE = (
+    " Choosing a target: the one tool that reaches a vCenter, `scan_target`, takes "
+    "`target` — a target name as configured in vmware-aiops, never a hostname or IP. "
+    "Choose it from what the user asked. A vcenter target scans every ESXi host it "
+    "manages; an esxi target scans only that host. If the request does not say "
+    "which, and the configured targets could answer differently, ask the user which "
+    "one before querying. The reading tools take no `target`: list_violations and "
+    "list_drift_events read the most recently completed snapshot, whichever target "
+    "produced it, so scan the target you mean before reading, and never present one "
+    "target's snapshot as another's. `scan_target`'s result names the `target` that "
+    "answered; say it in the answer."
+)
+
+#: Where the scan path really gets its targets and credentials.
+#:
+#: This skill has no config of its own: ``collectors/hosts.py`` and
+#: ``collectors/vms.py`` connect with ``vmware_aiops.connection.ConnectionManager
+#: .from_config()``, and ``doctor.py`` enumerates targets with
+#: ``vmware_aiops.config.load_config()``. Both read vmware-aiops'
+#: ``~/.vmware-aiops/config.yaml``, so that file is what a client has to be told
+#: about — naming a file this repo never opens is the whole point.
+_AIOPS_CONFIG = "~/.vmware-aiops/config.yaml"
+
+
+def _target_listing() -> str:
+    """The targets a scan can actually reach, as a client should be told about them.
+
+    Built at run time from the config the collectors themselves read, because a
+    hardcoded sentence drifts from the operator's file the day they edit it.
+    Imported lazily: vmware-aiops is an optional extra (``collectors``), so a
+    server installed without it must still start.
+
+    Never raises. When the listing cannot be produced it says so, rather than
+    implying the estate has no targets — "none configured" and "could not look"
+    send a model to different next steps (形态 #1).
+    """
+    try:
+        from vmware_aiops.config import load_config
+
+        targets = tuple(load_config().targets)
+    except Exception as exc:  # noqa: BLE001 — instructions are advisory, startup is not
+        # Only the exception's type: its text can carry a hostname or a
+        # certificate subject, and this string goes straight into a model's
+        # context. ``ImportError`` here means the collectors extra is not
+        # installed, which is a supported state, not a fault.
+        return (
+            f"Configured targets: not readable here ({type(exc).__name__}) — scans "
+            f"borrow vmware-aiops' connection manager and read its {_AIOPS_CONFIG} "
+            "(this skill has no target config of its own). Run `vmware-harden "
+            "doctor` to list them."
+        )
+    if not targets:
+        return (
+            f"Configured targets: none — {_AIOPS_CONFIG} declares no target, so "
+            "scan_target has nothing to reach. Run `vmware-aiops init`."
+        )
+    # Mirrors AppConfig.default_target: the first entry is the one a caller who
+    # omits a name gets, so it is the one worth marking.
+    default_name = targets[0].name
+    listed = "; ".join(
+        f"{t.name} ({t.type}, {t.host}"
+        f"{', default' if t.name == default_name else ''})"
+        for t in targets
+    )
+    return (
+        f"Configured targets: {listed} — read from vmware-aiops' {_AIOPS_CONFIG}, "
+        "which this skill's scans borrow."
+    )
+
+
+def _target_instructions() -> str:
+    """Server instructions that name the reachable targets and how to choose one.
+
+    ``initialize`` returns this text, and it is the only place a client learns
+    which targets exist. Without it the model calls tools with no target, takes
+    the default, and answers confidently about the wrong system — measured in
+    Monitor on 2026-09-15, where the default was a standalone ESXi host and "the
+    vCenter has 9 VMs" was read from that host.
+    """
+    return f"{_BASE_INSTRUCTIONS} {_target_listing()}{_TARGET_RULE}"
+
+
 def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMCP:
     """Construct and configure the MCP server."""
     t._DB_PATH = Path(os.path.expanduser(str(db_path)))
-    server = FastMCP("vmware-harden")
+    server = FastMCP("vmware-harden", instructions=_target_instructions())
 
     # FastMCP takes no version argument and leaves the lowlevel server's at
     # None, which makes `initialize` answer with the MCP SDK's version rather
