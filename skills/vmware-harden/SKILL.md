@@ -43,11 +43,11 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 ## Quick Install
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.11.0"
+uv tool install "vmware-harden[collectors]==1.11.1"
 vmware-harden baseline list
 ```
 
-The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.11.0` is enough to report on an existing twin DB.
+The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.11.1` is enough to report on an existing twin DB.
 
 For first-time use, ensure a vmware-aiops target is configured (harden uses aiops collectors) and optionally set `ANTHROPIC_API_KEY` for live remediation advice.
 
@@ -88,7 +88,7 @@ Use vmware-harden when the user needs to:
 
 ### 1. First-time scan with 等保 2.0 三级
 
-1. Install: `uv tool install "vmware-harden[collectors]==1.11.0"` (the extra carries the inventory collectors `scan` reads through)
+1. Install: `uv tool install "vmware-harden[collectors]==1.11.1"` (the extra carries the inventory collectors `scan` reads through)
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
@@ -137,7 +137,7 @@ Use vmware-harden when the user needs to:
 | Drift | `list_drift_events` | Recent drift events from snapshot diff |
 | Scan | `scan_target` | Trigger a scan against a target (read-only on the target) |
 
-All 8 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Actual remediation execution is intentionally **deferred to vmware-pilot** (approval-gated).
+All 8 tools are **read-only** with respect to vSphere/NSX. Writes to the local Twin DuckDB are scan-internal and do not modify any VMware resource. Harden never runs a remediation: the CLI-only `vmware-harden apply` saves a Suggestion as a **pending** vmware-pilot workflow and stops — nothing changes until someone runs it through pilot and approves its gate (see [references/cross-skill-workflows.md](./references/cross-skill-workflows.md)).
 
 **List results are enveloped.** `list_baselines`, `get_baseline_rules`, and `list_drift_events` return `{items, returned, limit, total, truncated, hint}` rather than a bare list, so completeness is stated rather than inferred — read the rows from `items`, and treat `truncated: true` as "there is more, raise `limit`". Because the twin is a local DuckDB, `total` is a real count, not an estimate: a page that exactly fills `limit` is still reported `truncated: false` when it is genuinely the whole set. `list_violations` keeps its own older `{violations, total, limit, offset, has_more}` envelope with the same guarantee.
 
@@ -200,7 +200,7 @@ Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in
 3. **Webhook data scope**: none. Harden makes **no outbound network calls** other than (a) optional Anthropic API requests when `ANTHROPIC_API_KEY` is set for advisor suggestions, and (b) the local web dashboard bound to `127.0.0.1` by default.
 4. **TLS verification**: harden does not connect to vCenter/NSX directly — TLS handling is delegated to vmware-aiops. The advisor's HTTPS calls to `api.anthropic.com` use system TLS verification (no opt-out).
 5. **Prompt injection protection**: advisor LLM context is built exclusively from typed Twin queries (rule id, severity, evidence dict) — no free-text user input is forwarded. Evidence text passes through `_sanitize()` (truncate ≤500 chars, strip C0/C1 control characters).
-6. **Least privilege**: all 8 MCP tools are read-only. Remediation execution is intentionally not exposed — agents that need to apply a fix must invoke **vmware-pilot**, which provides approval gates and audit logging.
+6. **Least privilege**: all 8 MCP tools are read-only, and no harden command changes a VMware system. The CLI-only `apply` hands a Suggestion to **vmware-pilot** as a pending workflow; execution happens only in pilot, after its approval gate, under the sibling skill's own gate and audit.
 
 All MCP operations are audited via the `@vmware_tool` decorator (vmware-policy dependency) to `~/.vmware/audit.db`. View with `vmware-audit log --last 20`.
 
