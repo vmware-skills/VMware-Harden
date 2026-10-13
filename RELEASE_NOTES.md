@@ -1,3 +1,17 @@
+## v1.11.1 — the docs say one thing about what `apply` does
+
+Docs only; no code change.
+
+* **The docs contradicted themselves about remediation.** SKILL.md said harden is read-only and remediation is "not
+  exposed", while `references/cross-skill-workflows.md` said `vmware-harden apply` makes pilot dispatch to aiops /
+  nsx-security and change the system. The code does neither: the CLI's `apply` saves the Suggestion as a **pending**
+  vmware-pilot workflow (with an approval-gate step) and stops. Nothing runs until someone drives it through pilot
+  (`run_workflow`, then `approve`), and each step then runs under the owning skill's own confirmation gate. Every
+  description of `apply` now says exactly that. Raised by ClawHub's review of 1.11.0.
+* **The workflow examples named two tools that do not exist** (`vmware_aiops.host_ntp_configure`,
+  `vmware-nsx-security.dfw_rule_delete`; the real one is `delete_dfw_rule`). They are now marked illustrative, and
+  the doc says pilot refuses a step whose tool its skill does not have.
+
 ## v1.11.0 — the MCP instructions name the configured targets
 
 `initialize` hands the client this server's `instructions`, and for a skill whose every tool takes a target that
