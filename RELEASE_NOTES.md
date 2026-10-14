@@ -1,3 +1,12 @@
+## v1.11.2 — installs alongside the 2.0 skills
+
+* The `collectors` extra admitted only `vmware-aiops` / `vmware-storage` `< 2.0`, so `vmware-harden[collectors]`
+  could not share an environment with the 2.0 releases, and an unpinned install silently pulled the 1.x skills (with
+  their pre-2.0 tool names) instead. The bounds are now `< 3.0`. Harden imports only their connection, config and
+  inventory layers, which 2.0 did not change; the full suite passes against vmware-aiops 2.0.0, vmware-storage 2.0.0
+  and vmware-monitor 2.0.0. `vmware-nsx-security` and `vmware-pilot` keep their bounds (no 2.0 exists). Found by the
+  2.0 integration review.
+
 ## v1.11.1 — the docs say one thing about what `apply` does
 
 Docs only; no code change.
