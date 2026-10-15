@@ -1,3 +1,10 @@
+## v1.12.0 — `mcp --expose` options; the account is the boundary
+
+`vmware-harden mcp` accepts the family's new `--expose` / `--allow-write` options (vmware-policy 1.20.0). This server has
+no write tools, so `--expose read` offers the same tools as the default; the options exist so every server in the
+family can be started the same way. `references/setup-guide.md` now says why the service account must itself be
+read-only: an agent with a shell can reach the platform without this skill. Requires `vmware-policy>=1.20.0`.
+
 ## v1.11.2 — installs alongside the 2.0 skills
 
 * The `collectors` extra admitted only `vmware-aiops` / `vmware-storage` `< 2.0`, so `vmware-harden[collectors]`
