@@ -509,14 +509,28 @@ def build_server(db_path: str | Path = "~/.vmware-harden/twin.duckdb") -> FastMC
 
 
     return server
-def main(expose: Optional[str] = None, allow_write: Optional[str] = None) -> None:
+def main(
+    expose: Optional[str] = None,
+    allow_write: Optional[str] = None,
+    transport: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    cert: Optional[str] = None,
+    key: Optional[str] = None,
+    public_name: Optional[str] = None,
+    token_file: Optional[str] = None,
+) -> None:
     """Entry point for `vmware-harden-mcp` (stdio transport)."""
     from vmware_harden.db_path import resolve_db_path
 
     server = build_server(resolve_db_path())
-    from vmware_policy.exposure import apply_or_exit
-    apply_or_exit(server, skill="harden", expose=expose, allow_write=allow_write)
-    server.run()
+    from vmware_policy.serve import run_server
+    run_server(
+        server,
+        skill="harden",
+        expose=expose, allow_write=allow_write, transport=transport, host=host, port=port,
+        cert=cert, key=key, public_name=public_name, token_file=token_file,
+    )
 
 
 if __name__ == "__main__":

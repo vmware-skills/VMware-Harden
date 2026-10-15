@@ -1,3 +1,22 @@
+## v1.13.0 — serve MCP over HTTPS
+
+`vmware-harden mcp` can now serve the network as well as stdio (HLD §16, via vmware-policy 1.21.0):
+
+```bash
+vmware-audit token create alice          # once per caller; shown once
+vmware-harden mcp --transport https --host 0.0.0.0 --port 8443 \
+    --cert server.pem --key server-key.pem --public-name mcp.example.com
+```
+
+* Every request needs `Authorization: Bearer <token>`; the server will not start without a token, refuses Host or
+  Origin values outside `--public-name`, and checks itself (unauthenticated requests must get 401) before it
+  binds. `--transport http` binds loopback only, for a TLS-terminating reverse proxy.
+* Audit rows record the caller as `token:<name>` and the surface as `mcp-https`. Calls naming different targets
+  run in parallel; calls naming no target run one at a time.
+* stdio remains the default; the `vmware-harden-mcp` console script and `python -m` are unchanged.
+* Everyone who can reach the endpoint acts with this server's account; run one endpoint per privilege level.
+* Requires `vmware-policy>=1.21.0` and `mcp>=1.28`.
+
 ## v1.12.0 — `mcp --expose` options; the account is the boundary
 
 `vmware-harden mcp` accepts the family's new `--expose` / `--allow-write` options (vmware-policy 1.20.0). This server has
