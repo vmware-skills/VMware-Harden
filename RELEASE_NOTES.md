@@ -1,3 +1,11 @@
+## v1.14.0 — roles for network callers (HLD §18)
+
+* Declares the role metadata vmware-policy ≥ 1.24.0 needs to apply **roles** to this server over HTTPS
+  (HLD §18): how a missing target resolves (through vmware-aiops' config, which scans borrow). With an older vmware-policy nothing changes. Once an operator runs
+  `vmware-audit roles enable`, a token's role decides which tools and targets it may use here; a refused call is
+  audited as `denied`. See vmware-policy's README, "Roles for network callers".
+* README and setup guide: one endpoint for several people or roles.
+
 ## v1.13.0 — serve MCP over HTTPS
 
 `vmware-harden mcp` can now serve the network as well as stdio (HLD §16, via vmware-policy 1.21.0):
