@@ -533,5 +533,8 @@ def main(
     )
 
 
+# Role metadata for network callers (HLD §18).
+import vmware_harden.policy_roles  # noqa: E402,F401
+
 if __name__ == "__main__":
     main()
