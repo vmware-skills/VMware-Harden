@@ -264,7 +264,7 @@ claude mcp add --transport http vmware-harden https://mcp.example.com:8443/mcp \
   所以多人共用一个 server 时请写明 target。
 - **能连到这个端点的人，都以该 server 配置的账号操作。** token 只用来识别调用者，不在平台上授予任何权限。
   每个权限级别单独起一个端点。
-- **一个端点给多人或多种角色用：** 给每个 token 指定角色（`vmware-audit token create 名字 --role reader`，或在 `roles.yaml` 里定义可用的工具和 target；需 vmware-policy ≥ 1.24.0）。角色只能限定这个 token 在本端点上能调用什么，不能超出账号本身的权限。详见 vmware-policy README 的「网络调用者的角色」一节。
+- **一个端点给多人或多种角色用：** 先运行一次 `vmware-audit roles enable`，再给每个 token 指定角色（`vmware-audit token create 名字 --role reader`，或在 `roles.yaml` 里定义可用的工具和 target；需 vmware-policy ≥ 1.24.0）。角色只能限定这个 token 在本端点上能调用什么，不能超出账号本身的权限。限定 target 的角色：`scan_target` 的 target 按 vmware-aiops 的配置检查；数据存储和 DFW 采集器会在 vmware-storage 和 vmware-nsx-security 的配置里查同一个名字，所以同一个名字在三份配置里必须指同一套系统。详见 vmware-policy README 的「网络调用者的角色」一节。
 
 **限制工具：**本 server 的工具全部只读，所以 `--expose read` 在这里不改变任何东西，它是为有写工具的 skill
 准备的。最小权限来自 server 使用的账号。
