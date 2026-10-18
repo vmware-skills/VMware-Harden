@@ -18,7 +18,12 @@ external ``--baseline custom.yaml`` that CI has never seen.
 
 from dataclasses import dataclass
 
-from vmware_harden.baselines.introspect import UnreadableRuleError, cited_attributes, node_type_of
+from vmware_harden.baselines.introspect import (
+    UnreadableRuleError,
+    cited_attributes,
+    cited_literals,
+    node_type_of,
+)
 from vmware_harden.baselines.model import Rule
 from vmware_harden.baselines.vocabulary import Status, lookup
 
@@ -53,6 +58,8 @@ def classify(rule: Rule) -> Evaluability:
     * an attribute absent from the vocabulary (typo, or an external baseline
       written against keys this build does not collect)
     * SQL whose node-type scope cannot be read at all
+    * a collected enum attribute compared against a value outside its declared
+      domain — the rule runs, can never match, and would pass every node
     """
     try:
         node_type = node_type_of(rule)
@@ -69,7 +76,22 @@ def classify(rule: Rule) -> Evaluability:
         elif entry.status is not Status.ACTIVE:
             pending.append(attr)
 
-    if not pending and not unknown:
+    impossible: list[str] = []
+    impossible_attrs: list[str] = []
+    for attr, literals in cited_literals(rule):
+        entry = lookup(node_type, attr)
+        if entry is None or entry.status is not Status.ACTIVE or not entry.value_domain:
+            continue
+        outside = [lit for lit in literals if lit not in entry.value_domain]
+        if outside:
+            impossible.append(
+                f"{node_type}.{attr} compared against {outside}, which it never holds "
+                f"(values: {list(entry.value_domain)})"
+            )
+            if attr not in impossible_attrs:
+                impossible_attrs.append(attr)
+
+    if not pending and not unknown and not impossible:
         return Evaluability(True, node_type=node_type, attributes=tuple(attrs))
 
     # Name the attributes and nothing else. Why an unevaluated rule is not a
@@ -85,10 +107,11 @@ def classify(rule: Rule) -> Evaluability:
             f"{', '.join(f'{node_type}.{a}' for a in unknown)} "
             f"not declared in vocabulary.py"
         )
+    parts.extend(impossible)
     return Evaluability(
         False,
         "; ".join(parts),
-        tuple(pending + unknown),
+        tuple(pending + unknown + [a for a in impossible_attrs if a not in pending + unknown]),
         node_type=node_type,
         attributes=tuple(attrs),
     )

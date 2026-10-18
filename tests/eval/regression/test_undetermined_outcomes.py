@@ -473,3 +473,32 @@ def test_sql_that_will_not_parse_is_refused_not_waved_through():
     assert not verdict.evaluable
     assert "could not be parsed" in verdict.reason
 
+
+@pytest.mark.unit
+def test_a_collected_attribute_compared_against_a_value_it_never_holds_is_undetermined():
+    """The value-domain layer, at runtime, for baselines CI never sees.
+
+    ``lockdown_mode`` became collectable on 2026-10-18 and the API spells the
+    value ``lockdownDisabled``. An external ``--baseline`` written against the
+    invented ``'disabled'`` used to be undetermined because nothing collected
+    the attribute; once something does, the rule runs, can never match, and
+    reports every host compliant. It must stay undetermined, and say why.
+    """
+    verdict = classify(_rule(
+        "custom",
+        "SELECT id, name FROM nodes WHERE type = 'host' "
+        "AND json_extract_string(attrs, '$.lockdown_mode') = 'disabled'",
+    ))
+    assert not verdict.evaluable
+    assert "lockdown_mode" in verdict.reason and "lockdownDisabled" in verdict.reason
+    assert verdict.blocking_attributes == ("lockdown_mode",)
+
+
+@pytest.mark.unit
+def test_the_same_rule_with_the_real_value_is_evaluable():
+    verdict = classify(_rule(
+        "custom",
+        "SELECT id, name FROM nodes WHERE type = 'host' AND "
+        "json_extract_string(attrs, '$.lockdown_mode') NOT IN ('lockdownNormal', 'lockdownStrict')",
+    ))
+    assert verdict.evaluable, verdict.reason
