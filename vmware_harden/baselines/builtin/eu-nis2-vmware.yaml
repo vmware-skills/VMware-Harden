@@ -267,10 +267,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.ad_joined') IS NULL
-            OR json_extract_string(attrs, '$.ad_joined') != 'true'
-          )
+          AND json_extract_string(attrs, '$.ad_joined') != 'true'
     remediation:
       summary: "Join ESXi hosts to AD or configure LDAP/SSO identity source"
       manual_steps: "vCenter → Host → Configure → Authentication → Join Domain"
@@ -320,10 +317,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.secure_boot_enabled') IS NULL
-            OR json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
-          )
+          AND json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
     remediation:
       summary: "Enable UEFI Secure Boot in BIOS and use signed ESXi image profiles"
       manual_steps: "Server BIOS → Secure Boot = Enabled; vCenter LCM → Image with VMware-signed profile"

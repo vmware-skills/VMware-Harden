@@ -61,11 +61,11 @@ def test_rule_reading_a_pending_attribute_is_undetermined():
     verdict = classify(_rule(
         "pending",
         "SELECT id, name FROM nodes WHERE type = 'host' "
-        "AND json_extract_string(attrs, '$.lockdown_mode') = 'disabled'",
+        "AND json_extract_string(attrs, '$.patch_status') != 'current'",
     ))
     assert not verdict.evaluable
-    assert "lockdown_mode" in verdict.reason
-    assert verdict.blocking_attributes == ("lockdown_mode",)
+    assert "patch_status" in verdict.reason
+    assert verdict.blocking_attributes == ("patch_status",)
 
 
 @pytest.mark.unit
@@ -197,8 +197,9 @@ def test_builtin_cis_scan_reports_most_rules_undetermined(tmp_path: Path):
         [snap_id],
     ).fetchall())
     # 4/16 before the service/time/firewall collector landed. Six attributes
-    # became collectable and took four more rules with them.
-    assert counts == {"evaluated": 8, "undetermined": 12}
+    # became collectable and took four more rules with them. 8/12 -> 14/6 with
+    # collector batches B1-B3/B5 (2026-10-18).
+    assert counts == {"evaluated": 14, "undetermined": 6}
     assert sum(counts.values()) == 20, "every rule must land in exactly one bucket"
     twin.close()
 
@@ -471,3 +472,4 @@ def test_sql_that_will_not_parse_is_refused_not_waved_through():
     ))
     assert not verdict.evaluable
     assert "could not be parsed" in verdict.reason
+

@@ -18,7 +18,7 @@ def _full_compliant_host(host_id: str, ntp: bool) -> dict:
         "id": host_id, "name": f"esx-{host_id}",
         "ntp_enabled": ntp, "build": 99999999,
         "ntp_servers": [], "ntp_service_policy": "on",
-        "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
+        "lockdown_mode": "lockdownNormal", "syslog_remote_host": "syslog.lab",
         "persistent_logs": True, "audit_retention_days": 90,
         "mgmt_vmk_isolated": True, "vswitch_promiscuous_mode": "reject",
         "forged_transmits": "reject", "firewall_enabled": True,

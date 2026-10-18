@@ -56,7 +56,7 @@ _HOSTS = [
         "ntp_enabled": True,
         "ntp_servers": ["10.0.0.1"],
         "ntp_service_policy": "on",
-        "lockdown_mode": "normal",
+        "lockdown_mode": "lockdownNormal",
         "syslog_remote_host": "syslog.lab",
         "persistent_logs": True,
         "audit_retention_days": 90,

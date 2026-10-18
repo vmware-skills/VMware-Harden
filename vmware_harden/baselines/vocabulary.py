@@ -38,6 +38,12 @@ from vmware_harden.collectors.dfw import (
     PRODUCIBLE_DFW_RULE_ATTRS,
     PRODUCIBLE_DFW_SECTION_ATTRS,
 )
+from vmware_harden.collectors.host_security import (
+    ACCEPTANCE_LEVELS,
+    LOCKDOWN_MODES,
+    TLS_VERSIONS,
+    VSWITCH_POLICY_VALUES,
+)
 from vmware_harden.collectors.hosts import PRODUCIBLE_HOST_ATTRS
 from vmware_harden.collectors.vms import PRODUCIBLE_VM_ATTRS
 
@@ -99,6 +105,7 @@ def _a(
     source: str,
     value_domain: tuple[str, ...] = (),
     probe_values: tuple[str, ...] = (),
+    aliases: tuple[str, ...] = (),
 ) -> Attribute:
     """Declare an ACTIVE attribute, asserting the collector really produces it.
 
@@ -118,6 +125,7 @@ def _a(
         source=source,
         value_domain=value_domain,
         probe_values=probe_values,
+        aliases=aliases,
     )
 
 
@@ -200,17 +208,21 @@ _ENTRIES: tuple[Attribute, ...] = (
        "HostSystem.runtime.connectionState",
        probe_values=("connected", "disconnected", "notResponding")),
 
-    # --- host: PENDING — access control --------------------------------------
-    # value_domain omitted on purpose: the collector is unwritten, so whether it
-    # stores the pyVmomi enum (lockdownNormal) or a normalised form is undecided.
-    _p("host", "lockdown_mode", "锁定模式（字符串枚举）",
-       "HostSystem.config.lockdownMode"),
-    _p("host", "lockdown_mode_enabled", "锁定模式是否启用（布尔写法）",
-       "HostSystem.config.lockdownMode，判非 disabled"),
-    _p("host", "lockdown_exceptions_count", "锁定模式例外账号数（数值）",
-       "HostAccessManager.QueryLockdownExceptions"),
-    _p("host", "ad_joined", "是否加入 AD 域",
-       "HostSystem.config.authenticationManagerInfo → domainMembershipStatus"),
+    # --- host: ACTIVE — access control (B1/B5, live-verified 2026-10-18) ------
+    # Stored in the API's own enum form; vCenter 8.0.3 and ESXi 8.0.3 both
+    # return 'lockdownDisabled' here.
+    _a("host", _HOST, "lockdown_mode", "锁定模式（API 枚举原样）",
+       "HostSystem.config.lockdownMode",
+       value_domain=LOCKDOWN_MODES),
+    _a("host", _HOST, "lockdown_mode_enabled", "锁定模式是否启用（布尔写法）",
+       "HostSystem.config.lockdownMode != lockdownDisabled",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "lockdown_exceptions_count", "锁定模式例外账号数（数值）",
+       "HostAccessManager.QueryLockdownExceptions()（只读查询，每主机一次）",
+       probe_values=("0", "1", "2")),
+    _a("host", _HOST, "ad_joined", "是否加入 AD 域",
+       "HostSystem.config.authenticationManagerInfo.authConfig[ActiveDirectoryInfo].joinedDomain",
+       value_domain=("true", "false")),
     _p("host", "named_admin_accounts", "具名管理员账号数/列表",
        "HostLocalAccountManager + HostAuthorizationManager（待核实）"),
     _p("host", "shared_root_in_use", "是否在共用 root 账号",
@@ -241,36 +253,44 @@ _ENTRIES: tuple[Attribute, ...] = (
        value_domain=("true", "false")),
     _a("host", _HOST, "ntp_servers", "已配置的 NTP 服务器列表",
        "HostSystem.config.dateTimeInfo.ntpConfig.server"),
-    _p("host", "persistent_logs", "日志是否落到持久存储",
-       f"{_ADV} Syslog.global.logDir（判非 scratch）"),
+    _a("host", _HOST, "persistent_logs", "日志是否落到持久存储",
+       f"{_ADV} Syslog.global.logDir + ScratchConfig.CurrentScratchLocation",
+       value_domain=("true", "false")),
+    # Not collectable as written: ESXi bounds audit records by size
+    # (Syslog.global.auditRecord.storageCapacity, MiB) and has no retention-days
+    # setting. The four rules reading this need re-specifying, not a collector.
     _p("host", "audit_retention_days", "审计记录保留天数",
-       f"{_ADV} Syslog.global.auditRecord.storageCapacity（待核实）",
+       "ESXi 无「天数」配置——只有 Syslog.global.auditRecord.storageEnable/"
+       "storageCapacity(MiB)，规则需重新定义（2026-10-18 真机核实）",
        aliases=("audit_log_retention_days",)),
     _p("host", "audit_log_retention_days", "同 audit_retention_days（别名写法）",
        "见 audit_retention_days"),
 
     # --- host: PENDING — platform integrity ----------------------------------
-    _p("host", "secure_boot_enabled", "主机 UEFI Secure Boot 是否启用",
-       "HostSystem.capability / runtime bootDeviceInfo（待核实）",
-       aliases=("host_secure_boot",)),
-    _p("host", "host_secure_boot", "同 secure_boot_enabled（别名写法）",
-       "见 secure_boot_enabled"),
-    _p("host", "host_tpm_attested", "TPM 证明是否通过",
-       "HostSystem.runtime.tpmPcrValues / attestation（待核实）"),
-    # value_domain omitted: the API form (community) and the esxcli form
-    # (CommunitySupported) differ; which lands in attrs is the collector's call.
-    _p("host", "image_profile_acceptance", "镜像 profile 接受级别",
-       "HostImageConfigManager.HostImageConfigGetAcceptance",
-       aliases=("vib_acceptance",)),
-    _p("host", "vib_acceptance", "同 image_profile_acceptance（别名写法）",
-       "见 image_profile_acceptance"),
-    _p("host", "nx_enabled", "NX/XD 位是否启用", "HostSystem.capability（待核实）"),
+    # DISA's ESXi 8.0 STIG (V-258741) reads this same property as "Secure Boot
+    # enabled".
+    _a("host", _HOST, "secure_boot_enabled", "主机 UEFI Secure Boot 是否启用",
+       "HostSystem.capability.uefiSecureBoot",
+       value_domain=("true", "false"), aliases=("host_secure_boot",)),
+    _a("host", _HOST, "host_tpm_attested", "TPM 证明是否通过（仅 vCenter 有）",
+       "HostSystem.summary.tpmAttestation.status（accepted/notAccepted）",
+       value_domain=("true", "false")),
+    # The API form, not the esxcli 'CommunitySupported' spelling.
+    _a("host", _HOST, "image_profile_acceptance", "镜像 profile 接受级别（API 枚举）",
+       "HostImageConfigManager.HostImageConfigGetAcceptance()（只读查询，每主机一次）",
+       value_domain=ACCEPTANCE_LEVELS, aliases=("vib_acceptance",)),
+    _a("host", _HOST, "nx_enabled", "CPU NX/XD 位是否对 ESXi 可见",
+       "HostSystem.config.featureCapability[cpuid.nx]",
+       value_domain=("true", "false")),
     _p("host", "patch_status", "补丁合规状态",
        "vLCM software/compliance（见 BACKLOG [S-5]）"),
 
     # --- host: PENDING — crypto ----------------------------------------------
-    _p("host", "tls_min_version", "最低 TLS 版本",
-       f"{_ADV} UserVars.ESXiVPsDisabledProtocols 反推（待核实）"),
+    # Checked against the wire 2026-10-18: with 'sslv3,tlsv1,tlsv1.1' disabled,
+    # port 443 refused TLS 1.0 and 1.1 handshakes and accepted 1.2.
+    _a("host", _HOST, "tls_min_version", "最低 TLS 版本",
+       f"{_ADV} UserVars.ESXiVPsDisabledProtocols 反推",
+       value_domain=TLS_VERSIONS),
     _p("host", "encrypted_vmotion", "vMotion 加密设置",
        "HostSystem.config.vmotion / VM 级 migrateEncryption（待核实）",
        aliases=("vmotion_encryption",)),
@@ -286,14 +306,21 @@ _ENTRIES: tuple[Attribute, ...] = (
     _p("host", "mgmt_vmk_isolated", "管理 vmk 是否与业务网隔离",
        "HostSystem.config.network.vnic + portgroup VLAN"),
     _p("host", "mgmt_isolated", "管理网是否隔离（另一写法）", "见 mgmt_vmk_isolated"),
-    _p("host", "mgmt_vlan_tagged", "管理网是否打了 VLAN tag",
-       "HostSystem.config.network.portgroup.spec.vlanId"),
-    _p("host", "vswitch_promiscuous_mode", "标准 vSwitch 混杂模式",
-       f"{_VSW}.allowPromiscuous"),
-    _p("host", "forged_transmits", "标准 vSwitch 伪造发送", f"{_VSW}.forgedTransmits"),
-    _p("host", "mac_address_changes", "标准 vSwitch MAC 变更", f"{_VSW}.macChanges"),
-    _p("host", "standard_vswitch_count", "标准 vSwitch 数量",
-       "len(HostSystem.config.network.vswitch)"),
+    _a("host", _HOST, "mgmt_vlan_tagged", "管理 vmk 所在标准端口组是否打了 VLAN tag",
+       "config.virtualNicManagerInfo[management] → config.network.portgroup.spec.vlanId",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "vswitch_promiscuous_mode", "标准 vSwitch 混杂模式（含端口组生效策略）",
+       f"{_VSW}.allowPromiscuous + portgroup.computedPolicy",
+       value_domain=VSWITCH_POLICY_VALUES),
+    _a("host", _HOST, "forged_transmits", "标准 vSwitch 伪造发送（含端口组生效策略）",
+       f"{_VSW}.forgedTransmits + portgroup.computedPolicy",
+       value_domain=VSWITCH_POLICY_VALUES),
+    _a("host", _HOST, "mac_address_changes", "标准 vSwitch MAC 变更（含端口组生效策略）",
+       f"{_VSW}.macChanges + portgroup.computedPolicy",
+       value_domain=VSWITCH_POLICY_VALUES),
+    _a("host", _HOST, "standard_vswitch_count", "标准 vSwitch 数量",
+       "len(HostSystem.config.network.vswitch)",
+       probe_values=("0", "1", "2")),
     _a("host", _HOST, "firewall_enabled", "ESXi 防火墙默认策略是否启用",
        "HostSystem.config.firewall.defaultPolicy（incomingBlocked）",
        value_domain=("true", "false")),
@@ -309,10 +336,12 @@ _ENTRIES: tuple[Attribute, ...] = (
        "guest.toolsRunningStatus",
        value_domain=("guestToolsRunning", "guestToolsNotRunning",
                      "guestToolsExecutingScripts", "N/A")),
-    _p("vm", "secure_boot", "VM EFI Secure Boot（VM 级，区别于 host）",
-       "VirtualMachine.config.bootOptions.efiSecureBootEnabled"),
-    _p("vm", "hw_version_int", "VM 硬件版本号（数值）",
-       "VirtualMachine.config.version 去掉 vmx- 前缀"),
+    _a("vm", _VM, "secure_boot", "VM EFI Secure Boot（VM 级，区别于 host；BIOS 固件为 false）",
+       "VirtualMachine.config.bootOptions.efiSecureBootEnabled",
+       value_domain=("true", "false")),
+    _a("vm", _VM, "hw_version_int", "VM 硬件版本号（数值）",
+       "VirtualMachine.config.version 去掉 vmx- 前缀",
+       probe_values=("11", "15", "19", "21")),
     _p("vm", "isolation_copy_disabled", "是否禁用复制粘贴",
        "config.extraConfig isolation.tools.copy.disable"),
     _p("vm", "encryption_enabled", "VM 是否加密",

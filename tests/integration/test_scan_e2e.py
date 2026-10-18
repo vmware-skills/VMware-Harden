@@ -19,7 +19,7 @@ HOSTS = [
         "ntp_enabled": True,
         "ntp_servers": ["10.0.0.1"],
         "ntp_service_policy": "on",
-        "lockdown_mode": "normal",
+        "lockdown_mode": "lockdownNormal",
         "syslog_remote_host": "syslog.lab",
         "persistent_logs": True,
         "audit_retention_days": 90,
@@ -46,7 +46,7 @@ HOSTS = [
         "ntp_enabled": False,          # → cis-esxi-2.1.1
         "ntp_servers": [],
         "ntp_service_policy": "on",
-        "lockdown_mode": "normal",
+        "lockdown_mode": "lockdownNormal",
         "syslog_remote_host": "syslog.lab",
         "persistent_logs": True,
         "audit_retention_days": 90,
@@ -132,8 +132,9 @@ def test_scan_then_report_json(tmp_path: Path, capsys):
     # moved from PENDING to ACTIVE and took their rules with them. The numbers
     # are pinned rather than computed so that a future change to coverage is a
     # deliberate edit here, not a silent drift — in either direction.
-    assert payload["coverage"]["evaluated"] == 8
-    assert payload["coverage"]["undetermined"] == 12
+    # 8 -> 14 with collector batches B1-B3/B5 (2026-10-18).
+    assert payload["coverage"]["evaluated"] == 14
+    assert payload["coverage"]["undetermined"] == 6
     assert (
         payload["coverage"]["evaluated"] + payload["coverage"]["undetermined"] == 20
     ), "coverage must account for every rule in the baseline"
@@ -215,7 +216,7 @@ def test_scan_dispatches_multiple_collectors_for_dengbao(tmp_path: Path, capsys)
     one_host = [
         {"id": "h-1", "name": "esx", "ntp_enabled": True, "esxi_build": 99999999,
          "ntp_servers": ["10.0.0.1"], "ntp_service_policy": "on",
-         "lockdown_mode": "normal", "syslog_remote_host": "syslog.lab",
+         "lockdown_mode": "lockdownNormal", "syslog_remote_host": "syslog.lab",
          "persistent_logs": True, "audit_retention_days": 200,
          "mgmt_vmk_isolated": True, "vswitch_promiscuous_mode": "reject",
          "forged_transmits": "reject", "firewall_enabled": True,
@@ -224,7 +225,7 @@ def test_scan_dispatches_multiple_collectors_for_dengbao(tmp_path: Path, capsys)
          "vsan_enabled": False, "vsan_encryption_enabled": False,
          "encrypted_vmotion": "required", "dcui_timeout_seconds": 600,
          "shell_timeout_seconds": 900, "console_keyboard": "US Default",
-         "host_secure_boot": True, "host_tpm_attested": True,
+         "secure_boot_enabled": True, "host_tpm_attested": True,
          "tls_min_version": "1.2"},
     ]
     one_vm = [

@@ -32,7 +32,7 @@ def _full_compliant_host(host_id: str, compliant: bool) -> dict:
         "id": host_id, "name": f"esx-{host_id}",
         "esxi_build": 99999999,
         "ntp_servers": [], "ntp_service_policy": "on",
-        "lockdown_mode": "normal",
+        "lockdown_mode": "lockdownNormal",
         "syslog_remote_host": "syslog.lab" if compliant else "",
         "persistent_logs": True, "audit_retention_days": 90,
         "mgmt_vmk_isolated": True, "vswitch_promiscuous_mode": "reject",

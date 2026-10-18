@@ -85,7 +85,7 @@ def test_custom_baseline_import_then_scan(tmp_path: Path, monkeypatch, capsys):
             "id": "host-bad", "name": "esx-bad",
             "esxi_build": 99999999,
             "ntp_servers": [], "ntp_service_policy": "on",
-            "lockdown_mode": "normal",
+            "lockdown_mode": "lockdownNormal",
             "syslog_remote_host": "",    # triggers the stricter syslog rule
             "persistent_logs": True, "audit_retention_days": 90,
             "mgmt_vmk_isolated": True,

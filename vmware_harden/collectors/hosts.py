@@ -1,6 +1,12 @@
 """Host inventory collector. Pulls ESXi host data via vmware-aiops."""
 from vmware_harden.checks.nodescope import MEASURED_ATTR
 from vmware_harden.collectors.base import Collector
+from vmware_harden.collectors.host_security import (
+    HOST_SECURITY_PATHS,
+    PRODUCIBLE_SECURITY_ATTRS,
+    queried_attrs,
+    security_attrs,
+)
 
 #: ESXi advanced-setting name -> the snake_case ``nodes.attrs`` key the STIG
 #: baseline SQL reads. Single source of truth for what the host collector can
@@ -53,14 +59,16 @@ _BASE_HOST_ATTRS: frozenset[str] = frozenset(
 )
 
 #: Every ``nodes.attrs`` key the host collector can populate = base inventory +
-#: the STIG advanced settings + the service/time/firewall facts + the stamped
-#: ``id``. The parity regression asserts no builtin baseline SQL reads a host key
+#: the STIG advanced settings + the service/time/firewall facts + the security
+#: facts of :mod:`~vmware_harden.collectors.host_security` + the stamped ``id``.
+#: The parity regression asserts no builtin baseline SQL reads a host key
 #: outside this set — and, read the other way, this set is what the "could not be
 #: evaluated" report subtracts from, so growing it is how that report shrinks.
 PRODUCIBLE_HOST_ATTRS: frozenset[str] = (
     _BASE_HOST_ATTRS
     | frozenset(STIG_ADVANCED_SETTING_ATTRS.values())
     | _SERVICE_TIME_ATTRS
+    | PRODUCIBLE_SECURITY_ATTRS
     | {"id"}
 )
 
@@ -176,6 +184,7 @@ def _fetch_advanced_settings(si: object) -> dict[str, dict]:
         "config.service",
         "config.dateTimeInfo",
         "config.firewall",
+        *HOST_SECURITY_PATHS,
     ]
     settings: dict[str, dict] = {}
     for _obj, props in _collect(si, [vim.HostSystem], paths):
@@ -183,6 +192,8 @@ def _fetch_advanced_settings(si: object) -> dict[str, dict]:
         settings[name] = {
             **_advanced_settings_to_attrs(props.get("config.option")),
             **_service_and_time_attrs(props),
+            **security_attrs(props),
+            **queried_attrs(props),
         }
     return settings
 

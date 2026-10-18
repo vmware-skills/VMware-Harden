@@ -155,10 +155,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.ad_joined') IS NULL
-            OR json_extract_string(attrs, '$.ad_joined') != 'true'
-          )
+          AND json_extract_string(attrs, '$.ad_joined') != 'true'
     remediation:
       summary: "Join ESXi hosts to Active Directory domain"
       manual_steps: "vCenter → Host → Configure → Authentication Services → Join Domain"
@@ -207,10 +204,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.lockdown_mode') IS NULL
-            OR json_extract_string(attrs, '$.lockdown_mode') = 'disabled'
-          )
+          AND json_extract_string(attrs, '$.lockdown_mode') = 'lockdownDisabled'
     remediation:
       summary: "Enable lockdown mode (normal or strict) on each ESXi host"
       manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Edit → Normal"

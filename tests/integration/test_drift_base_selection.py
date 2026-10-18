@@ -34,7 +34,7 @@ HOSTS = [
         "ntp_servers": ["10.0.0.1"],
         "ntp_service_policy": "on",
         "syslog_remote_host": "",
-        "lockdown_mode": "normal",
+        "lockdown_mode": "lockdownNormal",
     }
 ]
 VM_1 = {"id": "vm-1", "name": "test-llm"}

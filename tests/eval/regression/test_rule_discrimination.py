@@ -175,9 +175,10 @@ def test_the_probe_covers_every_runnable_rule(probe_results):
     assert probe_results, "no evaluable rules were probed"
     # 29 -> 38 when the service/time/firewall collector landed: six host
     # attributes became collectable and nine rules across the builtin baselines
-    # went from unevaluatable to judged.
-    assert len(probe_results) == 38, (
-        f"expected 38 evaluable builtin rules, probed {len(probe_results)} — "
+    # went from unevaluatable to judged. 38 -> 71 with batches B1-B3/B5 and the
+    # VM secure-boot/hardware-version facts (2026-10-18): 33 more rules.
+    assert len(probe_results) == 71, (
+        f"expected 71 evaluable builtin rules, probed {len(probe_results)} — "
         "update this count deliberately when a collector batch lands"
     )
 

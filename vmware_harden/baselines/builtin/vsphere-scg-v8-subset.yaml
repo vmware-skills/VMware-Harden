@@ -37,7 +37,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND TRY_CAST(json_extract(attrs, '$.host_secure_boot') AS BOOLEAN) = false
+          AND TRY_CAST(json_extract(attrs, '$.secure_boot_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable UEFI Secure Boot on host"
       manual_steps: "BIOS/UEFI → Secure Boot → Enable；reboot ESXi"
@@ -75,7 +75,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND json_extract_string(attrs, '$.vib_acceptance') = 'community'
+          AND json_extract_string(attrs, '$.image_profile_acceptance') = 'community'
     remediation:
       summary: "Tighten VIB acceptance level on the host"
       manual_steps: "esxcli software acceptance set --level=PartnerSupported"

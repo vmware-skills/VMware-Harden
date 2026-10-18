@@ -23,10 +23,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.image_profile_acceptance') IS NULL
-            OR json_extract_string(attrs, '$.image_profile_acceptance') NOT IN ('VMwareCertified', 'VMwareAccepted')
-          )
+          AND json_extract_string(attrs, '$.image_profile_acceptance') NOT IN ('vmware_certified', 'vmware_accepted')
     remediation:
       summary: "Set host image acceptance level to VMwareAccepted or higher"
       manual_steps: "esxcli software acceptance set --level=VMwareAccepted"
@@ -48,10 +45,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.nx_enabled') IS NULL
-            OR json_extract_string(attrs, '$.nx_enabled') != 'true'
-          )
+          AND json_extract_string(attrs, '$.nx_enabled') != 'true'
     remediation:
       summary: "Enable NX/XD bit in BIOS"
       manual_steps: "Server BIOS → Processor → Execute Disable Bit = Enabled"
@@ -73,7 +67,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND json_extract_string(attrs, '$.image_profile_acceptance') = 'CommunitySupported'
+          AND json_extract_string(attrs, '$.image_profile_acceptance') = 'community'
     remediation:
       summary: "Replace CommunitySupported VIBs with vendor-signed alternatives"
       manual_steps: "esxcli software vib list | grep -i community → remove and replace"
@@ -98,10 +92,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.lockdown_mode') IS NULL
-            OR json_extract_string(attrs, '$.lockdown_mode') = 'disabled'
-          )
+          AND json_extract_string(attrs, '$.lockdown_mode') = 'lockdownDisabled'
     remediation:
       summary: "Lockdown-Modus auf 'normal' oder 'strict' setzen"
       manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode → Normal"
@@ -145,10 +136,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.ad_joined') IS NULL
-            OR json_extract_string(attrs, '$.ad_joined') != 'true'
-          )
+          AND json_extract_string(attrs, '$.ad_joined') != 'true'
     remediation:
       summary: "ESXi-Hosts an Active Directory binden"
       manual_steps: "vCenter → Host → Configure → Authentication → Join Domain"
@@ -245,10 +233,7 @@ rules:
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.secure_boot_enabled') IS NULL
-            OR json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
-          )
+          AND json_extract_string(attrs, '$.secure_boot_enabled') != 'true'
     remediation:
       summary: "UEFI Secure Boot im BIOS aktivieren"
       manual_steps: "Server BIOS → Boot → Secure Boot = Enabled; ESXi mit signiertem Image-Profil starten"

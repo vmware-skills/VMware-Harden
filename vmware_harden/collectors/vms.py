@@ -18,8 +18,60 @@ PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
         "uuid",
         "tools_status",
         "id",
+        "secure_boot",
+        "hw_version_int",
     }
 )
+
+#: Properties read for the per-VM security facts, in one batched pass.
+_VM_SECURITY_PATHS: tuple[str, ...] = (
+    "config.uuid", "config.bootOptions", "config.version", "runtime.connectionState",
+)
+
+
+def _vm_security_attrs(props: dict) -> dict:
+    """Reduce one VM's batched properties to ``secure_boot`` / ``hw_version_int``.
+
+    ``efiSecureBootEnabled`` is reported ``False`` for a BIOS-firmware VM, which
+    is the truth: such a VM cannot secure-boot. An unreadable ``bootOptions``
+    leaves the key absent. ``config.version`` is ``vmx-NN``; anything else is not
+    parsed into a number.
+
+    A VM vCenter does not report as ``connected`` (its host is unreachable, or
+    the VM is orphaned/inaccessible) yields nothing: what vCenter answers for it
+    is a cached copy, not a reading.
+    """
+    if props.get("runtime.connectionState") != "connected":
+        return {}
+    attrs: dict = {}
+    secure_boot = getattr(props.get("config.bootOptions"), "efiSecureBootEnabled", None)
+    if isinstance(secure_boot, bool):
+        attrs["secure_boot"] = secure_boot
+    version = props.get("config.version")
+    if isinstance(version, str) and version.startswith("vmx-") and version[4:].isdigit():
+        attrs["hw_version_int"] = int(version[4:])
+    return attrs
+
+
+def _fetch_vm_security(si: object) -> dict[str, dict]:
+    """Security facts per ``config.uuid`` for every VM. REAL-HARDWARE-GATED.
+
+    A ``config.uuid`` shared by two VMs (a copied VM keeps it) is dropped: the
+    facts could belong to either, and attaching them to the wrong one is a
+    finding nobody measured.
+    """
+    from vmware_aiops.ops.inventory import _collect, vim
+
+    by_uuid: dict[str, dict] = {}
+    seen_twice: set[str] = set()
+    for _obj, props in _collect(si, [vim.VirtualMachine], list(_VM_SECURITY_PATHS)):
+        uuid = props.get("config.uuid")
+        if not uuid:
+            continue
+        if uuid in by_uuid:
+            seen_twice.add(uuid)
+        by_uuid[uuid] = _vm_security_attrs(props)
+    return {u: a for u, a in by_uuid.items() if u not in seen_twice}
 
 
 def _fetch_vms(target: str) -> list[dict]:
@@ -37,12 +89,16 @@ def _fetch_vms(target: str) -> list[dict]:
     try:
         si = mgr.connect(target)
         envelope = list_vms(si, compact_threshold=10**9)
+        security = _fetch_vm_security(si)
     finally:
         mgr.disconnect_all()
-    return [_shape_vm(vm) for vm in envelope.get("vms", [])]
+    return [
+        _shape_vm(vm, security.get(vm.get("uuid", ""), {}))
+        for vm in envelope.get("vms", [])
+    ]
 
 
-def _shape_vm(vm: dict) -> dict:
+def _shape_vm(vm: dict, security: dict | None = None) -> dict:
     """Stamp a VM record with a stable ``id``.
 
     ``config.uuid`` is the stable identity; a VM that reports none ("N/A")
@@ -51,7 +107,7 @@ def _shape_vm(vm: dict) -> dict:
     """
     uuid = vm.get("uuid")
     vm_id = uuid if uuid and uuid != "N/A" else vm.get("name", "")
-    return {**vm, "id": vm_id}
+    return {**vm, **(security or {}), "id": vm_id}
 
 
 class VMCollector(Collector):

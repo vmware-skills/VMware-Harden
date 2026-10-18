@@ -117,7 +117,13 @@ def test_value_domains_are_declared_where_they_are_relied_on():
     """
     from vmware_harden.baselines.vocabulary import VOCABULARY
 
-    must_have_domain = {("dfw_rule", "action"), ("vm", "tools_status")}
+    must_have_domain = {
+        ("dfw_rule", "action"), ("vm", "tools_status"),
+        # enum-valued host facts whose rules compare literals (B1-B3, 2026-10-18)
+        ("host", "lockdown_mode"), ("host", "image_profile_acceptance"),
+        ("host", "tls_min_version"), ("host", "vswitch_promiscuous_mode"),
+        ("host", "forged_transmits"), ("host", "mac_address_changes"),
+    }
     missing = {
         key for key in must_have_domain
         if not (VOCABULARY.get(key) and VOCABULARY[key].value_domain)
