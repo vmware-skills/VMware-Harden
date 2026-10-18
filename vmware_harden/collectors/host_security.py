@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 HOST_SECURITY_PATHS: tuple[str, ...] = (
     "runtime.connectionState",
     "config.lockdownMode",
+    "config.product.version",
     "capability.uefiSecureBoot",
     "summary.tpmAttestation",
     "config.authenticationManagerInfo",
@@ -138,7 +139,21 @@ def _persistent_logs(options: dict[str, object]) -> dict:
     return {}
 
 
-def _tls_min_version(options: dict[str, object]) -> dict:
+def _major_version(version: object) -> int | None:
+    head = str(version).split(".", 1)[0] if version is not None else ""
+    return int(head) if head.isdigit() else None
+
+
+def _tls_min_version(options: dict[str, object], product_version: object) -> dict:
+    """Lowest TLS version the reverse proxy / VPS services accept, per the option.
+
+    Only a result of 1.2 or above is trusted unconditionally — that is what the
+    lab's 8.0.3 hosts reported, and port 443 refused TLS 1.0/1.1 handshakes to
+    match. A *lower* result means the option leaves 1.0/1.1 enabled; on 7.x that
+    is what the services do, but on 8.x the option may not be what decides it,
+    so a sub-1.2 answer is kept only when the host is known to be older than 8.
+    Anything unknown is left out rather than reported as a weak protocol.
+    """
     raw = options.get("UserVars.ESXiVPsDisabledProtocols")
     if not isinstance(raw, str):
         return {}
@@ -147,6 +162,10 @@ def _tls_min_version(options: dict[str, object]) -> dict:
         return {}  # a token we do not understand: do not guess what it disables
     for token, version in _TLS_TOKENS.items():
         if token not in disabled:
+            if version in ("1.0", "1.1"):
+                major = _major_version(product_version)
+                if major is None or major >= 8:
+                    return {}
             return {"tls_min_version": version}
     return {}
 
@@ -240,7 +259,10 @@ def _mgmt_vlan_tagged(network: object, vnic_manager: object) -> dict:
         if getattr(getattr(vnic, "spec", None), "distributedVirtualPort", None) is not None:
             return {}
         vlan = vlans.get(getattr(vnic, "portgroup", None))
-        if not isinstance(vlan, int):
+        # 0 is untagged; 1-4094 is a VLAN the vmknic's traffic is tagged with.
+        # 4095 is the trunk (guest-tagging) setting: a vmknic does not tag its
+        # own frames, so it is neither — undecided rather than "tagged".
+        if not isinstance(vlan, int) or not 0 <= vlan <= 4094:
             return {}
         tagged.append(vlan != 0)
     if len(tagged) != len(selected):
@@ -255,7 +277,7 @@ def security_attrs(props: dict) -> dict:
     return {
         **_lockdown(props),
         **_persistent_logs(options),
-        **_tls_min_version(options),
+        **_tls_min_version(options, props.get("config.product.version")),
         **_platform(props),
         **_ad_joined(props),
         **_vswitch_security(network),

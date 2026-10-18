@@ -315,3 +315,121 @@ def cited_literals(rule: Rule) -> list[tuple[str, list[str]]]:
             if values:
                 out.append((attr, values))
     return out
+
+
+#: The extractions that yield the attribute's bare string. ``json_extract``,
+#: ``json_value`` and ``->`` yield JSON (``'"lockdownDisabled"'``, quotes and
+#: all), so an equality against a plain string literal can never hold — and
+#: ``json_extract`` compared to a non-JSON literal aborts the query outright.
+_STRING_EXTRACTORS = frozenset({"json_extract_string", "->>"})
+
+#: Comparisons whose constant operand must be a member of the domain. Ordering
+#: is included here, unlike in :data:`_DOMAIN_COMPARISONS`: for an enumerated
+#: attribute the threshold must itself be a value the attribute can hold, or
+#: the comparison is decided by string collation, not by configuration
+#: (``tls_min_version < 'TLSv1.2'`` is true for every host).
+_ENUM_COMPARISONS = frozenset({
+    "COMPARE_EQUAL", "COMPARE_NOTEQUAL", "COMPARE_LESSTHAN", "COMPARE_GREATERTHAN",
+    "COMPARE_LESSTHANOREQUALTO", "COMPARE_GREATERTHANOREQUALTO",
+})
+#: DuckDB's names for LIKE / NOT LIKE / ILIKE / NOT ILIKE -> case-insensitive?
+_LIKE_FUNCTIONS = {"~~": False, "!~~": False, "~~*": True, "!~~*": True}
+
+
+def _parents(tree) -> dict[int, dict | None]:
+    """``id(node) -> nearest enclosing dict node`` for every dict in the tree."""
+    parents: dict[int, dict | None] = {}
+    stack: list[tuple[object, dict | None]] = [(tree, None)]
+    while stack:
+        cur, parent = stack.pop()
+        if isinstance(cur, dict):
+            parents[id(cur)] = parent
+            stack.extend((v, cur) for v in cur.values())
+        elif isinstance(cur, list):
+            stack.extend((x, parent) for x in cur)
+    return parents
+
+
+def _like_matches(pattern: str, value: str, insensitive: bool) -> bool:
+    regex = "".join(
+        ".*" if ch == "%" else "." if ch == "_" else re.escape(ch) for ch in pattern
+    )
+    return re.fullmatch(regex, value, re.S | (re.I if insensitive else 0)) is not None
+
+
+def enum_comparison_problems(
+    rule: Rule, domains: dict[str, tuple[str, ...]]
+) -> list[tuple[str, str]]:
+    """Reads of an enumerated attribute that cannot be checked against its domain.
+
+    ``domains`` maps attribute name -> its declared string values. Every read
+    of such an attribute must be ``json_extract_string``/``->>`` used directly
+    as one side of ``=``/``!=``/ordering against a member of the domain, ``IN``
+    over members, ``IS [NOT] NULL``, or ``[I]LIKE`` with a pattern some member
+    matches. Anything else — a JSON-typed extraction, ``lower(...)``, a
+    comparison with another expression — can silently never match, and a rule
+    that never matches reports every node compliant. Returns ``(attr,
+    teaching sentence)`` per problem; empty means every read was understood.
+    """
+    if not isinstance(rule.check, QueryCheck) or not domains:
+        return []
+    try:
+        tree = _parse(rule.id, rule.check.sql)
+    except UnreadableRuleError:
+        return []  # the attribute/scope checks already refuse this rule
+    nodes = _walk(tree)
+    parents = _parents(tree)
+    problems: list[tuple[str, str]] = []
+    for fn, path in _extraction_reads(nodes, "attrs"):
+        simple = _SIMPLE_PATH_RE.match(path or "")
+        if simple is None or simple.group(1) not in domains:
+            continue
+        attr = simple.group(1)
+        if fn.get("function_name") not in _STRING_EXTRACTORS:
+            problems.append((attr,
+                f"{attr} is read with {fn.get('function_name')}(), which returns JSON, "
+                f"not the string — use json_extract_string(attrs, '$.{attr}')"))
+            continue
+        problem = _enum_use_problem(fn, parents.get(id(fn)), attr, domains[attr])
+        if problem:
+            problems.append((attr, problem))
+    return problems
+
+
+def _enum_use_problem(fn: dict, parent: dict | None, attr: str, domain: tuple) -> str:
+    """Why this one read of an enumerated attribute cannot be trusted, or ''."""
+    allowed = f"(values: {list(domain)})"
+    parent = parent or {}
+    cls, kind = parent.get("class"), parent.get("type")
+    if cls == "COMPARISON" and kind in _ENUM_COMPARISONS:
+        other = parent.get("right") if parent.get("left") is fn else parent.get("left")
+        value = _constant_value(other)
+        if value is None:
+            return f"{attr} is compared with an expression, not a value it can hold"
+        if value not in domain:
+            return f"{attr} compared against {[value]}, which it never holds {allowed}"
+        return ""
+    if cls == "OPERATOR" and kind in ("COMPARE_IN", "COMPARE_NOT_IN"):
+        children = parent.get("children") or []
+        values = [_constant_value(c) for c in children[1:]]
+        if not children or children[0] is not fn or any(v is None for v in values):
+            return f"{attr} is used in an IN list that is not plain values"
+        outside = [v for v in values if v not in domain]
+        if outside:
+            return f"{attr} compared against {outside}, which it never holds {allowed}"
+        return ""
+    if cls == "OPERATOR" and kind in ("OPERATOR_IS_NULL", "OPERATOR_IS_NOT_NULL"):
+        return ""
+    name = parent.get("function_name")
+    if cls == "FUNCTION" and name in _LIKE_FUNCTIONS:
+        children = parent.get("children") or []
+        pattern = _constant_value(children[1]) if len(children) == 2 else None
+        if not children or children[0] is not fn or pattern is None:
+            return f"{attr} is matched against a pattern that is not a plain value"
+        if not any(_like_matches(pattern, v, _LIKE_FUNCTIONS[name]) for v in domain):
+            return f"{attr} pattern {pattern!r} matches none of the values it holds {allowed}"
+        return ""
+    return (
+        f"{attr} is used inside an expression whose result cannot be checked against "
+        f"the values it holds {allowed}"
+    )

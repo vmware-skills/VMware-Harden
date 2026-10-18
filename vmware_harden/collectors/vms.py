@@ -1,11 +1,18 @@
 """VM inventory collector. Pulls VM data via vmware-aiops."""
+import logging
+
 from vmware_harden.collectors.base import Collector
+
+log = logging.getLogger(__name__)
 
 #: Every ``nodes.attrs`` key this collector can populate: the keys
 #: ``vmware_aiops.ops.inventory.list_vms`` builds into each entry, plus the
-#: ``id`` stamped by :func:`_shape_vm`. Single source of truth for the baseline
+#: ``id`` stamped by :func:`_shape_vm`, plus the security facts of the second
+#: pass (:data:`_VM_SECURITY_ATTRS`). Single source of truth for the baseline
 #: contract test — a rule reading a key outside this set matches zero rows and
 #: reports false compliance (doc-vs-code parity, 形态 #6).
+_VM_SECURITY_ATTRS: frozenset[str] = frozenset({"secure_boot", "hw_version_int"})
+
 PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
     {
         "name",
@@ -18,10 +25,8 @@ PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
         "uuid",
         "tools_status",
         "id",
-        "secure_boot",
-        "hw_version_int",
     }
-)
+) | _VM_SECURITY_ATTRS
 
 #: Properties read for the per-VM security facts, in one batched pass.
 _VM_SECURITY_PATHS: tuple[str, ...] = (
@@ -89,7 +94,15 @@ def _fetch_vms(target: str) -> list[dict]:
     try:
         si = mgr.connect(target)
         envelope = list_vms(si, compact_threshold=10**9)
-        security = _fetch_vm_security(si)
+        try:
+            security = _fetch_vm_security(si)
+        except Exception as exc:  # noqa: BLE001 — the inventory still stands
+            # The second pass failing must not cost the VMs the first pass did
+            # read. Its two facts go missing on every VM, which the engine
+            # reports as per-VM gaps — not as passes.
+            log.warning("VM security pass failed (%s); secure_boot/hw_version_int "
+                        "will be reported not evaluated", type(exc).__name__)
+            security = {}
     finally:
         mgr.disconnect_all()
     return [

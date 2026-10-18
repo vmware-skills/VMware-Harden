@@ -22,10 +22,11 @@ from vmware_harden.baselines.introspect import (
     UnreadableRuleError,
     cited_attributes,
     cited_literals,
+    enum_comparison_problems,
     node_type_of,
 )
 from vmware_harden.baselines.model import Rule
-from vmware_harden.baselines.vocabulary import Status, lookup
+from vmware_harden.baselines.vocabulary import VOCABULARY, Status, lookup, suggest
 
 
 @dataclass(frozen=True)
@@ -76,20 +77,7 @@ def classify(rule: Rule) -> Evaluability:
         elif entry.status is not Status.ACTIVE:
             pending.append(attr)
 
-    impossible: list[str] = []
-    impossible_attrs: list[str] = []
-    for attr, literals in cited_literals(rule):
-        entry = lookup(node_type, attr)
-        if entry is None or entry.status is not Status.ACTIVE or not entry.value_domain:
-            continue
-        outside = [lit for lit in literals if lit not in entry.value_domain]
-        if outside:
-            impossible.append(
-                f"{node_type}.{attr} compared against {outside}, which it never holds "
-                f"(values: {list(entry.value_domain)})"
-            )
-            if attr not in impossible_attrs:
-                impossible_attrs.append(attr)
+    impossible, impossible_attrs = _domain_problems(rule, node_type)
 
     if not pending and not unknown and not impossible:
         return Evaluability(True, node_type=node_type, attributes=tuple(attrs))
@@ -105,7 +93,8 @@ def classify(rule: Rule) -> Evaluability:
     if unknown:
         parts.append(
             f"{', '.join(f'{node_type}.{a}' for a in unknown)} "
-            f"not declared in vocabulary.py"
+            f"not declared in vocabulary.py "
+            f"({'; '.join(suggest(node_type, a) for a in unknown)})"
         )
     parts.extend(impossible)
     return Evaluability(
@@ -115,3 +104,46 @@ def classify(rule: Rule) -> Evaluability:
         node_type=node_type,
         attributes=tuple(attrs),
     )
+
+
+#: A value domain of just these is a boolean. Rules read booleans through
+#: ``TRY_CAST(json_extract(...) AS BOOLEAN)``, a JSON-typed extraction that is
+#: correct for them, so only string enums get the strict read check.
+_BOOLEAN_DOMAIN = frozenset({"true", "false"})
+
+
+def _domain_problems(rule: Rule, node_type: str) -> tuple[list[str], list[str]]:
+    """Comparisons that can never be decided by the attribute's real values.
+
+    Two passes. Every collected attribute with a domain: an ``=``/``!=``/``IN``
+    literal outside it. String enums additionally: every read must be a plain
+    string extraction compared directly with members of the domain (see
+    :func:`~vmware_harden.baselines.introspect.enum_comparison_problems`).
+    """
+    messages: list[str] = []
+    attrs: list[str] = []
+
+    def add(attr: str, message: str) -> None:
+        messages.append(f"{node_type}.{message}")
+        if attr not in attrs:
+            attrs.append(attr)
+
+    for attr, literals in cited_literals(rule):
+        entry = lookup(node_type, attr)
+        if entry is None or entry.status is not Status.ACTIVE or not entry.value_domain:
+            continue
+        outside = [lit for lit in literals if lit not in entry.value_domain]
+        if outside:
+            add(attr, f"{attr} compared against {outside}, which it never holds "
+                      f"(values: {list(entry.value_domain)})")
+
+    enums = {
+        name: entry.value_domain
+        for (nt, name), entry in VOCABULARY.items()
+        if nt == node_type and entry.status is Status.ACTIVE and entry.value_domain
+        and not set(entry.value_domain) <= _BOOLEAN_DOMAIN
+    }
+    for attr, message in enum_comparison_problems(rule, enums):
+        if f"{node_type}.{message}" not in messages:
+            add(attr, message)
+    return messages, attrs

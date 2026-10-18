@@ -288,8 +288,8 @@ _ENTRIES: tuple[Attribute, ...] = (
     # --- host: PENDING — crypto ----------------------------------------------
     # Checked against the wire 2026-10-18: with 'sslv3,tlsv1,tlsv1.1' disabled,
     # port 443 refused TLS 1.0 and 1.1 handshakes and accepted 1.2.
-    _a("host", _HOST, "tls_min_version", "最低 TLS 版本",
-       f"{_ADV} UserVars.ESXiVPsDisabledProtocols 反推",
+    _a("host", _HOST, "tls_min_version", "反向代理/VPS 服务接受的最低 TLS 版本",
+       f"{_ADV} UserVars.ESXiVPsDisabledProtocols 反推（8.x 上低于 1.2 的结果不采信）",
        value_domain=TLS_VERSIONS),
     _p("host", "encrypted_vmotion", "vMotion 加密设置",
        "HostSystem.config.vmotion / VM 级 migrateEncryption（待核实）",

@@ -502,3 +502,59 @@ def test_the_same_rule_with_the_real_value_is_evaluable():
         "json_extract_string(attrs, '$.lockdown_mode') NOT IN ('lockdownNormal', 'lockdownStrict')",
     ))
     assert verdict.evaluable, verdict.reason
+
+
+#: Rule forms that read a collected string enum and can never be decided by it.
+#: Each was confirmed in DuckDB by the independent review (2026-10-18): the
+#: JSON-typed extractions compare '"lockdownDisabled"' (quotes included) or
+#: abort the query; the rest are decided by case or collation, not config.
+_UNDECIDABLE_ENUM_READS = [
+    "json_value(attrs, '$.lockdown_mode') = 'lockdownDisabled'",
+    "json_extract(attrs, '$.lockdown_mode') = 'lockdownDisabled'",
+    "(attrs -> '$.lockdown_mode') = 'lockdownDisabled'",
+    "json_extract_string(attrs, '$.lockdown_mode') LIKE '%disabled'",
+    "json_extract_string(attrs, '$.lockdown_mode') NOT LIKE '%disabled'",
+    "lower(json_extract_string(attrs, '$.lockdown_mode')) = 'lockdowndisabled'",
+    "json_extract_string(attrs, '$.tls_min_version') < 'TLSv1.2'",
+    "json_extract_string(attrs, '$.lockdown_mode') = json_extract_string(attrs, '$.name')",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("predicate", _UNDECIDABLE_ENUM_READS)
+def test_an_enum_read_that_cannot_be_decided_by_its_values_is_undetermined(predicate):
+    verdict = classify(_rule(
+        "custom", f"SELECT id, name FROM nodes WHERE type = 'host' AND {predicate}",
+    ))
+    assert not verdict.evaluable, predicate
+    assert verdict.reason
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("predicate", [
+    "json_extract_string(attrs, '$.lockdown_mode') LIKE 'lockdown%'",
+    "json_extract_string(attrs, '$.lockdown_mode') ILIKE '%DISABLED'",
+    "json_extract_string(attrs, '$.tls_min_version') < '1.2'",
+    "(attrs ->> '$.lockdown_mode') = 'lockdownStrict'",
+    "json_extract_string(attrs, '$.lockdown_mode') IS NULL",
+    "CASE WHEN json_extract_string(attrs, '$.lockdown_mode') = 'lockdownNormal' "
+    "THEN true ELSE false END",
+    # booleans keep their TRY_CAST(json_extract(...)) form
+    "TRY_CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false",
+])
+def test_enum_reads_the_values_can_decide_stay_evaluable(predicate):
+    verdict = classify(_rule(
+        "custom", f"SELECT id, name FROM nodes WHERE type = 'host' AND {predicate}",
+    ))
+    assert verdict.evaluable, verdict.reason
+
+
+@pytest.mark.unit
+def test_an_old_alias_is_refused_with_the_canonical_name():
+    verdict = classify(_rule(
+        "custom",
+        "SELECT id, name FROM nodes WHERE type = 'host' "
+        "AND json_extract_string(attrs, '$.vib_acceptance') = 'community'",
+    ))
+    assert not verdict.evaluable
+    assert "image_profile_acceptance" in verdict.reason

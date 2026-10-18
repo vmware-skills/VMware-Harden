@@ -29,7 +29,7 @@ from vmware_harden.collectors.dfw import (
     PRODUCIBLE_DFW_SECTION_ATTRS,
 )
 from vmware_harden.collectors.hosts import PRODUCIBLE_HOST_ATTRS
-from vmware_harden.collectors.vms import PRODUCIBLE_VM_ATTRS
+from vmware_harden.collectors.vms import _VM_SECURITY_ATTRS, PRODUCIBLE_VM_ATTRS
 
 #: Family layout: sibling skills sit next to this repo.
 #: parents = regression / eval / tests / VMware-Harden / <family root>
@@ -43,7 +43,7 @@ _FAMILY = Path(__file__).resolve().parents[4]
 _CASES = [
     pytest.param(
         PRODUCIBLE_VM_ATTRS, "VMware-AIops",
-        "vmware_aiops/ops/inventory.py", "list_vms", {"id"},
+        "vmware_aiops/ops/inventory.py", "list_vms", {"id"} | _VM_SECURITY_ATTRS,
         id="vm",
     ),
     pytest.param(
@@ -128,6 +128,7 @@ def test_host_declared_output_matches_its_two_sources():
     """
     import types
 
+    from vmware_harden.collectors.host_security import PRODUCIBLE_SECURITY_ATTRS
     from vmware_harden.collectors.hosts import (
         _BASE_HOST_ATTRS,
         _SERVICE_TIME_ATTRS,
@@ -144,6 +145,7 @@ def test_host_declared_output_matches_its_two_sources():
         set(_BASE_HOST_ATTRS)
         | set(STIG_ADVANCED_SETTING_ATTRS.values())
         | set(_SERVICE_TIME_ATTRS)
+        | set(PRODUCIBLE_SECURITY_ATTRS)
         | {"id"}
     )
 
@@ -181,3 +183,59 @@ def test_the_parity_cases_cover_every_declared_set():
         )
     }
     assert covered == every
+
+
+@pytest.mark.unit
+def test_security_reducers_emit_exactly_what_they_declare():
+    """The fourth host source and the VM second pass, checked by running them.
+
+    Fed one record where every fact is answerable, each reducer must emit its
+    whole declared set and nothing beyond it — a declared key it can never emit
+    is a name nothing writes, which a rule can then read and match nothing.
+    """
+    import types
+
+    from vmware_harden.collectors.host_security import (
+        PRODUCIBLE_SECURITY_ATTRS,
+        queried_attrs,
+        security_attrs,
+    )
+    from vmware_harden.collectors.vms import _vm_security_attrs
+
+    ns = types.SimpleNamespace
+    sec = ns(allowPromiscuous=False, macChanges=False, forgedTransmits=False)
+    props = {
+        "runtime.connectionState": "connected",
+        "config.lockdownMode": "lockdownNormal",
+        "config.option": [
+            ns(key="Syslog.global.logDir", value="[ds1] logs"),
+            ns(key="UserVars.ESXiVPsDisabledProtocols", value="sslv3,tlsv1,tlsv1.1"),
+        ],
+        "capability.uefiSecureBoot": True,
+        "summary.tpmAttestation": ns(status="accepted"),
+        "config.authenticationManagerInfo": ns(authConfig=[
+            ns(enabled=True, joinedDomain="corp.lab", domainMembershipStatus="ok")]),
+        "config.featureCapability": [ns(key="cpuid.nx", value="1")],
+        "config.network": ns(
+            vswitch=[ns(spec=ns(policy=ns(security=sec)))],
+            portgroup=[ns(spec=ns(name="Mgmt", vlanId=10), computedPolicy=ns(security=sec))],
+            vnic=[ns(key="vmk0", portgroup="Mgmt", spec=ns(distributedVirtualPort=None))],
+        ),
+        "config.virtualNicManagerInfo": ns(netConfig=[
+            ns(nicType="management", selectedVnic=["management.vmk0"])]),
+        "configManager.hostAccessManager": ns(QueryLockdownExceptions=lambda: []),
+        "configManager.imageConfigManager": ns(
+            HostImageConfigGetAcceptance=lambda: "vmware_accepted"),
+    }
+    emitted = {**security_attrs(props), **queried_attrs(props)}
+    assert set(emitted) == set(PRODUCIBLE_SECURITY_ATTRS), (
+        f"declared-only {set(PRODUCIBLE_SECURITY_ATTRS) - set(emitted)}, "
+        f"emitted-only {set(emitted) - set(PRODUCIBLE_SECURITY_ATTRS)}"
+    )
+
+    vm = _vm_security_attrs({
+        "runtime.connectionState": "connected",
+        "config.bootOptions": ns(efiSecureBootEnabled=True),
+        "config.version": "vmx-21",
+    })
+    assert set(vm) == set(_VM_SECURITY_ATTRS)

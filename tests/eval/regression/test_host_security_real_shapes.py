@@ -113,6 +113,7 @@ def _vcenter_props(network=_NETWORK_118) -> dict:
     return {
         "runtime.connectionState": "connected",
         "config.lockdownMode": "lockdownDisabled",
+        "config.product.version": "8.0.3",
         "config.option": _LAB_OPTIONS,
         "capability.uefiSecureBoot": False,
         "summary.tpmAttestation": NS(status="notAccepted",
@@ -242,18 +243,25 @@ def test_persistent_logs(log_dir, scratch, expected):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(("disabled", "expected"), [
-    ("sslv3,tlsv1,tlsv1.1", "1.2"),
-    ("sslv3,tlsv1", "1.1"),
-    ("sslv3", "1.0"),
-    ("", "1.0"),
-    ("tlsv1,tlsv1.1,tlsv1.2", "1.3"),
-    ("sslv3,tlsv1,tlsv1.1,tlsv1.2,tlsv1.3", None),
-    ("sslv3,tlsv1,dtls1", None),        # unknown token: do not guess
+@pytest.mark.parametrize(("disabled", "version", "expected"), [
+    ("sslv3,tlsv1,tlsv1.1", "8.0.3", "1.2"),     # the lab's answer
+    ("sslv3,tlsv1,tlsv1.1", None, "1.2"),
+    ("tlsv1,tlsv1.1,tlsv1.2", "8.0.3", "1.3"),
+    ("sslv3,tlsv1", "7.0.3", "1.1"),
+    ("sslv3", "7.0.3", "1.0"),
+    ("", "7.0.3", "1.0"),
+    # a weak answer is only believed where the option is known to decide it
+    ("sslv3,tlsv1", "8.0.3", None),
+    ("", "8.0.3", None),
+    ("sslv3", None, None),
+    ("sslv3,tlsv1,tlsv1.1,tlsv1.2,tlsv1.3", "8.0.3", None),
+    ("sslv3,tlsv1,dtls1", "8.0.3", None),        # unknown token: do not guess
 ])
-def test_tls_min_version(disabled, expected):
-    a = security_attrs({"config.option": [_opt("UserVars.ESXiVPsDisabledProtocols", disabled)]})
-    assert a.get("tls_min_version") == expected
+def test_tls_min_version(disabled, version, expected):
+    props = {"config.option": [_opt("UserVars.ESXiVPsDisabledProtocols", disabled)]}
+    if version is not None:
+        props["config.product.version"] = version
+    assert security_attrs(props).get("tls_min_version") == expected
 
 
 @pytest.mark.unit
@@ -274,6 +282,65 @@ def test_a_tagged_management_port_group_is_tagged():
              vnic=_NETWORK_117.vnic)
     a = security_attrs({"config.network": net, "config.virtualNicManagerInfo": _VNIC_MANAGER})
     assert a["mgmt_vlan_tagged"] is True
+
+
+@pytest.mark.unit
+def test_a_trunk_vlan_on_the_management_port_group_is_undecided():
+    """4095 is guest tagging; a vmknic does not tag its own frames (review MED)."""
+    net = NS(vswitch=_NETWORK_117.vswitch,
+             portgroup=[_pg("Management Network", 4095, _sec(False, False, False))],
+             vnic=_NETWORK_117.vnic)
+    a = security_attrs({"config.network": net, "config.virtualNicManagerInfo": _VNIC_MANAGER})
+    assert "mgmt_vlan_tagged" not in a
+
+
+@pytest.mark.unit
+def test_a_selected_management_vmknic_that_is_not_listed_leaves_it_undecided():
+    """vmk1 is selected for management but absent from config.network.vnic.
+
+    Judging on vmk0 alone would call the host tagged on partial evidence.
+    """
+    vnm = NS(netConfig=[NS(nicType="management", selectedVnic=[
+        "management.key-vim.host.VirtualNic-vmk0", "management.key-vim.host.VirtualNic-vmk1"])])
+    net = NS(vswitch=_NETWORK_117.vswitch,
+             portgroup=[_pg("Management Network", 120, _sec(False, False, False))],
+             vnic=_NETWORK_117.vnic)
+    assert "mgmt_vlan_tagged" not in security_attrs(
+        {"config.network": net, "config.virtualNicManagerInfo": vnm})
+
+
+@pytest.mark.unit
+def test_an_accepted_attestation_is_attested():
+    props = _vcenter_props()
+    props["summary.tpmAttestation"] = NS(status="accepted", message=None)
+    assert security_attrs(props)["host_tpm_attested"] is True
+
+
+@pytest.mark.unit
+def test_two_vms_sharing_a_bios_uuid_get_no_security_facts(monkeypatch):
+    """A copied VM keeps config.uuid; facts could belong to either VM."""
+    import sys
+
+    from vmware_harden.collectors import vms
+
+    rows = [
+        (object(), {"config.uuid": "u-1", "runtime.connectionState": "connected",
+                    "config.bootOptions": NS(efiSecureBootEnabled=True),
+                    "config.version": "vmx-21"}),
+        (object(), {"config.uuid": "u-1", "runtime.connectionState": "connected",
+                    "config.bootOptions": NS(efiSecureBootEnabled=False),
+                    "config.version": "vmx-11"}),
+        (object(), {"config.uuid": "u-2", "runtime.connectionState": "connected",
+                    "config.bootOptions": NS(efiSecureBootEnabled=True),
+                    "config.version": "vmx-21"}),
+    ]
+    fake = types.ModuleType("vmware_aiops.ops.inventory")
+    fake._collect = lambda si, types_, paths: rows
+    fake.vim = NS(VirtualMachine=object)
+    monkeypatch.setitem(sys.modules, "vmware_aiops.ops.inventory", fake)
+    got = vms._fetch_vm_security(si=None)
+    assert "u-1" not in got
+    assert got["u-2"] == {"secure_boot": True, "hw_version_int": 21}
 
 
 @pytest.mark.unit
@@ -385,3 +452,38 @@ def test_a_host_that_answered_nothing_is_undetermined_not_violating(tmp_path, ba
     gaps = {r for r, _n, _m in coverage_for(twin, snap, rule_limit=1000).undetermined_node_checks}
     assert activated <= gaps
     twin.close()
+
+
+@pytest.mark.unit
+def test_a_failed_vm_security_pass_keeps_the_inventory_and_omits_its_facts(monkeypatch):
+    """The second pass is extra evidence; its failure must not cost the VMs."""
+    import sys
+
+    from vmware_harden.collectors import vms
+
+    class _Mgr:
+        @classmethod
+        def from_config(cls):
+            return cls()
+
+        def connect(self, target):
+            return object()
+
+        def disconnect_all(self):
+            pass
+
+    conn = types.ModuleType("vmware_aiops.connection")
+    conn.ConnectionManager = _Mgr
+    inv = types.ModuleType("vmware_aiops.ops.inventory")
+    inv.list_vms = lambda si, compact_threshold: {"vms": [
+        {"name": "web-01", "uuid": "u-1", "tools_status": "guestToolsRunning"}]}
+    monkeypatch.setitem(sys.modules, "vmware_aiops.connection", conn)
+    monkeypatch.setitem(sys.modules, "vmware_aiops.ops.inventory", inv)
+
+    def _boom(si):
+        raise RuntimeError("InvalidProperty")
+
+    monkeypatch.setattr(vms, "_fetch_vm_security", _boom)
+    got = vms._fetch_vms("lab")
+    assert [v["name"] for v in got] == ["web-01"]
+    assert "secure_boot" not in got[0] and "hw_version_int" not in got[0]
