@@ -129,8 +129,8 @@ class Coverage:
         if self.undetermined:
             parts.append(
                 f"{self.undetermined} of {self.total} rules could not be "
-                f"evaluated — no collector provides the data they check, so "
-                f"their result is unknown, not compliant."
+                f"evaluated (the reason is listed per rule), so their result "
+                f"is unknown, not compliant."
             )
         if self.rules_without_targets:
             parts.append(
@@ -149,9 +149,9 @@ class Coverage:
             parts.append(
                 f"{self.node_checks_undetermined} of {self.node_checks_total} "
                 f"per-node checks could not be made across "
-                f"{self.nodes_affected} node(s): the rules ran, but the values "
-                f"they read were missing on those nodes, so those nodes are "
-                f"unknown rather than compliant."
+                f"{self.nodes_affected} node(s): the rules ran, but could not "
+                f"reach a verdict on those nodes (the reason is listed per node), "
+                f"so those nodes are unknown rather than compliant."
             )
         return " ".join(parts)
 

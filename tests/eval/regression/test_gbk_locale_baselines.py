@@ -184,7 +184,9 @@ def test_doctor_does_not_count_a_baseline_it_cannot_parse(tmp_path, monkeypatch)
     (user_dir / "broken-baseline.yaml").write_text("id: [ unclosed\n", encoding="utf-8")
     monkeypatch.setattr(loader, "USER_DIR", user_dir)
 
-    healthy = len(list(loader.BUILTIN_DIR.glob("*.yaml")))
+    # The shipped YAML files plus the one baseline generated from the advisory
+    # catalog (vmsa-advisories), which loads without a file.
+    healthy = len(list(loader.BUILTIN_DIR.glob("*.yaml"))) + 1
     result = doctor_mod._check_baselines()
 
     assert result.status == "error", f"a baseline that will not parse reported {result.status!r}"

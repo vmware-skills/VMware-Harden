@@ -1,0 +1,111 @@
+# Offline VMware security advisory catalog.
+#
+# A clean result against this catalog means "no open advisory known as of
+# as_of" — never "not vulnerable". Advisories published after as_of are not here.
+#
+# How each entry was built (2026-10-19):
+#   * CVE ids, CVSS and the vulnerable-version lists: NVD CVE API 2.0.
+#   * KEV flags: CISA Known Exploited Vulnerabilities feed, catalogVersion 2026.10.16.
+#   * Fixed releases: the release that follows the last vulnerable version NVD
+#     lists on each update branch, confirmed against an independent source
+#     quoting the advisory's response matrix, with its build read from the
+#     Broadcom build KB (see builds.yaml).
+#   * Where sources disagree, the branch is listed under unknown_updates and is
+#     always judged unknown.
+#   * Broadcom's advisory pages sit behind a bot challenge and could not be read
+#     directly; their URLs are recorded as the primary source to re-check.
+as_of: 2026-10-19
+
+# End of general support. Used only when an advisory does not list a line:
+# an advisory published after a line's EOL says nothing about that line.
+# Source: Broadcom response matrix quoted for VMSA-2026-0006 ("vCenter 7.0 …
+# ended general support on October 2, 2025").
+eol:
+  esxi:
+    "7.0": 2025-10-02
+  vcenter:
+    "7.0": 2025-10-02
+
+advisories:
+  - id: VMSA-2025-0004
+    published: 2025-03-04
+    title: "VMware ESXi, Workstation, and Fusion updates address multiple vulnerabilities"
+    severity: critical
+    cves:
+      - {id: CVE-2025-22224, cvss: 9.3, kev: true}
+      - {id: CVE-2025-22225, cvss: 8.2, kev: true}
+      - {id: CVE-2025-22226, cvss: 7.1, kev: true}
+    sources:
+      - https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/25390
+      - https://nvd.nist.gov/vuln/detail/CVE-2025-22224
+      - https://www.dell.com/support/kbdoc/ar-sa/000291002/vxrail-vmsa-2025-0004-information
+      - https://knowledge.broadcom.com/external/article/316595/build-numbers-and-versions-of-vmware-esx.html
+    affected:
+      - product: esxi
+        line: "8.0"
+        fixed:
+          - {update: 2, build: 24585300, label: "ESXi 8.0 Update 2d"}
+          - {update: 3, build: 24585383, label: "ESXi 8.0 Update 3d"}
+      - product: esxi
+        line: "7.0"
+        fixed:
+          - {update: 3, build: 24585291, label: "ESXi 7.0 Update 3s"}
+
+  - id: VMSA-2024-0019
+    published: 2024-09-17
+    title: "VMware vCenter Server updates address heap-overflow and privilege escalation vulnerabilities"
+    severity: critical
+    cves:
+      - {id: CVE-2024-38812, cvss: 9.8, kev: true}
+      - {id: CVE-2024-38813, cvss: 7.5, kev: true}
+    sources:
+      - https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/24968
+      - https://nvd.nist.gov/vuln/detail/CVE-2024-38812
+      - https://safecomputing.umich.edu/security-alerts/update-vmware-vcenter-server-critical-vulnerabilities
+      - https://knowledge.broadcom.com/external/article/326316/build-numbers-and-versions-of-vmware-vce.html
+    affected:
+      - product: vcenter
+        line: "8.0"
+        fixed:
+          - {update: 3, build: 24322831, label: "vCenter Server 8.0 Update 3d"}
+        # The September patches did not fully fix CVE-2024-38812; sources
+        # disagree on whether the reissued 8.0 U2e carries the fix.
+        unknown_updates: [2]
+      - product: vcenter
+        line: "7.0"
+        fixed:
+          - {update: 3, build: 24322018, label: "vCenter Server 7.0 Update 3t"}
+
+  - id: VMSA-2026-0006
+    published: 2026-07-29
+    title: "Multiple VMware ESX, vCenter, Workstation and Fusion vulnerabilities"
+    severity: critical
+    cves:
+      - {id: CVE-2026-59309, cvss: 9.8, kev: false}
+      - {id: CVE-2026-59310, cvss: 9.8, kev: true}
+    sources:
+      - https://support.broadcom.com/web/ecx/support-content-notification/-/external/content/SecurityAdvisories/0/38017
+      - https://nvd.nist.gov/vuln/detail/CVE-2026-59310
+      - https://socradar.io/blog/critical-vmware-vcenter-esx-flaws/
+      - https://knowledge.broadcom.com/external/article/326316/build-numbers-and-versions-of-vmware-vce.html
+    affected:
+      - product: vcenter
+        line: "8.0"
+        fixed:
+          - {update: 2, build: 25624321, label: "vCenter Server 8.0 Update 2f"}
+          - {update: 3, build: 25600417, label: "vCenter Server 8.0 Update 3k"}
+      - product: vcenter
+        line: "9.0"
+        fixed:
+          - {update: 2, build: 25629525, label: "vCenter 9.0.2.0100"}
+      - product: vcenter
+        line: "9.1"
+        fixed:
+          - {update: 0, build: 25629530, label: "vCenter 9.1.0.0300"}
+      # The response matrix offers 7.0 no public fix (extended-support
+      # customers contact Broadcom).
+      - product: vcenter
+        line: "7.0"
+        fixed: []
+    # The advisory also covers ESX; its ESX rows are not catalogued yet.
+    uncatalogued_products: [esxi]

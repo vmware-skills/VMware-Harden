@@ -58,8 +58,16 @@ def import_cmd(
         typer.echo(f"File not found: {e}")
         raise typer.Exit(code=2)
 
-    loader.USER_DIR.mkdir(parents=True, exist_ok=True)
     dest_name = name if name else path.stem
+    if dest_name in loader.RESERVED_IDS:
+        # load_builtin never reads a user file of this name, so the copy would
+        # be reported imported and then silently ignored.
+        typer.echo(
+            f"Validation failed: {dest_name!r} is reserved (generated from the "
+            "advisory catalog). Import under another --name."
+        )
+        raise typer.Exit(code=1)
+    loader.USER_DIR.mkdir(parents=True, exist_ok=True)
     dest = loader.USER_DIR / f"{dest_name}.yaml"
     shutil.copyfile(path, dest)
     typer.echo(f"Imported to {dest}")

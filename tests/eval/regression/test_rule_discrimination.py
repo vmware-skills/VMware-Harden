@@ -242,7 +242,10 @@ def test_candidates_do_not_depend_on_the_rule_under_test():
 @pytest.mark.unit
 def test_builtin_directory_is_where_this_looks():
     """``list_builtins`` must be reading the shipped baselines, not an empty dir."""
+    from vmware_harden.advisories.baseline import ADVISORY_BASELINE_ID
     from vmware_harden.baselines import builtin
 
     shipped = list(Path(builtin.__file__).parent.glob("*.yaml"))
-    assert len(shipped) == len(list_builtins()) == 9
+    assert len(shipped) == 9
+    # Every shipped file, plus the catalog-generated advisory baseline.
+    assert sorted(list_builtins()) == sorted([p.stem for p in shipped] + [ADVISORY_BASELINE_ID])

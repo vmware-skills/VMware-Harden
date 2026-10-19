@@ -6,7 +6,9 @@ and persists violations.
 import json
 import uuid
 
-from vmware_harden.baselines.model import Baseline, QueryCheck
+from vmware_harden.advisories.baseline import covered_node_types, judge_nodes
+from vmware_harden.advisories.baseline import evidence as advisory_evidence
+from vmware_harden.baselines.model import AdvisoryCheck, Baseline, QueryCheck
 from vmware_harden.checks.evaluability import classify
 from vmware_harden.checks.nodescope import (
     load_snapshot_nodes,
@@ -177,6 +179,11 @@ class CheckRunner:
                             node_id, ", ".join(missing),
                         ]
                     )
+            elif isinstance(rule.check, AdvisoryCheck):
+                self._run_advisory(
+                    snapshot_id, baseline, rule, nodes_by_type, uncollected or {},
+                    violations, insert_rows, outcome_rows, gap_rows,
+                )
             # ScriptCheck and any unknown check types are silently skipped
             # (loader gates against ScriptCheck; this is defensive).
 
@@ -232,3 +239,80 @@ class CheckRunner:
                 self.twin.conn.execute("ROLLBACK")
                 raise
         return violations
+
+    @staticmethod
+    def _run_advisory(
+        snapshot_id, baseline, rule, nodes_by_type, uncollected,
+        violations, insert_rows, outcome_rows, gap_rows,
+    ) -> None:
+        """Judge collected builds against one catalogued advisory.
+
+        Same tables, same meanings as a query rule: affected → violation,
+        unknown → gap (never a pass), and a rule whose node types were not
+        collected at all is undetermined.
+        """
+        adv_id = rule.check.advisory_id
+        verdicts = judge_nodes(adv_id, nodes_by_type)
+        if not verdicts:
+            # Nothing this advisory covers was seen. "Zero affected" off zero
+            # components would read as a clean result, so it is undetermined,
+            # with the reason a reader can act on.
+            failed = sorted(t for t in ("host", "vcenter") if t in uncollected)
+            reason = (
+                f"{', '.join(failed)} was not collected in this scan "
+                f"({uncollected[failed[0]]}), so this advisory was not evaluated"
+                if failed
+                else "no component this advisory covers was collected in this scan, "
+                "so it was not evaluated"
+            )
+            outcome_rows.append(
+                [str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                 "undetermined", reason, None, None]
+            )
+            return
+        unknown = 0
+        for nv in verdicts:
+            status = nv.verdict.status
+            if status == "affected":
+                ev = {
+                    **advisory_evidence(adv_id, nv),
+                    "category": rule.category,
+                    "title": rule.title,
+                }
+                v = {
+                    "id": str(uuid.uuid4()),
+                    "snapshot_id": snapshot_id,
+                    "baseline_id": baseline.id,
+                    "rule_id": rule.id,
+                    "node_id": nv.node_id,
+                    "severity": rule.severity,
+                    "evidence": ev,
+                }
+                violations.append(v)
+                insert_rows.append(
+                    [v["id"], snapshot_id, baseline.id, rule.id, nv.node_id,
+                     rule.severity, json.dumps(ev, default=str)]
+                )
+            elif status == "unknown":
+                unknown += 1
+                gap_rows.append(
+                    [str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                     nv.node_id, nv.verdict.reason]
+                )
+        # A covered node type nobody could read: the nodes that were judged
+        # stand, but the advisory as a whole is not established — "0 affected"
+        # on the vCenter says nothing about hosts that were never read.
+        missing = [t for t in covered_node_types(adv_id) if t in uncollected]
+        if missing:
+            outcome_rows.append(
+                [str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+                 "undetermined",
+                 f"{', '.join(missing)} was not collected in this scan "
+                 f"({uncollected[missing[0]]}); judged only what was collected",
+                 len(verdicts), unknown]
+            )
+            return
+        outcome_rows.append(
+            [str(uuid.uuid4()), snapshot_id, baseline.id, rule.id,
+             "evaluated", None, len(verdicts), unknown]
+        )

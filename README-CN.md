@@ -16,7 +16,7 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 ## GA 家族成员（自 v1.5.18 起）
 
 生产可用的合规平台：**9 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
-**EU NIS2**、**BSI IT-Grundschutz**）、**99 条规则**、多 vCenter Twin、drift 检测、
+**EU NIS2**、**BSI IT-Grundschutz**）、**99 条规则**、面向 ESXi 与 vCenter build 号的 **VMSA 已知漏洞比对**、多 vCenter Twin、drift 检测、
 **LLM Remediation Advisor**、带 8 个受审计工具的 **MCP server**、Web dashboard，以及
 `vmware-harden doctor` 环境诊断。
 
@@ -99,11 +99,39 @@ VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/
 | `pci-dss-4.0-vmware` | 10 | host, dfw_rule | PCI-DSS v4.0 |
 | `eu-nis2-vmware` | 12 | host, dfw_rule | EU NIS2 指令（第 21/23 条，附件 I） |
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz（OPS.1.1.4 + SYS.1.1） |
+| `vmsa-advisories` | 3（每条收录的公告一条） | host, vcenter | 离线 VMSA 公告目录 —— 见[已知漏洞](#已知漏洞vmsa) |
 | `vsphere-stig-v9-subset` ⚠️ *实验性* | 12 | host | vSphere 9 STIG 对齐的主机高级设置（[DoD/DISA STIG 内容](https://github.com/vmware/dod-compliance-and-automation)）—— 采集路径已在 ESXi 8.0.3 真机验证；9.x 尚未跑过 |
 | `cis-vmware-esxi-9.0-subset` | 20 | host | 通过 `extends:` 继承 `cis-vmware-esxi-8.0-subset` |
 | `vsphere-scg-v9-subset` | 15 | host, vm | 通过 `extends:` 继承 `vsphere-scg-v8-subset` |
 
-`baseline list` 返回 9 个 ID：上表 7 组含规则的基线（共 **99 条规则**）加两个 v9 别名，别名自身不含规则，解析为其 v8 父基线的规则。
+`baseline list` 返回 10 个 ID：上表 7 组含规则的 YAML 基线（共 **99 条规则**）、两个 v9 别名（自身不含规则，解析为其 v8 父基线的规则），以及由公告目录生成、不读文件的 `vmsa-advisories`。
+
+### 已知漏洞（VMSA）
+
+`vmsa-advisories` 用每台 ESXi 主机和 vCenter 本身的版本与 build 号，对照随包发布的**离线 VMware 安全公告目录**
+（`vmware_harden/advisories/catalog.yaml`，在目录日期当天对照来源核对过）。每条公告一条规则；规则说明里引用它所对应的
+等保 2.0 三级控制项（安全计算环境·入侵防范：应能发现可能存在的已知漏洞，并在经过充分测试评估后，及时修补漏洞）。
+
+```bash
+vmware-harden scan --target prod-vc --baseline vmsa-advisories
+vmware-harden report                    # 每个受影响组件：修复版本，以及该 CVE 是否在 CISA KEV 中
+vmware-harden report --format csv > vmsa.csv
+```
+
+| 结论 | 含义 |
+|---|---|
+| **affected（受影响）** | 记为违规，证据里写明修复它的版本。 |
+| **fixed（已修复）** | 同一版本线，build 已达到或超过修复版本。 |
+| **unknown（未知）** | 按节点列出原因：build 读不到、公告未列出该版本线或该线已停止支持、来源对某分支说法不一、目录尚未收录该产品。**从不算通过。** |
+
+没有报出问题，意思是**截至目录日期没有已知的未修复公告**，不是"没有漏洞"：之后发布的公告不在目录里。build 号只在同一条
+`major.minor` 版本线内比较（7.0 U3 的 build 数值可能大于 8.0 GA）。
+
+**目录怎么来的。** Broadcom 的公告页挡在人机验证后面，脚本读不到，Broadcom 也不提供 CSAF 数据源。每条数据取自 NVD CVE
+接口（CVE、CVSS、受影响版本）、CISA KEV（是否已被在野利用）和 Broadcom 的 build 号知识库文章（修复版本 build），每个修复版本
+都另找一个引用公告原文的独立来源核对；每个修复 build 都由测试对照 `builds.yaml` 里的知识库快照机械校验。首版目录
+（2026-10-19）收录三条已列入 KEV 的公告：VMSA-2025-0004（ESXi）、VMSA-2024-0019 与 VMSA-2026-0006（vCenter；
+后者的 ESX 部分尚未收录，报为未知）。
 
 ### 等保 2.0 三级（国内合规）
 

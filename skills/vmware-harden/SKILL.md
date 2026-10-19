@@ -4,9 +4,9 @@ description: >
   Use this skill whenever the user needs to perform VMware cyber compliance auditing (aligned with VCF 9 Advanced Cyber Compliance / ACC),
   baseline checking, or drift detection on vSphere/ESXi/NSX environments.
   Directly handles: CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 scans;
-  custom YAML baselines; LLM-driven remediation suggestions; web dashboard.
+  known-vulnerability (VMSA) matching of ESXi/vCenter builds; custom YAML baselines; LLM-driven remediation suggestions; web dashboard.
   Always use this skill for "scan compliance", "check baseline", "audit etcd",
-  "check 等保", "drift detection", "compliance report", "cyber compliance scan", "ACC posture", "STIG check" when the context is
+  "check 等保", "drift detection", "compliance report", "cyber compliance scan", "ACC posture", "STIG check", "check VMSA", "known vulnerabilities" when the context is
   explicitly VMware/vSphere/ESXi.
   Do NOT use for general vSphere monitoring (use vmware-monitor or vmware-aiops),
   network changes (use vmware-nsx), or executing remediations directly
@@ -25,7 +25,7 @@ metadata: {"openclaw":{"requires":{"anyBins":["vmware-harden","uvx"]},"optional"
 
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom. Source code is publicly auditable at [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) under the MIT license.
 
-AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 baselines, drift detection, LLM-driven remediation advice, and a web dashboard.
+AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 baselines, a VMSA known-vulnerability check, drift detection, LLM-driven remediation advice, and a web dashboard.
 
 > **Companion skills**: [vmware-aiops](https://github.com/vmware-skills/VMware-AIops) (inventory + collectors data source; host/VM remediation target), [vmware-monitor](https://github.com/vmware-skills/VMware-Monitor) (read-only inspection), [vmware-storage](https://github.com/vmware-skills/VMware-Storage) (datastore remediation target), [vmware-nsx](https://github.com/vmware-skills/VMware-NSX) (segment/gateway evidence), [vmware-nsx-security](https://github.com/vmware-skills/VMware-NSX-Security) (DFW evidence + remediation target), [vmware-aria](https://github.com/vmware-skills/VMware-Aria) (metrics correlation), [vmware-avi](https://github.com/vmware-skills/VMware-AVI) (load balancer evidence), [vmware-vks](https://github.com/vmware-skills/VMware-VKS) (Tanzu Kubernetes evidence), [vmware-pilot](https://github.com/vmware-skills/VMware-Pilot) (remediation execution with approval gates), [vmware-policy](https://github.com/vmware-skills/VMware-Policy) (audit log). See [references/cross-skill-workflows.md](./references/cross-skill-workflows.md) for end-to-end remediation flows that span pilot + sibling skills.
 
@@ -34,6 +34,7 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 | Category | Tools | Count | Read or Write |
 |----------|-------|-------|---------------|
 | Baseline Management | 9 built-in baselines (CIS ESXi 8.0/9.0, vSphere SCG v8/v9, vSphere 9 STIG, 等保 2.0 L3, PCI-DSS 4.0, BSI ITGS, EU NIS2) + custom YAML loader | 9+N | Read |
+| Known Vulnerabilities | `vmsa-advisories`: ESXi and vCenter builds against an offline VMSA catalog (NVD + CISA KEV + Broadcom build KBs) → affected / fixed / unknown | 1 baseline | Read |
 | Scanning | Multi-collector (vCenter, ESXi, NSX, vSAN, K8s) → typed Twin store | 1 pipeline | Read (no target writes) |
 | Drift Detection | Snapshot-to-snapshot configuration diff (per-node added/removed/changed fields) | 1 type | Read |
 | Remediation Advisor | LLM-driven (Anthropic) suggestions per violation; mock fallback when no key | 1 advisor | Read |
@@ -43,11 +44,11 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 ## Quick Install
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.15.0"
+uv tool install "vmware-harden[collectors]==1.16.0"
 vmware-harden baseline list
 ```
 
-The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.15.0` is enough to report on an existing twin DB.
+The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.16.0` is enough to report on an existing twin DB.
 
 For first-time use, ensure a vmware-aiops target is configured (harden uses aiops collectors) and optionally set `ANTHROPIC_API_KEY` for live remediation advice.
 
@@ -88,7 +89,7 @@ Use vmware-harden when the user needs to:
 
 ### 1. First-time scan with 等保 2.0 三级
 
-1. Install: `uv tool install "vmware-harden[collectors]==1.15.0"` (the extra carries the inventory collectors `scan` reads through)
+1. Install: `uv tool install "vmware-harden[collectors]==1.16.0"` (the extra carries the inventory collectors `scan` reads through)
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
@@ -114,6 +115,14 @@ Use vmware-harden when the user needs to:
 5. Open web view: `vmware-harden web --port 8080` then navigate to `/drift`
 
    **Failure branch**: If `vmware-harden drift` reports `No drift detected since previous snapshot`, both scans likely ran against the same state. Ensure two scans actually completed against the same `--target`; the Twin DB at `~/.vmware-harden/twin.duckdb` must contain at least two snapshots for that target.
+
+### 4. Known vulnerabilities (VMSA)
+
+1. Scan: `vmware-harden scan --baseline vmsa-advisories --target prod-vcenter` — one rule per catalogued advisory, over the ESXi hosts and the vCenter itself
+2. Report: `vmware-harden report` (each affected component shows its fix and whether the CVE is in CISA KEV) or `vmware-harden report --format csv > vmsa.csv` for the security team
+3. Read the result as three states: **affected** (a violation, with the release that fixes it), **fixed**, and **unknown** (listed per node with the reason). A clean result means "no open advisory known as of the catalog date" (printed in every rule) — never "not vulnerable"; advisories published after that date are not in the catalog.
+
+   **Failure branch**: A component listed as unknown has a reason beside it — an unreadable build, a line the advisory does not list (or that reached end of support), a branch the sources disagree on, or a product the catalog does not carry yet. None of these is a pass; check the advisory on Broadcom's site for that component.
 
 ## Usage Mode
 
@@ -155,7 +164,8 @@ vmware-harden baseline list
 vmware-harden baseline import <path>
 vmware-harden baseline validate <path>
 vmware-harden scan --baseline <id> --target <name>
-vmware-harden report [--format text|json]
+vmware-harden report [--format text|json|csv]
+vmware-harden scan --baseline vmsa-advisories --target <name>   # known vulnerabilities
 vmware-harden drift [--format text|json]
 vmware-harden advise (--violation-id <id> | --all-critical)
 vmware-harden web [--host 127.0.0.1] [--port 8080]

@@ -41,7 +41,21 @@ class ScriptCheck(BaseModel):
     function: str
 
 
-Check = QueryCheck | ScriptCheck
+class AdvisoryCheck(BaseModel):
+    """Judge collected builds against one advisory in the shipped catalog.
+
+    Not authored in YAML: the ``vmsa-advisories`` baseline is generated from
+    ``vmware_harden/advisories/catalog.yaml``. See
+    :mod:`vmware_harden.advisories`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["advisory"]
+    advisory_id: str
+
+
+Check = QueryCheck | ScriptCheck | AdvisoryCheck
 
 
 class Remediation(BaseModel):

@@ -19,6 +19,7 @@ from vmware_harden.collectors.base import (
 from vmware_harden.collectors.datastores import DatastoreCollector
 from vmware_harden.collectors.dfw import DFWCollector
 from vmware_harden.collectors.hosts import HostCollector
+from vmware_harden.collectors.vcenter import VCenterCollector
 from vmware_harden.collectors.vms import VMCollector
 from vmware_harden.install import COLLECTORS_EXTRA, ISOLATION_NOTE, install_extra
 from vmware_harden.store.twin import Twin
@@ -32,6 +33,7 @@ _COLLECTOR_MAP: dict[str, type[Collector]] = {
     "datastore": DatastoreCollector,
     "dfw_rule": DFWCollector,
     "dfw_section": DFWCollector,  # same collector handles both
+    "vcenter": VCenterCollector,
 }
 
 
@@ -282,6 +284,97 @@ def run_scan(
         twin.close()
 
 
+#: CSV columns. The advisory columns are empty for query-rule violations.
+_CSV_FIELDS = (
+    "rule", "node", "node_name", "severity", "status", "version", "build",
+    "fixed_in", "kev", "cves", "catalog_as_of", "reason",
+)
+
+
+def _evidence(raw: object) -> dict:
+    try:
+        ev = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        return {}
+    return ev if isinstance(ev, dict) else {}
+
+
+def _advisory_suffix(raw: object) -> str:
+    """`` → fix: …; KEV`` for an advisory violation; empty for anything else."""
+    ev = _evidence(raw)
+    if "catalog_as_of" not in ev:
+        return ""
+    fix = ev.get("fixed_in") or "no public fix"
+    kev = "; KEV (exploited in the wild)" if ev.get("kev") else ""
+    return f" → fix: {fix}{kev}"
+
+
+#: A cell starting with one of these is a formula to a spreadsheet. Node names
+#: come from the vCenter inventory, so they are prefixed with a quote.
+_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: object) -> object:
+    if isinstance(value, str) and value.startswith(_FORMULA_LEAD):
+        return "'" + value
+    return value
+
+
+def _write_csv(rows: list, twin: Twin | None = None, snapshot_id: str | None = None) -> None:
+    """One row per violation, then one per node or rule that could not be judged.
+
+    The unknowns are rows, not a footnote: this format is the one handed to
+    another team, and a file listing only violations reads as "everything else
+    is fine" (independent review, 2026-10-19). Header always written.
+    """
+    import csv
+    import io
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_CSV_FIELDS, lineterminator="\n")
+    writer.writeheader()
+
+    def emit(row: dict) -> None:
+        writer.writerow({k: _csv_safe(v) for k, v in row.items()})
+
+    for rule, node, name, severity, raw in rows:
+        ev = _evidence(raw)
+        kev = ev.get("kev")
+        emit(
+            {
+                "rule": rule,
+                "node": node,
+                "node_name": name,
+                "severity": severity,
+                "status": ev.get("status", ""),
+                "version": ev.get("version", ""),
+                "build": ev.get("build", ""),
+                "fixed_in": ev.get("fixed_in") or "",
+                "kev": "" if kev is None else str(bool(kev)).lower(),
+                "cves": ";".join(ev.get("cves", [])),
+                "catalog_as_of": ev.get("catalog_as_of", ""),
+                "reason": ev.get("reason", ""),
+            }
+        )
+    if twin is not None and snapshot_id is not None:
+        blank = {k: "" for k in _CSV_FIELDS}
+        for rule, node, name, reason in twin.conn.execute(
+            "SELECT g.rule_id, g.node_id, COALESCE(n.name, ''), g.missing_attributes "
+            "FROM rule_node_gap g LEFT JOIN nodes n ON n.id = g.node_id "
+            "WHERE g.snapshot_id = ? ORDER BY g.rule_id, g.node_id",
+            [snapshot_id],
+        ).fetchall():
+            emit({**blank, "rule": rule, "node": node, "node_name": name,
+                  "status": "unknown", "reason": reason})
+        for rule, reason in twin.conn.execute(
+            "SELECT rule_id, COALESCE(reason, '') FROM rule_outcome "
+            "WHERE snapshot_id = ? AND outcome = 'undetermined' ORDER BY rule_id",
+            [snapshot_id],
+        ).fetchall():
+            emit({**blank, "rule": rule, "status": "undetermined", "reason": reason})
+    typer.echo(buf.getvalue(), nl=False)
+
+
 def run_report(db: str, format: str = "text", limit: int = 500) -> None:
     """Print a report of the most recent completed snapshot's violations.
 
@@ -331,7 +424,15 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
         cov = coverage_for(twin, latest["id"])
         standing = twin.snapshot_standing(latest)
 
-        if format == "json":
+        if format == "csv":
+            _write_csv(rows, twin, latest["id"])
+            if truncated:
+                typer.echo(
+                    f"# Showing {len(rows)} of {total} violations "
+                    f"(limited by --limit {limit}).",
+                    err=True,
+                )
+        elif format == "json":
             violations = [
                 {
                     "rule": r[0],
@@ -380,6 +481,7 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                 for r in rows:
                     typer.echo(
                         f"  [{r[3].upper():8s}] {r[0]:30s} {r[1]} ({r[2]})"
+                        f"{_advisory_suffix(r[4])}"
                     )
                 if truncated:
                     typer.echo(
@@ -420,7 +522,7 @@ def run_report(db: str, format: str = "text", limit: int = 500) -> None:
                     for node_id, why in cov.unmeasured_nodes:
                         typer.echo(f"  {node_id:24s} {why}")
                 if cov.undetermined_node_checks:
-                    typer.echo("Not judged on these nodes (data missing):")
+                    typer.echo("Not judged on these nodes (why, per node):")
                     for rule_id, node_id, missing in cov.undetermined_node_checks:
                         typer.echo(f"  {rule_id:30s} {node_id:24s} {missing}")
                     if cov.undetermined_node_checks_truncated:

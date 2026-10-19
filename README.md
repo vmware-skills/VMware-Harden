@@ -14,7 +14,7 @@ AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` 
 
 ## GA family member (since v1.5.18)
 
-Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
+Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, a **VMSA known-vulnerability check** for ESXi and vCenter builds, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
 
 ## Quickstart
 
@@ -132,10 +132,46 @@ vmware-pilot, which provides approval gating and audit trails for write operatio
 | `bsi-itgs-basisabsicherung-vmware` | 10 | host | BSI IT-Grundschutz (OPS.1.1.4 + SYS.1.1) |
 | `cis-vmware-esxi-9.0-subset` | 20 | host | Inherits `cis-vmware-esxi-8.0-subset` via `extends:` |
 | `vsphere-scg-v9-subset` | 15 | host, vm | Inherits `vsphere-scg-v8-subset` via `extends:` |
+| `vmsa-advisories` | 3 (one per catalogued advisory) | host, vcenter | Offline VMSA catalog — see [Known vulnerabilities](#known-vulnerabilities-vmsa) |
 | `vsphere-stig-v9-subset` ⚠️ *experimental* | 12 | host | vSphere 9 STIG-aligned host advanced settings ([DoD/DISA STIG content](https://github.com/vmware/dod-compliance-and-automation)) — collector verified on ESXi 8.0.3; not yet run against 9.x |
 
-`baseline list` returns 9 IDs: the 7 rule-bearing baselines above (99 rules total) plus the
-two v9 aliases, which carry no rules of their own and resolve to their v8 parent's.
+`baseline list` returns 10 IDs: the 7 rule-bearing YAML baselines above (99 rules total), the
+two v9 aliases, which carry no rules of their own and resolve to their v8 parent's, and
+`vmsa-advisories`, which is generated from the advisory catalog rather than read from a file.
+
+### Known vulnerabilities (VMSA)
+
+`vmsa-advisories` judges each ESXi host's and the vCenter's own version and build
+against an **offline catalog of VMware security advisories** shipped in the package
+(`vmware_harden/advisories/catalog.yaml`, checked against its sources on the catalog
+date). One rule per advisory; each rule's text quotes the 等保 2.0 三级 control it
+evidences (安全计算环境·入侵防范: find known vulnerabilities and patch them after testing).
+
+```bash
+vmware-harden scan --target prod-vc --baseline vmsa-advisories
+vmware-harden report                    # each affected component: its fix, and whether the CVE is in CISA KEV
+vmware-harden report --format csv > vmsa.csv
+```
+
+| Verdict | Meaning |
+|---|---|
+| **affected** | A violation. The evidence names the release that fixes it. |
+| **fixed** | Same line, at or past the fix. |
+| **unknown** | Listed per node with the reason: unreadable build, a line the advisory does not list or that was past end of support, a branch the sources disagree on, a product the catalog does not carry yet. **Never a pass.** |
+
+A clean result means **no open advisory known as of the catalog date**, not "not
+vulnerable": advisories published later are not in the catalog. Builds are compared
+only within one `major.minor` line (a 7.0 U3 build can be numerically larger than an
+8.0 GA build).
+
+**How the catalog is built.** Broadcom's advisory pages are behind a bot challenge and
+cannot be read by a script, and Broadcom publishes no CSAF feed. Each entry is assembled
+from the NVD CVE API (CVEs, CVSS, vulnerable versions), the CISA KEV feed (exploited in
+the wild), and Broadcom's build-number KB articles (fixed builds), with each fixed release
+confirmed against an independent source quoting the advisory. Every fix is checked
+mechanically against a snapshot of the build KB in `builds.yaml`. The first catalog
+(2026-10-19) carries three KEV-listed advisories: VMSA-2025-0004 (ESXi), VMSA-2024-0019
+and VMSA-2026-0006 (vCenter; its ESX half is not catalogued yet and reports unknown).
 
 ### VCF 9.0 / 9.1 Compatibility
 

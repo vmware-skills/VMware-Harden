@@ -7,6 +7,7 @@ and review_policy.
 from dataclasses import dataclass, field
 
 from vmware_harden.baselines.model import (
+    AdvisoryCheck,
     Baseline,
     QueryCheck,
     Rule,
@@ -45,6 +46,8 @@ def _rule_check_signature(rule: Rule) -> str:
         return f"query::{rule.check.sql}"
     if isinstance(rule.check, ScriptCheck):
         return f"script::{rule.check.module}::{rule.check.function}"
+    if isinstance(rule.check, AdvisoryCheck):
+        return f"advisory::{rule.check.advisory_id}"
     return "unknown"
 
 

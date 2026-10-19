@@ -1,0 +1,19 @@
+# Release → build snapshot, copied from Broadcom's build-number KB articles.
+#
+# Only releases the catalog names are listed. Each row was read from the raw
+# KB page on the retrieval date below (not from a summary of it), and
+# tests/unit/test_advisory_catalog.py checks every catalog fix against this file.
+#
+# ESXi:    https://knowledge.broadcom.com/external/article/316595/build-numbers-and-versions-of-vmware-esx.html
+# vCenter: https://knowledge.broadcom.com/external/article/326316/build-numbers-and-versions-of-vmware-vce.html
+retrieved: 2026-10-19
+releases:
+  - {product: esxi, label: "ESXi 8.0 Update 3d", version: "8.0.3", build: 24585383, released: 2025-03-04}
+  - {product: esxi, label: "ESXi 8.0 Update 2d", version: "8.0.2", build: 24585300, released: 2025-03-04}
+  - {product: esxi, label: "ESXi 7.0 Update 3s", version: "7.0.3", build: 24585291, released: 2025-03-04}
+  - {product: vcenter, label: "vCenter Server 8.0 Update 3d", version: "8.0.3.00400", build: 24322831, released: 2024-10-21}
+  - {product: vcenter, label: "vCenter Server 7.0 Update 3t", version: "7.0.3.02200", build: 24322018, released: 2024-10-21}
+  - {product: vcenter, label: "vCenter Server 8.0 Update 3k", version: "8.0.3.01000", build: 25600417, released: 2026-07-29}
+  - {product: vcenter, label: "vCenter Server 8.0 Update 2f", version: "8.0.2.00600", build: 25624321, released: 2026-08-03}
+  - {product: vcenter, label: "vCenter 9.0.2.0100", version: "9.0.2.0100", build: 25629525, released: 2026-07-29}
+  - {product: vcenter, label: "vCenter 9.1.0.0300", version: "9.1.0.0300", build: 25629530, released: 2026-07-29}

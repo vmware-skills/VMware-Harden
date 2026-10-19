@@ -3,7 +3,10 @@ from pathlib import Path
 
 import yaml
 
-from vmware_harden.baselines.model import Baseline, ScriptCheck
+from vmware_harden.baselines.model import AdvisoryCheck, Baseline, ScriptCheck
+
+#: Generated from the advisory catalog; no YAML baseline may use this id.
+RESERVED_IDS = frozenset({"vmsa-advisories"})
 
 BUILTIN_DIR = Path(__file__).parent / "builtin"
 USER_DIR = Path("~/.vmware-harden/baselines").expanduser()
@@ -46,6 +49,17 @@ def load_baseline(path: Path | str) -> Baseline:
     with path.open(encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     baseline = Baseline(**raw)
+    if baseline.id in RESERVED_IDS:
+        raise NotImplementedError(
+            f"Baseline id {baseline.id!r} is reserved: it is generated from the "
+            "shipped advisory catalog. Give this baseline another id."
+        )
+    if any(isinstance(r.check, AdvisoryCheck) for r in baseline.rules):
+        raise NotImplementedError(
+            f"Baseline {baseline.id!r} uses check type 'advisory', which only the "
+            "generated vmsa-advisories baseline may use. Scan that baseline for "
+            "known vulnerabilities, or convert this rule to a 'query' check."
+        )
 
     if baseline.extends:
         parent = load_builtin(baseline.extends)
@@ -105,8 +119,14 @@ def load_builtin(name: str) -> Baseline:
     """Load a baseline by name (without `.yaml` suffix).
 
     Searches user dir (~/.vmware-harden/baselines) first, then the
-    package's built-in directory.
+    package's built-in directory. ``vmsa-advisories`` is the one baseline not
+    read from YAML: it is generated from the shipped advisory catalog, and the
+    id is reserved — a user file of that name is not consulted.
     """
+    from vmware_harden.advisories.baseline import ADVISORY_BASELINE_ID, advisory_baseline
+
+    if name == ADVISORY_BASELINE_ID:
+        return advisory_baseline()
     return load_baseline(_resolve_baseline_path(name))
 
 
@@ -126,6 +146,9 @@ def list_builtins() -> list[str]:
             continue
         for p in base.glob("*.yaml"):
             names.add(p.stem)
+    from vmware_harden.advisories.baseline import ADVISORY_BASELINE_ID
+
+    names.add(ADVISORY_BASELINE_ID)
     return sorted(names)
 
 
