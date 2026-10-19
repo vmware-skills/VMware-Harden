@@ -1,3 +1,47 @@
+## v1.16.0 — Known vulnerabilities: ESXi and vCenter builds against VMware security advisories (2026-10-19)
+
+**New baseline `vmsa-advisories`.** `vmware-harden scan --baseline vmsa-advisories --target <vc>` judges each
+ESXi host's and the vCenter's own version and build against an offline catalog of VMware security advisories shipped
+in the package. One rule per advisory; each rule quotes the 等保 2.0 三级 control it evidences (安全计算环境·入侵防范).
+
+* Three states. **affected** is a violation whose evidence names the fixing release, the CVEs and whether they are in
+  CISA KEV. **fixed** is judged with no violation. **unknown** is a per-node gap with its reason — an unreadable build,
+  a line the advisory does not list or that was past end of support, a branch the sources disagree on, a product the
+  catalog does not carry yet. Unknown is never a pass. An advisory with nothing to judge in the scan, or one whose
+  covered node type could not be collected (e.g. the vCenter was judged but the host collector failed), is reported
+  undetermined rather than "0 affected".
+* Within a line, patches are cumulative: a build at or past the fix on the same update branch, or a later update
+  branch whose build is past the newest fix, is judged fixed even when that exact build is not in the catalog's build
+  snapshot. A build below the fix is affected; a later branch below the newest fix is unknown.
+* Builds are compared only within one `major.minor` line.
+* A clean result means "no open advisory known as of the catalog date" (printed in every rule), not "not vulnerable".
+* The first catalog (as of 2026-10-19) carries three KEV-listed advisories: VMSA-2025-0004 (ESXi), VMSA-2024-0019 and
+  VMSA-2026-0006 (vCenter; its ESX half is not catalogued and reports unknown). Built from the NVD CVE API, the CISA
+  KEV feed and Broadcom's build-number KBs, each fix confirmed against an independent source; Broadcom's advisory pages
+  sit behind a bot challenge and are recorded as the source to re-check. Every fixed build is checked by tests against
+  a snapshot of the build KB.
+* Run on a live vCenter 8.0.3 with two ESXi 8.0.3 hosts and on a standalone ESXi 8.0.3: the affected path (all
+  three advisories), the uncatalogued-product path and the nothing-to-judge path. Not yet run live: the fixed path,
+  and vCenter / ESXi 9.x (whose `about.version` format is not yet observed).
+
+**New collector: the vCenter itself** (`vcenter` node: version, build, full name), read from `content.about`. A
+standalone ESXi target yields no vCenter node.
+
+**`report --format csv`** — one row per violation, with advisory columns (status, version, build, fixed_in, kev, cves,
+catalog_as_of, reason), **followed by one row per node that could not be judged (`unknown`) and per rule that was not
+evaluated (`undetermined`)** — the file handed to another team must not read as "everything else is fine". Cells
+starting with `=`, `+`, `-` or `@` are prefixed with `'` (node names come from the vCenter inventory). An unknown
+`--format` value now exits 2 instead of silently printing text. The text report
+prints each affected component's fix and KEV flag.
+
+**Reserved.** `vmsa-advisories` cannot be used as a user baseline id (file name via `baseline import --name`, or `id:`
+inside a file), and check type `advisory` is refused in user YAML — both used to load and then be silently ignored or
+fail mid-scan.
+
+**Wording.** The report's per-node list was headed "data missing" and the summary said the rules' values "were
+missing" or that "no collector provides the data"; both are now neutral ("could not reach a verdict … the reason is
+listed per node/rule"), because a node can be unjudged for reasons other than missing data.
+
 ## v1.15.0 — 17 more attributes collected: more rules run, and some results change (2026-10-19)
 
 **Read this before comparing with an earlier scan.** 71 built-in rules now evaluate (38 before). Some hosts and VMs
