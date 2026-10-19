@@ -138,6 +138,41 @@ vmware-harden baseline validate ./my-corp.yaml
 vmware-harden baseline import ./my-corp.yaml --name corp-prod
 ```
 
+## advisories
+
+Inspect, and optionally refresh, the VMSA catalog the `vmsa-advisories`
+baseline judges against.
+
+```bash
+vmware-harden advisories show
+vmware-harden advisories update [--nvd]
+```
+
+`show` (local) prints the catalog date, its advisories, and whether KEV flags
+were ever refreshed. `update` (audited, outbound HTTPS) downloads the CISA KEV
+feed and, with `--nvd`, one NVD record per catalogued CVE (spaced 6.5 s for
+NVD's public rate limit), then writes `~/.vmware-harden/advisories-cache.json`
+atomically (unique temp file, fsync, rename). The cache keeps the whole KEV set, so a
+newer catalog is flagged from it too. Redirects are followed only to https. A running
+MCP server sees a new cache on its next call (the loader keys on the file's mtime). What it changes, and what it does not:
+
+| | |
+|---|---|
+| KEV flag | Added when KEV lists a catalogued CVE; never removed |
+| CVSS | Filled only where the catalog has none; a different NVD score is printed, not applied |
+| Affected versions / fixed builds | Never — they come only from the shipped catalog (NVD's lists can be incomplete) |
+
+It also lists ESXi / vCenter-scope CVEs that KEV carries but no catalogued
+advisory covers — the catalog cannot judge those — and counts other
+VMware/Broadcom KEV entries (Spring, Aria, …). A KEV failure (HTTP error, an HTML
+challenge page, a body that is not the expected JSON, an empty feed, a cache write
+error) exits 1 with the reason on stderr, and the previous cache is left as it was.
+An NVD record that cannot be read is listed and does not block the KEV refresh.
+Each run replaces the whole cache: a run without `--nvd` drops CVSS scores a previous
+`--nvd` run had filled (the shipped catalog has every score today, so nothing changes). A cache that cannot
+be read is ignored with a warning; the shipped catalog still answers. Broadcom's
+own advisory pages are behind a bot challenge and are not fetched.
+
 ## drift
 
 Show drift events from the most recent snapshot relative to its prior

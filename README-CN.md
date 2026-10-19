@@ -133,6 +133,12 @@ vmware-harden report --format csv > vmsa.csv
 （2026-10-19）收录三条已列入 KEV 的公告：VMSA-2025-0004（ESXi）、VMSA-2024-0019 与 VMSA-2026-0006（vCenter；
 后者的 ESX 部分尚未收录，报为未知）。
 
+**可选的在线刷新。** `vmware-harden advisories update` 下载 CISA KEV 清单（加 `--nvd` 时还下载 NVD 评分），写入
+`~/.vmware-harden/advisories-cache.json`，由目录加载器叠加：KEV 标记只增不减，CVSS 只补缺失值，修复版本永远不从这里取。
+它还会列出 KEV 里有、但目录没有任何公告覆盖的 ESXi/vCenter CVE。KEV 拉取失败以退出码 1 结束，原有缓存保持不变；某条 NVD
+记录读不到只会报告出来，不阻断 KEV 刷新。正在运行的 MCP server 在下一次调用时就会读到新缓存。报告会写明 KEV 最近一次核对的时间。
+`vmware-harden advisories show` 显示目录日期和最近一次刷新时间。
+
 ### 等保 2.0 三级（国内合规）
 
 `dengbao-2.0-level3-vmware` 依据 **GB/T 22239-2019《信息安全技术 网络安全等级保护基本要求》第三级**

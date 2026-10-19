@@ -44,11 +44,11 @@ AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 
 ## Quick Install
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.16.0"
+uv tool install "vmware-harden[collectors]==1.17.0"
 vmware-harden baseline list
 ```
 
-The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.16.0` is enough to report on an existing twin DB.
+The `[collectors]` extra is what `scan` needs: inventory is read through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool install` isolates each tool's environment — installing those packages on their own leaves harden unable to import them. Plain `uv tool install vmware-harden==1.17.0` is enough to report on an existing twin DB.
 
 For first-time use, ensure a vmware-aiops target is configured (harden uses aiops collectors) and optionally set `ANTHROPIC_API_KEY` for live remediation advice.
 
@@ -89,7 +89,7 @@ Use vmware-harden when the user needs to:
 
 ### 1. First-time scan with 等保 2.0 三级
 
-1. Install: `uv tool install "vmware-harden[collectors]==1.16.0"` (the extra carries the inventory collectors `scan` reads through)
+1. Install: `uv tool install "vmware-harden[collectors]==1.17.0"` (the extra carries the inventory collectors `scan` reads through)
 2. Verify aiops is configured: `vmware-aiops doctor` — harden reuses aiops connection for the vCenter collector
 3. List baselines: `vmware-harden baseline list` — confirm `dengbao-2.0-level3-vmware` is present
 4. Scan: `vmware-harden scan --baseline dengbao-2.0-level3-vmware --target prod-vcenter`
@@ -118,6 +118,7 @@ Use vmware-harden when the user needs to:
 
 ### 4. Known vulnerabilities (VMSA)
 
+0. Optional: `vmware-harden advisories update` refreshes KEV (exploited-in-the-wild) flags from CISA (and, with `--nvd`, missing CVSS from NVD) into a local cache, and lists ESXi/vCenter KEV CVEs the catalog does not carry yet. It never changes which builds fix what. `vmware-harden advisories show` prints the catalog date and when KEV was last refreshed.
 1. Scan: `vmware-harden scan --baseline vmsa-advisories --target prod-vcenter` — one rule per catalogued advisory, over the ESXi hosts and the vCenter itself
 2. Report: `vmware-harden report` (each affected component shows its fix and whether the CVE is in CISA KEV) or `vmware-harden report --format csv > vmsa.csv` for the security team
 3. Read the result as three states: **affected** (a violation, with the release that fixes it), **fixed**, and **unknown** (listed per node with the reason). A clean result means "no open advisory known as of the catalog date" (printed in every rule) — never "not vulnerable"; advisories published after that date are not in the catalog.
@@ -166,6 +167,7 @@ vmware-harden baseline validate <path>
 vmware-harden scan --baseline <id> --target <name>
 vmware-harden report [--format text|json|csv]
 vmware-harden scan --baseline vmsa-advisories --target <name>   # known vulnerabilities
+vmware-harden advisories show | update [--nvd]                  # catalog date / optional KEV (+NVD) refresh
 vmware-harden drift [--format text|json]
 vmware-harden advise (--violation-id <id> | --all-critical)
 vmware-harden web [--host 127.0.0.1] [--port 8080]
@@ -206,9 +208,9 @@ Verify the dashboard is reading the same DuckDB. If `VMWARE_HARDEN_DB` is set in
 ## Audit & Safety
 
 1. **Source code**: [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) — MIT license, publicly auditable.
-2. **Config / state files**: custom baselines in `~/.vmware-harden/baselines/*.yaml`; Twin DuckDB at `~/.vmware-harden/twin.duckdb`. No passwords are stored — all credentials live in the upstream skill (`~/.vmware-aiops/.env`).
-3. **Webhook data scope**: none. Harden makes **no outbound network calls** other than (a) optional Anthropic API requests when `ANTHROPIC_API_KEY` is set for advisor suggestions, and (b) the local web dashboard bound to `127.0.0.1` by default.
-4. **TLS verification**: harden does not connect to vCenter/NSX directly — TLS handling is delegated to vmware-aiops. The advisor's HTTPS calls to `api.anthropic.com` use system TLS verification (no opt-out).
+2. **Config / state files**: custom baselines in `~/.vmware-harden/baselines/*.yaml`; Twin DuckDB at `~/.vmware-harden/twin.duckdb`; the optional advisory refresh cache at `~/.vmware-harden/advisories-cache.json`. No passwords are stored — all credentials live in the upstream skill (`~/.vmware-aiops/.env`).
+3. **Webhook data scope**: none. Harden makes **no outbound network calls** other than (a) optional Anthropic API requests when `ANTHROPIC_API_KEY` is set for advisor suggestions, (b) the local web dashboard bound to `127.0.0.1` by default, and (c) `vmware-harden advisories update`, run only on request and audited, which downloads public data from cisa.gov (KEV feed) and, with `--nvd`, nvd.nist.gov (one request per catalogued CVE), and sends nothing about your estate.
+4. **TLS verification**: harden does not connect to vCenter/NSX directly — TLS handling is delegated to vmware-aiops. The advisor's HTTPS calls to `api.anthropic.com` and the advisory refresh's calls to cisa.gov / nvd.nist.gov use system TLS verification (no opt-out).
 5. **Prompt injection protection**: advisor LLM context is built exclusively from typed Twin queries (rule id, severity, evidence dict) — no free-text user input is forwarded. Evidence text passes through `_sanitize()` (truncate ≤500 chars, strip C0/C1 control characters).
 6. **Least privilege**: all 8 MCP tools are read-only, and no harden command changes a VMware system. The CLI-only `apply` hands a Suggestion to **vmware-pilot** as a pending workflow; execution happens only in pilot, after its approval gate, under the sibling skill's own gate and audit.
 

@@ -50,6 +50,11 @@ This skill is **strictly non-destructive**. Every MCP tool and every CLI command
 
 - `vmware-harden` makes **no direct TLS connections to vSphere, NSX, or Aria** — TLS verification policy is owned by the sibling skills it delegates to.
 - The Anthropic API client uses the system CA bundle and full certificate verification by default.
+- `vmware-harden advisories update` (run only on request; a CLI command, not an MCP tool) downloads public data
+  from `www.cisa.gov` (KEV feed) and, with `--nvd`, `services.nvd.nist.gov`, using the system CA bundle with full
+  verification; redirects are followed only to https. It sends nothing about the scanned estate — the only request
+  parameters are CVE ids taken from the shipped catalog. The result is a local cache that can only add KEV flags and
+  fill missing CVSS; it never changes which builds are affected or fixed.
 
 ### Transitive Dependencies
 

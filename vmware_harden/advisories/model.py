@@ -5,7 +5,7 @@ in the wheel. Every entry carries the sources it was taken from; the shipped
 file is checked mechanically by ``tests/unit/test_advisory_catalog.py``.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -108,3 +108,8 @@ class Catalog(BaseModel):
     #: a line's EOL does not list that line, so its absence means nothing.
     eol: dict[Product, dict[str, date]] = Field(default_factory=dict)
     advisories: list[Advisory]
+    #: Set only when an online refresh cache was overlaid (see
+    #: :mod:`vmware_harden.advisories.refresh`): when it was fetched and which
+    #: CISA KEV catalog version it read. None means the shipped catalog alone.
+    kev_refreshed_at: datetime | None = None
+    kev_catalog_version: str | None = None

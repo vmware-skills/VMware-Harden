@@ -100,3 +100,37 @@ def test_machine_formats_still_emit_when_there_are_no_advisory_rows(tmp_path, ca
     twin.close()
     run_report(db=str(db), format=fmt)
     assert capsys.readouterr().out.strip()
+
+
+def test_csv_and_text_say_when_kev_was_last_checked(tmp_path, capsys, monkeypatch):
+    from vmware_harden.advisories import catalog as catalog_mod
+
+    cache = tmp_path / "c.json"
+    cache.write_text(
+        json.dumps(
+            {"fetched_at": "2026-10-19T01:02:03+00:00", "kev": {"catalog_version": "v", "cves": []}}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(catalog_mod, "cache_path", lambda: cache)
+    catalog_mod.reset_cache()
+    try:
+        db = _seed(tmp_path)
+        run_report(db=str(db), format="csv")
+        rows = list(csv.DictReader(io.StringIO(capsys.readouterr().out)))
+        hit = [r for r in rows if r["status"] == "affected"]
+        assert hit and hit[0]["kev_refreshed_at"] == "2026-10-19T01:02:03+00:00"
+        run_report(db=str(db), format="text")
+        assert "KEV checked 2026-10-19" in capsys.readouterr().out
+    finally:
+        catalog_mod.reset_cache()
+
+
+def test_without_a_refresh_the_csv_column_is_empty_and_text_says_shipped(tmp_path, capsys):
+    db = _seed(tmp_path)
+    run_report(db=str(db), format="csv")
+    rows = list(csv.DictReader(io.StringIO(capsys.readouterr().out)))
+    assert "kev_refreshed_at" in rows[0]
+    assert all(r["kev_refreshed_at"] == "" for r in rows)
+    run_report(db=str(db), format="text")
+    assert "KEV per shipped catalog" in capsys.readouterr().out

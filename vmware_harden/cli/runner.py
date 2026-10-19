@@ -287,7 +287,7 @@ def run_scan(
 #: CSV columns. The advisory columns are empty for query-rule violations.
 _CSV_FIELDS = (
     "rule", "node", "node_name", "severity", "status", "version", "build",
-    "fixed_in", "kev", "cves", "catalog_as_of", "reason",
+    "fixed_in", "kev", "cves", "catalog_as_of", "kev_refreshed_at", "reason",
 )
 
 
@@ -306,7 +306,9 @@ def _advisory_suffix(raw: object) -> str:
         return ""
     fix = ev.get("fixed_in") or "no public fix"
     kev = "; KEV (exploited in the wild)" if ev.get("kev") else ""
-    return f" → fix: {fix}{kev}"
+    checked = ev.get("kev_refreshed_at")
+    when = f"KEV checked {checked[:10]}" if checked else "KEV per shipped catalog"
+    return f" → fix: {fix}{kev} [{when}]"
 
 
 #: A cell starting with one of these is a formula to a spreadsheet. Node names
@@ -353,6 +355,7 @@ def _write_csv(rows: list, twin: Twin | None = None, snapshot_id: str | None = N
                 "kev": "" if kev is None else str(bool(kev)).lower(),
                 "cves": ";".join(ev.get("cves", [])),
                 "catalog_as_of": ev.get("catalog_as_of", ""),
+                "kev_refreshed_at": ev.get("kev_refreshed_at") or "",
                 "reason": ev.get("reason", ""),
             }
         )

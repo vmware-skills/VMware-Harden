@@ -173,6 +173,15 @@ mechanically against a snapshot of the build KB in `builds.yaml`. The first cata
 (2026-10-19) carries three KEV-listed advisories: VMSA-2025-0004 (ESXi), VMSA-2024-0019
 and VMSA-2026-0006 (vCenter; its ESX half is not catalogued yet and reports unknown).
 
+**Optional refresh.** `vmware-harden advisories update` downloads the CISA KEV feed (and, with
+`--nvd`, NVD scores) into `~/.vmware-harden/advisories-cache.json`, which the catalog loader
+overlays: KEV flags are only ever added, CVSS only filled where missing, and fixed builds are never
+taken from it. It also lists ESXi/vCenter CVEs in KEV that no catalogued advisory covers. A failed
+KEV fetch exits 1 and leaves the previous cache unchanged; an NVD record that cannot be read is
+reported and does not block the KEV refresh. A running MCP server picks up a new cache on its next
+call. Reports show when KEV was last checked. `vmware-harden advisories show` prints the catalog
+date and the last refresh.
+
 ### VCF 9.0 / 9.1 Compatibility
 
 The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0-subset` and `vsphere-scg-v9-subset` ship today as `extends:` aliases of their v8 parents — same rules, a v9-named ID to scan and report under. Rules specific to 9.x will be added to them as Broadcom publishes the v9 guides.

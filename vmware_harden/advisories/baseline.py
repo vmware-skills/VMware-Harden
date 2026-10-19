@@ -155,5 +155,6 @@ def evidence(adv_id: str, nv: NodeVerdict, catalog: Catalog | None = None) -> di
         "cves": [c.id for c in adv.cves],
         "kev": adv.kev,
         "catalog_as_of": cat.as_of.isoformat(),
+        "kev_refreshed_at": cat.kev_refreshed_at.isoformat() if cat.kev_refreshed_at else None,
         "sources": list(adv.sources),
     }
