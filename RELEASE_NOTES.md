@@ -1,3 +1,44 @@
+## v1.15.0 — 17 more attributes collected: more rules run, and some results change (2026-10-19)
+
+**Read this before comparing with an earlier scan.** 71 built-in rules now evaluate (38 before). Some hosts and VMs
+that a previous version reported as compliant will now show **violations**, and some will show **undetermined**:
+before, many rules could not run at all (their attribute was never collected) or compared against a value the API
+never returns, so they passed every host. That earlier "compliant" was not a measurement. A new violation after
+upgrading is most likely a finding that was always there, not a change on the host.
+
+**New collected facts** (each read off a live vCenter 8.0.3 and ESXi 8.0.3 before the collector was written; read in
+the same batched pass as the existing host facts, plus two read-only queries per host):
+
+* Lockdown and logging: `lockdown_mode` (the API enum as returned, e.g. `lockdownDisabled`),
+  `lockdown_mode_enabled`, `lockdown_exceptions_count`, `persistent_logs`.
+* Boot and platform: `secure_boot_enabled`, `host_tpm_attested` (vCenter only), `image_profile_acceptance` (API
+  spellings such as `partner`), `nx_enabled`, `tls_min_version` (a value below TLS 1.2 is only believed on hosts
+  known to be older than 8.x; otherwise it is left out).
+* Standard vSwitch security: promiscuous mode, forged transmits, MAC address changes (including each port group's
+  effective policy), `standard_vswitch_count`, `mgmt_vlan_tagged` (VLAN 4095, a guest trunk, is undecided, not
+  "tagged").
+* Directory: `ad_joined`.
+* VM: `secure_boot`, `hw_version_int`.
+
+A fact that cannot be read stays absent and is reported as a per-node gap; it is never filled with a default.
+Disconnected hosts and VMs are not read.
+
+**Rule fixes:** lockdown rules compared against `'disabled'` (now `'lockdownDisabled'`); acceptance-level rules used
+`VMwareCertified` / `CommunitySupported` (now the API spellings); `host_secure_boot` / `vib_acceptance` now use the
+canonical names; 9 rules no longer treat a missing value as a violation (`IS NULL OR` removed) — a missing value is
+a gap.
+
+**A rule that can never match is now undetermined, not passed.** A rule — including one in your own `--baseline` —
+that compares a collected value against something it never holds (an invented spelling, a JSON-typed extraction, a
+function wrapper, an ordering against a non-member, a `LIKE` no value satisfies) used to run, match nothing and pass
+every host, or abort the scan. It is now reported undetermined, with the impossible literal and the real values in
+the reason. Check custom baselines written against older spellings.
+
+Still not collected (the rule needs redefining, there is no vSphere API for it, or the lab could not confirm its
+shape): audit retention in days, encrypted vMotion at host level, management vmk isolation, default admin account,
+datastore encryption, vSAN encryption, VM isolation copy, VM encryption and tags, NSX DFW section name, and the
+account/patch/backup rules. Rules on these stay undetermined.
+
 ## v1.14.0 — roles for network callers (HLD §18)
 
 * Declares the role metadata vmware-policy ≥ 1.24.0 needs to apply **roles** to this server over HTTPS
