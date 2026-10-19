@@ -1,3 +1,35 @@
+## v1.17.0 — Optional online refresh of the advisory catalog: CISA KEV and NVD (2026-10-20)
+
+**`vmware-harden advisories update`** downloads the CISA Known Exploited Vulnerabilities feed and, with `--nvd`,
+one NVD record per catalogued CVE (spaced for NVD's public rate limit), and writes
+`~/.vmware-harden/advisories-cache.json`. The catalog loader overlays it on the shipped catalog:
+
+* KEV flags are only **added** — a stale or partial cache never erases a flag the catalog carries. The cache keeps
+  the whole KEV set, so a catalog upgraded later is flagged from it too.
+* CVSS is only **filled where the catalog has none**; a different NVD score is printed, not applied. NVD is off by
+  default (the shipped catalog has every score), and an NVD record that cannot be read — including a valid JSON body
+  of an unexpected shape — is reported without blocking the KEV refresh. Each run replaces the whole cache.
+* Affected versions and fixed builds are **never** taken from the refresh: NVD's vulnerable-version lists can be
+  incomplete, and Broadcom's advisory pages (behind a bot challenge) are not fetched.
+* It lists the ESXi / vCenter-scope CVEs that KEV carries but no catalogued advisory covers — the catalog cannot
+  judge those — and counts the other VMware/Broadcom KEV entries (Spring, Aria, …) without listing them. Against the
+  live feed on 2026-10-20 that was 15 in scope and 13 others.
+* A KEV failure — an HTTP error, an HTML challenge page, a body that is not the expected JSON, an empty feed, a cache
+  write error — exits 1 with the reason on stderr, and the previous cache is left unchanged (unique temp file,
+  fsync, rename). Redirects are followed only to https. A cache that cannot be read, or does not meet the catalog's
+  own constraints (CVSS 0–10, a timezone-aware past `fetched_at`), is ignored with a warning naming the command
+  that rewrites it.
+* A running MCP server picks up a new cache on its next call (the loader keys on the cache file's path, inode, size
+  and mtime, so a rewrite on a coarse-mtime filesystem is still seen). A cache without a KEV catalog version is refused.
+* Off by default: nothing is fetched and nothing is overlaid until the command is run. It is a CLI command only
+  (audited as `update_advisory_catalog`), not an MCP tool, so a network caller cannot trigger the download.
+
+**`vmware-harden advisories show`** prints the catalog date, its advisories, and when KEV was last refreshed.
+Advisory evidence carries `kev_refreshed_at`; the CSV report has a `kev_refreshed_at` column and the text report
+says "KEV checked <date>" or "KEV per shipped catalog".
+
+Run against the live CISA and NVD services on 2026-10-20.
+
 ## v1.16.0 — Known vulnerabilities: ESXi and vCenter builds against VMware security advisories (2026-10-19)
 
 **New baseline `vmsa-advisories`.** `vmware-harden scan --baseline vmsa-advisories --target <vc>` judges each
