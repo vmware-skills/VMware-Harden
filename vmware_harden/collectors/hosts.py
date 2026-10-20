@@ -1,12 +1,19 @@
 """Host inventory collector. Pulls ESXi host data via vmware-aiops."""
+import logging
+
 from vmware_harden.checks.nodescope import MEASURED_ATTR
 from vmware_harden.collectors.base import Collector
 from vmware_harden.collectors.host_security import (
     HOST_SECURITY_PATHS,
     PRODUCIBLE_SECURITY_ATTRS,
+    host_vm_networks,
+    mgmt_isolation_attrs,
     queried_attrs,
     security_attrs,
+    vm_networks_by_host,
 )
+
+log = logging.getLogger(__name__)
 
 #: ESXi advanced-setting name -> the snake_case ``nodes.attrs`` key the STIG
 #: baseline SQL reads. Single source of truth for what the host collector can
@@ -184,18 +191,52 @@ def _fetch_advanced_settings(si: object) -> dict[str, dict]:
         "config.service",
         "config.dateTimeInfo",
         "config.firewall",
+        "vm",
         *HOST_SECURITY_PATHS,
     ]
+    by_host, seen_vm_ids = _fetch_vm_networks(si, _collect, vim) or (None, set())
     settings: dict[str, dict] = {}
-    for _obj, props in _collect(si, [vim.HostSystem], paths):
+    for obj, props in _collect(si, [vim.HostSystem], paths):
         name = props.get("name", "")
+        vm_networks = host_vm_networks(
+            getattr(obj, "_moId", None), props.get("vm"), by_host, seen_vm_ids)
         settings[name] = {
             **_advanced_settings_to_attrs(props.get("config.option")),
             **_service_and_time_attrs(props),
             **security_attrs(props),
             **queried_attrs(props),
+            **mgmt_isolation_attrs(
+                props.get("config.network"),
+                props.get("config.virtualNicManagerInfo"),
+                vm_networks,
+            ),
         }
     return settings
+
+
+def _fetch_vm_networks(si: object, collect, vim) -> tuple[dict, set[str]] | None:
+    """VM network names per host moId, and the moIds of every VM fully read. REAL-HARDWARE-GATED.
+
+    Two batched passes (networks, then VMs), whatever the estate size. Only a
+    plain ``vim.Network`` is a standard port group; a distributed port group or
+    an NSX opaque network is a subclass and makes its VMs' hosts undecided. A
+    failure returns ``None``, which leaves ``mgmt_vmk_isolated`` undecided on
+    every host with a tagged management VLAN rather than calling it isolated.
+    """
+    not_standard = (vim.dvs.DistributedVirtualPortgroup, vim.OpaqueNetwork)
+    try:
+        kinds = {
+            getattr(obj, "_moId", None): (isinstance(obj, not_standard), props.get("name", ""))
+            for obj, props in collect(si, [vim.Network], ["name"])
+        }
+        vms = collect(si, [vim.VirtualMachine], ["runtime.host", "network", "config.template"])
+        by_host, read = vm_networks_by_host(
+            [(getattr(obj, "_moId", None), props) for obj, props in vms], kinds)
+    except Exception as exc:  # noqa: BLE001 — the host facts still stand
+        log.warning("VM network pass failed (%s); mgmt_vmk_isolated will be "
+                    "reported not evaluated", type(exc).__name__)
+        return None
+    return by_host, read - {None}
 
 
 def _fetch_hosts(target: str) -> list[dict]:

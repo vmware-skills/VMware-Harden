@@ -92,26 +92,29 @@ rules:
   # Requirement 2 — Apply secure configurations to all system components
   # ============================================================
   - id: pci-r2-1
-    title: "Default vendor accounts disabled on ESXi hosts"
+    title: "Default root account restricted on ESXi hosts (lockdown on, SSH off)"
     severity: critical
     category: secure-configuration
     rationale: |
       PCI-DSS Requirement 2.2.2 — Vendor default accounts are managed: removed
       or disabled if not used; if used, default password is changed and use is
-      restricted. We check that ESXi default admin accounts are disabled.
+      restricted. ESXi's root account cannot be removed or disabled, so this
+      checks that its use is restricted: lockdown mode is on, and SSH is
+      neither running nor set to start with the host.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
           AND (
-            json_extract_string(attrs, '$.default_admin_disabled') IS NULL
-            OR json_extract_string(attrs, '$.default_admin_disabled') != 'true'
+            TRY_CAST(json_extract(attrs, '$.lockdown_mode_enabled') AS BOOLEAN) = false
+            OR TRY_CAST(json_extract(attrs, '$.ssh_enabled') AS BOOLEAN) = true
+            OR TRY_CAST(json_extract(attrs, '$.ssh_running') AS BOOLEAN) = true
           )
     remediation:
-      summary: "Disable the built-in default admin account on each ESXi host"
-      manual_steps: "ESXi → Manage → Security → Users → disable or rename default admin account"
-      risk: "Lockout risk if no alternate admin account exists; verify alternate account works first"
+      summary: "Enable lockdown mode and stop SSH on each ESXi host"
+      manual_steps: "vCenter → Host → Configure → Security Profile → Lockdown Mode: Normal; Services → SSH: Stop, policy 'Start and stop manually'"
+      risk: "Lockdown blocks direct host logins; confirm vCenter access and exception users first"
     review_policy:
       human_review_required: true
       min_confidence: 0.95
@@ -243,26 +246,32 @@ rules:
       min_confidence: 0.9
 
   - id: pci-r10-2
-    title: "Audit logs retained at least 90 days online (1 year total)"
+    title: "Local audit record storage enabled, persistent and at least 100 MiB"
     severity: medium
     category: logging-monitoring
     rationale: |
       PCI-DSS Requirement 10.7 (formerly 10.5.4 / 10.7) — Audit log history is
       retained for at least 12 months, with at least the most recent 3 months
-      immediately available for analysis. We check ESXi local audit retention
-      meets the 90-day minimum.
+      immediately available for analysis.
+      ESXi keeps audit records by size (MiB), not by age: there is no
+      retention-days setting on the host, and how long the log server keeps
+      them is not visible to a host scan. This rule checks what the host does
+      answer: local audit record storage is enabled, on persistent storage, and
+      at least 100 MiB (the ESXi 8 STIG value). The retention period itself
+      must be enforced, and verified, on the log server.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
           AND (
-            json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
-            OR TRY_CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 90
+            TRY_CAST(json_extract(attrs, '$.audit_record_storage_enabled') AS BOOLEAN) = false
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_capacity_mib') AS INTEGER) < 100
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_persistent') AS BOOLEAN) = false
           )
     remediation:
-      summary: "Increase audit log retention to >= 90 days"
-      manual_steps: "ESXi → Advanced Settings → Syslog.global.auditRecord.storageCapacity (and/or remote syslog with archival policy)"
+      summary: "Enable persistent local audit record storage of at least 100 MiB; keep 12 months (3 online) on the log server"
+      manual_steps: "Advanced System Settings → Syslog.global.auditRecord.storageEnable = true; storageCapacity >= 100; storageDirectory on a datastore (or persistent scratch)"
       risk: "Higher disk usage on host log volume; verify storage capacity"
     review_policy:
       human_review_required: false

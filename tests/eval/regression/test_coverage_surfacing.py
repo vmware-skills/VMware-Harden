@@ -86,7 +86,7 @@ def test_scan_output_reports_partial_coverage(tmp_path: Path, capsys):
         run_scan(target="prod", baseline=_CIS, db=db, progress=typer.echo)
     out = capsys.readouterr().out
     assert "Found 0 violations" in out
-    assert "6 of 20 rules could not be evaluated" in out
+    assert "3 of 20 rules could not be evaluated" in out
 
 
 @pytest.mark.integration
@@ -114,8 +114,8 @@ def test_json_report_is_an_object_carrying_coverage(tmp_path: Path, capsys):
 
     assert isinstance(payload, dict)
     assert payload["violations"] == []
-    assert payload["coverage"]["evaluated"] == 14
-    assert payload["coverage"]["undetermined"] == 6
+    assert payload["coverage"]["evaluated"] == 17
+    assert payload["coverage"]["undetermined"] == 3
     assert payload["coverage"]["complete"] is False
     blocked = {r["rule"] for r in payload["coverage"]["undetermined_rules"]}
     # 2.1.1 used to be here; NTP is collected now, so it is judged instead.
@@ -138,7 +138,7 @@ def test_mcp_surfaces_coverage_next_to_the_violation_count(tmp_path: Path, capsy
         srv._DB_PATH = old
 
     assert listed["violations"] == []
-    assert listed["coverage"]["undetermined"] == 6
+    assert listed["coverage"]["undetermined"] == 3
     assert listed["coverage"]["complete"] is False
     assert "not compliant" in listed["note"]
 
@@ -270,7 +270,7 @@ def test_scan_target_also_carries_coverage(tmp_path: Path, capsys):
     capsys.readouterr()
 
     assert out["violations"] == 0
-    assert out["coverage"]["undetermined"] == 6
+    assert out["coverage"]["undetermined"] == 3
     assert out["coverage"]["complete"] is False
     assert "not compliant" in out["note"]
 

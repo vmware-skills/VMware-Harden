@@ -11,7 +11,12 @@ log = logging.getLogger(__name__)
 #: pass (:data:`_VM_SECURITY_ATTRS`). Single source of truth for the baseline
 #: contract test — a rule reading a key outside this set matches zero rows and
 #: reports false compliance (doc-vs-code parity, 形态 #6).
-_VM_SECURITY_ATTRS: frozenset[str] = frozenset({"secure_boot", "hw_version_int"})
+_VM_SECURITY_ATTRS: frozenset[str] = frozenset(
+    {"secure_boot", "hw_version_int", "migrate_encryption", "encryption_enabled"}
+)
+
+#: ``VirtualMachineConfigSpecEncryptedVMotionModes``, the API form.
+MIGRATE_ENCRYPTION_MODES: tuple[str, ...] = ("disabled", "opportunistic", "required")
 
 PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
     {
@@ -31,16 +36,31 @@ PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
 #: Properties read for the per-VM security facts, in one batched pass.
 _VM_SECURITY_PATHS: tuple[str, ...] = (
     "config.uuid", "config.bootOptions", "config.version", "runtime.connectionState",
+    "config.migrateEncryption", "config.keyId", "config.hardware.device", "datastore",
 )
 
 
-def _vm_security_attrs(props: dict) -> dict:
-    """Reduce one VM's batched properties to ``secure_boot`` / ``hw_version_int``.
+def _vm_security_attrs(props: dict, datastore_types: dict[str, str] | None = None) -> dict:
+    """Reduce one VM's batched properties to its security facts.
 
     ``efiSecureBootEnabled`` is reported ``False`` for a BIOS-firmware VM, which
     is the truth: such a VM cannot secure-boot. An unreadable ``bootOptions``
     leaves the key absent. ``config.version`` is ``vmx-NN``; anything else is not
     parsed into a number.
+
+    ``encryption_enabled`` needs the VM home *and* every virtual disk encrypted
+    (``config.keyId`` and each disk backing's ``keyId``): a vTPM VM has its home
+    encrypted and its disks in clear text. It is only judged when the config was
+    read (a well-formed ``config.version``) and the device list arrived. An RDM
+    or PMem disk has no key to carry, so a VM with one is not fully encrypted.
+
+    "Not encrypted" also needs to know the VM is on no vSAN datastore, whose
+    data-at-rest encryption may cover it and is not read: ``datastore_types``
+    maps every datastore the datastore pass read to its type (``None`` when the
+    pass failed), and the VM's own ``datastore`` list must have come back with
+    every entry in that map and none of them vSAN. Otherwise the fact is left
+    undecided. ``migrateEncryption`` is stored in the API's own enum form; any
+    other value is not stored.
 
     A VM vCenter does not report as ``connected`` (its host is unreachable, or
     the VM is orphaned/inaccessible) yields nothing: what vCenter answers for it
@@ -55,7 +75,30 @@ def _vm_security_attrs(props: dict) -> dict:
     version = props.get("config.version")
     if isinstance(version, str) and version.startswith("vmx-") and version[4:].isdigit():
         attrs["hw_version_int"] = int(version[4:])
+        attrs.update(_encryption(props, datastore_types))
+    mode = props.get("config.migrateEncryption")
+    if mode in MIGRATE_ENCRYPTION_MODES:
+        attrs["migrate_encryption"] = mode
     return attrs
+
+
+def _encryption(props: dict, datastore_types: dict[str, str] | None) -> dict:
+    devices = props.get("config.hardware.device")
+    if devices is None:
+        return {}
+    # Duck-typed on the field only a virtual disk has: a CD-ROM's ISO backing
+    # has a fileName too, but no capacity.
+    disks = [d for d in devices if hasattr(d, "capacityInKB")]
+    encrypted = props.get("config.keyId") is not None and all(
+        getattr(getattr(d, "backing", None), "keyId", None) is not None for d in disks
+    )
+    if not encrypted:
+        on = [getattr(ds, "_moId", None) for ds in props.get("datastore") or []]
+        if datastore_types is None or not on:
+            return {}
+        if any(datastore_types.get(ds) in (None, "vsan") for ds in on):
+            return {}
+    return {"encryption_enabled": encrypted}
 
 
 def _fetch_vm_security(si: object) -> dict[str, dict]:
@@ -67,6 +110,18 @@ def _fetch_vm_security(si: object) -> dict[str, dict]:
     """
     from vmware_aiops.ops.inventory import _collect, vim
 
+    try:
+        # A datastore whose type did not come back is left out, so a VM on it
+        # is undecided rather than judged as off vSAN.
+        types: dict[str, str] | None = {
+            getattr(obj, "_moId", None): str(props["summary.type"]).lower()
+            for obj, props in _collect(si, [vim.Datastore], ["summary.type"])
+            if props.get("summary.type") is not None
+        }
+    except Exception as exc:  # noqa: BLE001 — only the unencrypted verdict depends on it
+        log.warning("datastore pass failed (%s); unencrypted VMs will be reported "
+                    "not evaluated", type(exc).__name__)
+        types = None
     by_uuid: dict[str, dict] = {}
     seen_twice: set[str] = set()
     for _obj, props in _collect(si, [vim.VirtualMachine], list(_VM_SECURITY_PATHS)):
@@ -75,7 +130,7 @@ def _fetch_vm_security(si: object) -> dict[str, dict]:
             continue
         if uuid in by_uuid:
             seen_twice.add(uuid)
-        by_uuid[uuid] = _vm_security_attrs(props)
+        by_uuid[uuid] = _vm_security_attrs(props, types)
     return {u: a for u, a in by_uuid.items() if u not in seen_twice}
 
 
@@ -100,8 +155,8 @@ def _fetch_vms(target: str) -> list[dict]:
             # The second pass failing must not cost the VMs the first pass did
             # read. Its two facts go missing on every VM, which the engine
             # reports as per-VM gaps — not as passes.
-            log.warning("VM security pass failed (%s); secure_boot/hw_version_int "
-                        "will be reported not evaluated", type(exc).__name__)
+            log.warning("VM security pass failed (%s); its facts will be reported "
+                        "not evaluated", type(exc).__name__)
             security = {}
     finally:
         mgr.disconnect_all()

@@ -197,6 +197,7 @@ def test_security_reducers_emit_exactly_what_they_declare():
 
     from vmware_harden.collectors.host_security import (
         PRODUCIBLE_SECURITY_ATTRS,
+        mgmt_isolation_attrs,
         queried_attrs,
         security_attrs,
     )
@@ -210,6 +211,9 @@ def test_security_reducers_emit_exactly_what_they_declare():
         "config.option": [
             ns(key="Syslog.global.logDir", value="[ds1] logs"),
             ns(key="UserVars.ESXiVPsDisabledProtocols", value="sslv3,tlsv1,tlsv1.1"),
+            ns(key="Syslog.global.auditRecord.storageEnable", value=True),
+            ns(key="Syslog.global.auditRecord.storageCapacity", value=100),
+            ns(key="Syslog.global.auditRecord.storageDirectory", value="[ds1] audit"),
         ],
         "capability.uefiSecureBoot": True,
         "summary.tpmAttestation": ns(status="accepted"),
@@ -227,7 +231,12 @@ def test_security_reducers_emit_exactly_what_they_declare():
         "configManager.imageConfigManager": ns(
             HostImageConfigGetAcceptance=lambda: "vmware_accepted"),
     }
-    emitted = {**security_attrs(props), **queried_attrs(props)}
+    emitted = {
+        **security_attrs(props),
+        **queried_attrs(props),
+        **mgmt_isolation_attrs(props["config.network"],
+                               props["config.virtualNicManagerInfo"], frozenset()),
+    }
     assert set(emitted) == set(PRODUCIBLE_SECURITY_ATTRS), (
         f"declared-only {set(PRODUCIBLE_SECURITY_ATTRS) - set(emitted)}, "
         f"emitted-only {set(emitted) - set(PRODUCIBLE_SECURITY_ATTRS)}"
@@ -237,5 +246,8 @@ def test_security_reducers_emit_exactly_what_they_declare():
         "runtime.connectionState": "connected",
         "config.bootOptions": ns(efiSecureBootEnabled=True),
         "config.version": "vmx-21",
+        "config.migrateEncryption": "required",
+        "config.hardware.device": [],
+        "config.keyId": ns(keyId="k"),
     })
     assert set(vm) == set(_VM_SECURITY_ATTRS)

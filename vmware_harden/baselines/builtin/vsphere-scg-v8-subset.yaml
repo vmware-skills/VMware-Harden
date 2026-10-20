@@ -283,15 +283,15 @@ rules:
     title: "Ensure encrypted vMotion is required"
     severity: critical
     category: encryption
-    rationale: "vMotion 包含 VM 内存页明文，未加密时管理网嗅探即可还原敏感数据。"
+    rationale: "vMotion 包含 VM 内存页明文，未加密时管理网嗅探即可还原敏感数据。加密 vMotion 是 VM 级设置，按每台 VM 检查；opportunistic 会退回明文，不算合规。"
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
-        WHERE type = 'host'
-          AND json_extract_string(attrs, '$.encrypted_vmotion') != 'required'
+        WHERE type = 'vm'
+          AND json_extract_string(attrs, '$.migrate_encryption') != 'required'
     remediation:
-      summary: "Set Encrypted vMotion = Required cluster-wide"
+      summary: "Set Encrypted vMotion = Required on every VM"
       manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → Encrypted vMotion: Required"
       risk: "对端主机不支持加密 vMotion 时迁移失败；先验证全集群兼容性"
     review_policy:

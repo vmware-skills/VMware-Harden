@@ -45,7 +45,7 @@ from vmware_harden.collectors.host_security import (
     VSWITCH_POLICY_VALUES,
 )
 from vmware_harden.collectors.hosts import PRODUCIBLE_HOST_ATTRS
-from vmware_harden.collectors.vms import PRODUCIBLE_VM_ATTRS
+from vmware_harden.collectors.vms import MIGRATE_ENCRYPTION_MODES, PRODUCIBLE_VM_ATTRS
 
 
 class Status(str, Enum):
@@ -227,8 +227,11 @@ _ENTRIES: tuple[Attribute, ...] = (
        "HostLocalAccountManager + HostAuthorizationManager（待核实）"),
     _p("host", "shared_root_in_use", "是否在共用 root 账号",
        "会话审计推断（待核实，可能不可采）"),
+    # Not collected: ESXi's root cannot be disabled, and config.adminDisabled
+    # is the legacy lockdown flag. pci-r2-1 now reads lockdown_mode_enabled and
+    # ssh_enabled/ssh_running instead (user decision 2026-10-20).
     _p("host", "default_admin_disabled", "默认管理员账号是否禁用",
-       "HostLocalAccountManager（待核实）"),
+       "不采：ESXi root 不能禁用；内置规则改读 lockdown_mode_enabled + ssh_*"),
 
     # --- host: PENDING — remote access ---------------------------------------
     _a("host", _HOST, "ssh_enabled", "SSH 服务是否设为随主机启动",
@@ -256,12 +259,21 @@ _ENTRIES: tuple[Attribute, ...] = (
     _a("host", _HOST, "persistent_logs", "日志是否落到持久存储",
        f"{_ADV} Syslog.global.logDir + ScratchConfig.CurrentScratchLocation",
        value_domain=("true", "false")),
-    # Not collectable as written: ESXi bounds audit records by size
-    # (Syslog.global.auditRecord.storageCapacity, MiB) and has no retention-days
-    # setting. The four rules reading this need re-specifying, not a collector.
+    # ESXi bounds audit records by size and has no retention-days setting
+    # (checked live 2026-10-18), so the four rules that asked for days now read
+    # the three facts below (user decision 2026-10-20). Days are kept by the log
+    # server, which a host scan cannot see.
+    _a("host", _HOST, "audit_record_storage_enabled", "本地审计记录存储是否启用",
+       f"{_ADV} Syslog.global.auditRecord.storageEnable",
+       value_domain=("true", "false")),
+    _a("host", _HOST, "audit_record_storage_capacity_mib", "本地审计记录存储容量（MiB）",
+       f"{_ADV} Syslog.global.auditRecord.storageCapacity",
+       probe_values=("0", "4", "100", "1024")),
+    _a("host", _HOST, "audit_record_storage_persistent", "审计记录目录是否在持久存储上",
+       f"{_ADV} Syslog.global.auditRecord.storageDirectory + ScratchConfig.CurrentScratchLocation",
+       value_domain=("true", "false")),
     _p("host", "audit_retention_days", "审计记录保留天数",
-       "ESXi 无「天数」配置——只有 Syslog.global.auditRecord.storageEnable/"
-       "storageCapacity(MiB)，规则需重新定义（2026-10-18 真机核实）",
+       "不采：ESXi 无「天数」配置；内置规则改读 audit_record_storage_*",
        aliases=("audit_log_retention_days",)),
     _p("host", "audit_log_retention_days", "同 audit_retention_days（别名写法）",
        "见 audit_retention_days"),
@@ -291,20 +303,25 @@ _ENTRIES: tuple[Attribute, ...] = (
     _a("host", _HOST, "tls_min_version", "反向代理/VPS 服务接受的最低 TLS 版本",
        f"{_ADV} UserVars.ESXiVPsDisabledProtocols 反推（8.x 上低于 1.2 的结果不采信）",
        value_domain=TLS_VERSIONS),
+    # Not a host setting: encrypted vMotion is per VM. The rules now read
+    # vm.migrate_encryption (user decision 2026-10-20).
     _p("host", "encrypted_vmotion", "vMotion 加密设置",
-       "HostSystem.config.vmotion / VM 级 migrateEncryption（待核实）",
+       "不采：VM 级设置；内置规则改读 vm.migrate_encryption",
        aliases=("vmotion_encryption",)),
     _p("host", "vmotion_encryption", "同 encrypted_vmotion（别名写法）",
        "见 encrypted_vmotion"),
     _p("host", "datastore_encryption", "主机侧存储加密是否启用",
-       "HostSystem.config.cryptoState（待核实）"),
+       "不采：主机上没有这个事实；nis2-ir-3 改读 vm.encryption_enabled"),
     _p("host", "vsan_enabled", "vSAN 是否启用", "HostVsanSystem.config.enabled"),
     _p("host", "vsan_encryption_enabled", "vSAN 静态加密是否启用",
        "VsanClusterConfig dataEncryptionConfig（待核实）"),
 
     # --- host: PENDING — networking ------------------------------------------
-    _p("host", "mgmt_vmk_isolated", "管理 vmk 是否与业务网隔离",
-       "HostSystem.config.network.vnic + portgroup VLAN"),
+    _a("host", _HOST, "mgmt_vmk_isolated",
+       "管理 vmk 是否独占 VLAN（只看本机）：全部打 tag，且本机没有 VM 接在同 VLAN 或 4095 端口组上",
+       "config.virtualNicManagerInfo[management] → config.network.portgroup.spec.vlanId"
+       " + HostSystem.vm + 本机 VM 的 network（VirtualMachine.runtime.host / network）",
+       value_domain=("true", "false")),
     _p("host", "mgmt_isolated", "管理网是否隔离（另一写法）", "见 mgmt_vmk_isolated"),
     _a("host", _HOST, "mgmt_vlan_tagged", "管理 vmk 所在标准端口组是否打了 VLAN tag",
        "config.virtualNicManagerInfo[management] → config.network.portgroup.spec.vlanId",
@@ -344,8 +361,12 @@ _ENTRIES: tuple[Attribute, ...] = (
        probe_values=("11", "15", "19", "21")),
     _p("vm", "isolation_copy_disabled", "是否禁用复制粘贴",
        "config.extraConfig isolation.tools.copy.disable"),
-    _p("vm", "encryption_enabled", "VM 是否加密",
-       "VirtualMachine.config.keyId 是否存在"),
+    _a("vm", _VM, "encryption_enabled", "VM 是否加密",
+       "VirtualMachine.config.keyId + 每块 VirtualDisk.backing.keyId（未加密且在 vSAN 上不判）",
+       value_domain=("true", "false")),
+    _a("vm", _VM, "migrate_encryption", "加密 vMotion 模式（API 枚举原样）",
+       "VirtualMachine.config.migrateEncryption",
+       value_domain=MIGRATE_ENCRYPTION_MODES),
     _p("vm", "tags", "VM 标签", "vSphere Tagging REST 或 NSX tag（待定归属）"),
 
     # --- datastore ------------------------------------------------------------

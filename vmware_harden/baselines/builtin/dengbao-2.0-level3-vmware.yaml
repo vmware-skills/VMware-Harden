@@ -61,22 +61,23 @@ rules:
       min_confidence: 0.95
 
   - id: db-l3-net-3
-    title: "ESXi 主机加密 vMotion 强制启用"
+    title: "VM 加密 vMotion 强制启用（required）"
     severity: high
     category: 通信完整性
     rationale: |
       GB/T 22239-2019 8.1.2 通信传输要求"应采用密码技术保证通信过程中数据的完整性"。
-      vMotion 流量包含内存全量副本，未加密则在迁移期间暴露 VM 状态。
+      vMotion 流量包含内存全量副本，未加密则在迁移期间暴露 VM 状态。加密 vMotion 是
+      VM 级设置，按每台 VM 检查；opportunistic 在对端不支持时会退回明文，不算合规。
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
-        WHERE type = 'host'
-          AND json_extract_string(attrs, '$.encrypted_vmotion') NOT IN ('required', 'opportunistic')
+        WHERE type = 'vm'
+          AND json_extract_string(attrs, '$.migrate_encryption') != 'required'
     remediation:
       summary: "启用加密 vMotion (required 模式)"
-      manual_steps: "vCenter → Host → Configure → vMotion → Encryption = Required"
-      risk: "older ESXi 版本性能损失约 5%；可先用 opportunistic 过渡"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → Encrypted vMotion: Required"
+      risk: "older ESXi 版本性能损失约 5%；对端不支持加密时迁移失败"
     review_policy:
       human_review_required: true
       min_confidence: 0.9
@@ -235,21 +236,27 @@ rules:
       min_confidence: 0.95
 
   - id: db-l3-host-6
-    title: "审计日志保留 ≥ 180 天 (三级要求)"
+    title: "本地审计记录存储启用、持久且 ≥ 100 MiB（180 天保留在日志平台）"
     severity: high
     category: 安全审计
     rationale: |
-      GB/T 22239-2019 8.1.3 安全审计要求三级系统审计日志保留时间不少于六个月，
-      高于二级 30 天的要求。本规则按 180 天阈值检查。
+      GB/T 22239-2019 8.1.3 安全审计要求三级系统审计日志保留时间不少于六个月。
+      ESXi 按容量（MiB）保留审计记录，主机上没有「天数」设置；日志平台保留多久，
+      主机扫描看不到。本规则检查主机能回答的部分：本地审计记录存储已启用、在持久
+      存储上、容量不低于 ESXi 8 STIG 的 100 MiB。180 天保留期须在日志平台上设置并核实。
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND TRY_CAST(json_extract(attrs, '$.audit_retention_days') AS INTEGER) < 180
+          AND (
+            TRY_CAST(json_extract(attrs, '$.audit_record_storage_enabled') AS BOOLEAN) = false
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_capacity_mib') AS INTEGER) < 100
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_persistent') AS BOOLEAN) = false
+          )
     remediation:
-      summary: "调高审计日志保留时长到 180 天以上"
-      manual_steps: "集中日志平台调整 retention policy；本地需 Syslog.global.logDirUnique=true 配持久 datastore"
+      summary: "启用持久的本地审计记录存储（≥ 100 MiB），并在日志平台保留 180 天以上"
+      manual_steps: "Advanced System Settings → Syslog.global.auditRecord.storageEnable = true；storageCapacity ≥ 100；storageDirectory 放在 datastore（或持久 scratch）；日志平台调整 retention policy"
       risk: "存储容量增长，需评估 SIEM 容量"
     review_policy:
       human_review_required: false

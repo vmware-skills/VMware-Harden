@@ -198,8 +198,9 @@ def test_builtin_cis_scan_reports_most_rules_undetermined(tmp_path: Path):
     ).fetchall())
     # 4/16 before the service/time/firewall collector landed. Six attributes
     # became collectable and took four more rules with them. 8/12 -> 14/6 with
-    # collector batches B1-B3/B5 (2026-10-18).
-    assert counts == {"evaluated": 14, "undetermined": 6}
+    # collector batches B1-B3/B5 (2026-10-18). 14/6 -> 17/3 when audit
+    # retention, mgmt isolation and encrypted vMotion were re-specified (2026-10-20).
+    assert counts == {"evaluated": 17, "undetermined": 3}
     assert sum(counts.values()) == 20, "every rule must land in exactly one bucket"
     twin.close()
 

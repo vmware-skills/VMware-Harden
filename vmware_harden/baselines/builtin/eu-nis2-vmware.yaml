@@ -94,7 +94,7 @@ rules:
   # Incident readiness (Article 23) — 3 rules
   # ============================================================
   - id: nis2-ir-1
-    title: "Audit log retention >= 365 days"
+    title: "Local audit record storage enabled, persistent and at least 100 MiB"
     severity: high
     category: incident-readiness
     rationale: |
@@ -102,18 +102,25 @@ rules:
       require entities to retain forensic evidence enabling incident analysis
       within 24h/72h/1-month windows. Annex I logging requirements imply at
       least 12 months audit retention.
+      ESXi keeps audit records by size (MiB), not by age: there is no
+      retention-days setting on the host, and how long the log server keeps
+      them is not visible to a host scan. This rule checks what the host does
+      answer: local audit record storage is enabled, on persistent storage, and
+      at least 100 MiB (the ESXi 8 STIG value). The retention period itself
+      must be enforced, and verified, on the log server.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
           AND (
-            json_extract_string(attrs, '$.audit_log_retention_days') IS NULL
-            OR TRY_CAST(json_extract_string(attrs, '$.audit_log_retention_days') AS INTEGER) < 365
+            TRY_CAST(json_extract(attrs, '$.audit_record_storage_enabled') AS BOOLEAN) = false
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_capacity_mib') AS INTEGER) < 100
+            OR TRY_CAST(json_extract(attrs, '$.audit_record_storage_persistent') AS BOOLEAN) = false
           )
     remediation:
-      summary: "Increase audit log retention to >= 365 days, preferably to remote SIEM"
-      manual_steps: "ESXi → Advanced Settings → Syslog.global.logHost → SIEM with 1y retention policy"
+      summary: "Enable persistent local audit record storage of at least 100 MiB; keep 12 months on a remote SIEM"
+      manual_steps: "Advanced System Settings → Syslog.global.auditRecord.storageEnable = true; storageCapacity >= 100; storageDirectory on a datastore (or persistent scratch)"
       risk: "Increased storage cost; verify SIEM ingest licensing"
     review_policy:
       human_review_required: false
@@ -145,23 +152,27 @@ rules:
       min_confidence: 0.9
 
   - id: nis2-ir-3
-    title: "Encryption at rest enabled on host datastores"
+    title: "VM Encryption enabled (VM home and every virtual disk)"
     severity: high
     category: incident-readiness
     rationale: |
       NIS2 Directive Article 21(2)(h) — Policies and procedures regarding the
       use of cryptography and, where appropriate, encryption. Encryption at
       rest mitigates data exposure from physical theft and supports breach
-      notification de-escalation under Article 23.
+      notification de-escalation under Article 23. A host has no datastore
+      encryption setting to read; encryption at rest is checked per VM: the VM
+      home and every virtual disk must carry a key (a vTPM VM can have an
+      encrypted home and clear-text disks; an RDM or PMem disk cannot carry a
+      key). An unencrypted VM is only a violation when it is known to sit on no
+      vSAN datastore — vSAN data-at-rest encryption may cover it and that
+      setting is not read yet — so one on vSAN, or whose datastores could not be
+      read, is left undetermined.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
-        WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.datastore_encryption') IS NULL
-            OR json_extract_string(attrs, '$.datastore_encryption') != 'enabled'
-          )
+        WHERE type = 'vm'
+          AND TRY_CAST(json_extract(attrs, '$.encryption_enabled') AS BOOLEAN) = false
     remediation:
       summary: "Enable VM Encryption with KMS-backed keys"
       manual_steps: "vCenter → Configure → Key Providers → add KMS; VM Storage Policy → enable Encryption"
@@ -200,23 +211,31 @@ rules:
       min_confidence: 0.95
 
   - id: nis2-net-2
-    title: "Management plane isolated on dedicated VLAN/segment"
+    title: "Management VMK on a tagged VLAN no VM on the host shares"
     severity: high
     category: network-security
     rationale: |
       NIS2 Directive Annex I — Network segmentation must isolate critical
       management interfaces from production traffic. ESXi vmkernel mgmt
       interfaces must reside on a dedicated mgmt segment, not the workload
-      segment, per Article 24 secure architecture requirements.
+      segment, per Article 24 secure architecture requirements. Isolated here
+      means every management vmknic is on a VLAN-tagged standard port group and
+      no VM on that host is attached to a port group carrying the same VLAN (or
+      the 4095 trunk). The check is host-local: VMs on other hosts sharing the
+      VLAN are not seen, so a pass is not proof the VLAN is dedicated estate-wide.
+      Running VMs are read from the port groups' own port lists (host
+      configuration, visible to a restricted account too); powered-off VMs come
+      from the VM inventory, which assumes the account can read every VM on the
+      host — if vCenter also filters the host's VM list for a restricted account,
+      a hidden powered-off VM may be missed. A management vmknic on a distributed
+      switch, a VM on a distributed port group or NSX segment, or VMs read that
+      do not match the host's VM list, leave the host undetermined.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
         WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.mgmt_isolated') IS NULL
-            OR json_extract_string(attrs, '$.mgmt_isolated') != 'true'
-          )
+          AND TRY_CAST(json_extract(attrs, '$.mgmt_vmk_isolated') AS BOOLEAN) = false
     remediation:
       summary: "Move ESXi mgmt vmkernel to a dedicated VLAN/segment; restrict via DFW"
       manual_steps: "vCenter → Host → Networking → vmkernel → migrate to mgmt-vlan portgroup"
@@ -233,20 +252,19 @@ rules:
       NIS2 Directive Article 21(2)(h) — Cryptography policies cover data in
       transit. Live VM memory transferred via vMotion contains secrets
       (passwords, keys) and must be encrypted on the wire when crossing
-      networks shared with other tenants or workloads.
+      networks shared with other tenants or workloads. Encrypted vMotion is a
+      per-VM setting; 'opportunistic' falls back to clear text when the other
+      side cannot encrypt, so only 'required' complies.
     check:
       type: query
       sql: |
         SELECT id, name FROM nodes
-        WHERE type = 'host'
-          AND (
-            json_extract_string(attrs, '$.vmotion_encryption') IS NULL
-            OR json_extract_string(attrs, '$.vmotion_encryption') = 'disabled'
-          )
+        WHERE type = 'vm'
+          AND json_extract_string(attrs, '$.migrate_encryption') != 'required'
     remediation:
-      summary: "Set VM-level vMotion encryption to 'required' or cluster default"
-      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → vMotion = Required"
-      risk: "Slight CPU overhead; negligible on modern hosts"
+      summary: "Set VM-level vMotion encryption to 'required'"
+      manual_steps: "vCenter → VM → Edit Settings → VM Options → Encryption → Encrypted vMotion: Required"
+      risk: "Slight CPU overhead; migration fails where the destination cannot encrypt"
     review_policy:
       human_review_required: false
       min_confidence: 0.9

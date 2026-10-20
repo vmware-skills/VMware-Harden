@@ -149,6 +149,7 @@ def test_the_lab_host_reduces_to_what_it_really_is():
         "lockdown_mode_enabled": False,
         "lockdown_exceptions_count": 0,
         "persistent_logs": True,
+        "audit_record_storage_capacity_mib": 4,
         "tls_min_version": "1.2",
         "secure_boot_enabled": False,
         "host_tpm_attested": False,

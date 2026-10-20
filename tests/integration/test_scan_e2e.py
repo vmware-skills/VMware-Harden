@@ -132,9 +132,10 @@ def test_scan_then_report_json(tmp_path: Path, capsys):
     # moved from PENDING to ACTIVE and took their rules with them. The numbers
     # are pinned rather than computed so that a future change to coverage is a
     # deliberate edit here, not a silent drift — in either direction.
-    # 8 -> 14 with collector batches B1-B3/B5 (2026-10-18).
-    assert payload["coverage"]["evaluated"] == 14
-    assert payload["coverage"]["undetermined"] == 6
+    # 8 -> 14 with collector batches B1-B3/B5 (2026-10-18); 14 -> 17 with the
+    # three CIS rules re-specified as things vSphere answers (2026-10-20).
+    assert payload["coverage"]["evaluated"] == 17
+    assert payload["coverage"]["undetermined"] == 3
     assert (
         payload["coverage"]["evaluated"] + payload["coverage"]["undetermined"] == 20
     ), "coverage must account for every rule in the baseline"

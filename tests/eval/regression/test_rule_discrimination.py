@@ -24,6 +24,8 @@ the defect this whole release addresses went unnoticed.
 """
 import itertools
 import json
+import math
+import random
 from pathlib import Path
 
 import pytest
@@ -63,9 +65,35 @@ _BASE_VALUES = (
 _NAMES = ("", "rule-7", "friendly-name")
 
 #: Ceiling on the cartesian product per rule. Reached only by the three-attribute
-#: DFW rules; everything else enumerates fully. Kept low enough that the whole
-#: file stays well under a minute — a probe nobody runs catches nothing.
+#: rules (DFW, and the audit record rules); everything else enumerates fully.
+#: Kept low enough that the whole file stays well under a minute — a probe
+#: nobody runs catches nothing.
 _MAX_COMBINATIONS = 800
+
+
+def _combinations(columns: list[list[str]]) -> list[tuple[str, ...]]:
+    """The full product, or two samples of it above the ceiling.
+
+    The first N in order keeps the declared domain values (listed first in
+    every column) together, which is the only place the DFW rules' three-value
+    condition occurs. But it holds the leading attribute at its first one or two
+    values, so a rule with a numeric threshold there was only ever probed below
+    it and looked like it fired on everything (2026-10-20, the audit record
+    rules: capacity never got past 4 MiB). A fixed-seed uniform sample of the
+    whole product reaches the rest. Neither alone covers both kinds of rule.
+    """
+    total = math.prod(len(c) for c in columns)
+    if total <= _MAX_COMBINATIONS:
+        return list(itertools.product(*columns))
+    head = list(itertools.islice(itertools.product(*columns), _MAX_COMBINATIONS))
+    spread = []
+    for index in sorted(random.Random(0).sample(range(total), _MAX_COMBINATIONS)):
+        combo = []
+        for column in reversed(columns):
+            index, digit = divmod(index, len(column))
+            combo.append(column[digit])
+        spread.append(tuple(reversed(combo)))
+    return list(dict.fromkeys(head + spread))
 
 #: Per-attribute candidate ceiling, applied after the rule-derived values so a
 #: boundary value is never the one that gets cut.
@@ -114,12 +142,7 @@ def _populate(twin: Twin, rule) -> tuple[int, int]:
         literals.setdefault(attr, []).extend(values)
 
     per_attr = {a: _candidate_values(node_type, a, literals.get(a, []), sql) for a in attrs}
-    combinations = (
-        list(itertools.islice(
-            itertools.product(*[per_attr[a] for a in attrs]), _MAX_COMBINATIONS
-        ))
-        if attrs else [()]
-    )
+    combinations = _combinations([per_attr[a] for a in attrs]) if attrs else [()]
 
     snapshot = twin.start_snapshot("probe")
     node_rows, state_rows = [], []
@@ -177,8 +200,11 @@ def test_the_probe_covers_every_runnable_rule(probe_results):
     # attributes became collectable and nine rules across the builtin baselines
     # went from unevaluatable to judged. 38 -> 71 with batches B1-B3/B5 and the
     # VM secure-boot/hardware-version facts (2026-10-18): 33 more rules.
-    assert len(probe_results) == 71, (
-        f"expected 71 evaluable builtin rules, probed {len(probe_results)} — "
+    # 71 -> 83 when five facts were re-specified as things vSphere answers
+    # (audit record storage, mgmt isolation, VM encrypted vMotion and VM
+    # encryption, root restricted): 12 more rules (2026-10-20).
+    assert len(probe_results) == 83, (
+        f"expected 83 evaluable builtin rules, probed {len(probe_results)} — "
         "update this count deliberately when a collector batch lands"
     )
 

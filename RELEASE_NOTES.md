@@ -1,3 +1,44 @@
+## v1.18.0 — Twelve rules that could never be judged now are: five facts re-specified as things vSphere answers (2026-10-20)
+
+Twelve builtin rules read five facts that no collector could write, because vSphere does not hold them in that form.
+They were reported "not evaluated" on every estate. Each is now defined by what the host or VM does answer:
+
+| Was | Now | Rules |
+|---|---|---|
+| audit log retention ≥ N days | local audit record storage **enabled**, **≥ 100 MiB** (ESXi 8 STIG value), on **persistent** storage | cis-esxi-3.1.3, db-l3-host-6, nis2-ir-1, pci-r10-2 |
+| encrypted vMotion (host) | per **VM**: `config.migrateEncryption` must be **`required`**; `opportunistic` falls back to clear text and no longer complies (db-l3-net-3 accepted it before) | cis-esxi-7.1.2, db-l3-net-3, nis2-net-3, scg-enc-2 |
+| management VMK isolated | every management vmknic on a **VLAN-tagged** standard port group, and **no VM on that host** attached to a port group carrying the same VLAN or the 4095 trunk (host-local: VMs on other hosts are not seen) | cis-esxi-4.1.1, nis2-net-2 |
+| default admin account disabled | ESXi root cannot be disabled, so its use is checked as restricted: **lockdown mode on** and **SSH neither running nor set to start** | pci-r2-1 |
+| datastore encryption (host) | per **VM**: the VM home **and every virtual disk** encrypted (a vTPM VM can have an encrypted home and clear-text disks) | nis2-ir-3 |
+
+* **ESXi has no retention-days setting.** How long audit records are kept is decided on the log server, which a host
+  scan cannot read. The audit rules check the host's half and say so; set and verify the retention period on the log
+  server.
+* **Expect new violations after upgrading.** These rules used to report nothing at all. A factory-default host has
+  4 MiB of audit record storage, an untagged management network and lockdown off, and a new VM's encrypted vMotion
+  mode is `opportunistic`, so a default estate now fails several of them. That is the first measurement, not a
+  change in the hosts.
+* **Undetermined stays undetermined.** The management isolation fact is left unjudged when a management vmknic is on a
+  distributed switch, its port group is the 4095 trunk, a VM on the host uses a distributed port group or an NSX
+  segment (its VLAN is not read), or the VMs read do not match the host's own VM list. Running VMs are found in the
+  port groups' port lists, which a restricted account also sees; powered-off VMs come from the VM inventory, so if
+  vCenter hides VMs from a restricted account in the host's VM list too, a hidden powered-off VM can be missed
+  (not yet checked on a restricted account). VM facts are only taken from a VM vCenter reports as connected; "not
+  encrypted" only when the VM's configuration and device list were read and it is known to be on no vSAN datastore,
+  whose data-at-rest encryption is not read yet. Templates do not count as sharing the management VLAN. Several of the old rules read `attr IS NULL OR …`, which would have made an unread value a
+  violation; that clause is gone.
+* New host attributes `audit_record_storage_enabled`, `audit_record_storage_capacity_mib`,
+  `audit_record_storage_persistent`, `mgmt_vmk_isolated`; new VM attributes `migrate_encryption`, `encryption_enabled`.
+  The old names stay declared as not collected, so an external baseline that reads them is still reported
+  undetermined rather than passing.
+* The host collector adds two batched reads (networks, and each VM's host, networks and template flag) and the VM
+  collector one (datastore types), whatever the estate size. If one fails, only the facts that depend on it are
+  undetermined.
+* Runnable builtin rules 71 → 83; rules still waiting on a fact 28 → 16 (no vSphere API, or they need vSAN, NSX or
+  vSphere tags).
+* The `remediation` extra now accepts vmware-pilot 2.x (`<3.0`); before, it pinned pilot below 2.0. Harden's pilot
+  integration tests pass against vmware-pilot 2.4.0.
+
 ## v1.17.0 — Optional online refresh of the advisory catalog: CISA KEV and NVD (2026-10-20)
 
 **`vmware-harden advisories update`** downloads the CISA Known Exploited Vulnerabilities feed and, with `--nvd`,
