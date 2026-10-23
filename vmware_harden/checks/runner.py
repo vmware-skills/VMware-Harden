@@ -6,6 +6,7 @@ and persists violations.
 import json
 import uuid
 
+from vmware_harden.advisories import catalog as advisory_catalog
 from vmware_harden.advisories.baseline import covered_node_types, judge_nodes
 from vmware_harden.advisories.baseline import evidence as advisory_evidence
 from vmware_harden.baselines.model import AdvisoryCheck, Baseline, QueryCheck
@@ -252,7 +253,10 @@ class CheckRunner:
         collected at all is undetermined.
         """
         adv_id = rule.check.advisory_id
-        verdicts = judge_nodes(adv_id, nodes_by_type)
+        # One catalog for the whole rule: a refresh written mid-scan must not
+        # leave a row judged by one cache version and evidenced by another.
+        catalog = advisory_catalog.load_catalog()
+        verdicts = judge_nodes(adv_id, nodes_by_type, catalog)
         if not verdicts:
             # Nothing this advisory covers was seen. "Zero affected" off zero
             # components would read as a clean result, so it is undetermined,
@@ -275,7 +279,7 @@ class CheckRunner:
             status = nv.verdict.status
             if status == "affected":
                 ev = {
-                    **advisory_evidence(adv_id, nv),
+                    **advisory_evidence(adv_id, nv, catalog),
                     "category": rule.category,
                     "title": rule.title,
                 }

@@ -274,3 +274,37 @@ def test_import_refuses_the_reserved_filename(tmp_path, monkeypatch):
     assert result.exit_code == 1, result.output
     assert "reserved" in result.output
     assert not (tmp_path / "user" / "vmsa-advisories.yaml").exists()
+
+
+def test_one_rule_judges_and_evidences_from_one_catalog_version(twin, monkeypatch):
+    """A refresh landing mid-scan must not split a row between two cache versions.
+
+    Each load here returns a new version (a later ``kev_refreshed_at``), as if
+    ``advisories update`` ran between calls. Every row of one rule has to carry
+    the version it was judged with (2026-10-20 review L6).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from vmware_harden.advisories import baseline as baseline_mod
+    from vmware_harden.advisories import catalog as catalog_mod
+
+    real = load_catalog()
+    baseline = advisory_baseline()
+    loads = []
+
+    def next_version():
+        loads.append(1)
+        stamp = datetime(2026, 10, 20, tzinfo=timezone.utc) + timedelta(minutes=len(loads))
+        return real.model_copy(update={"kev_refreshed_at": stamp})
+
+    monkeypatch.setattr(catalog_mod, "load_catalog", next_version)
+    monkeypatch.setattr(baseline_mod, "load_catalog", next_version)
+
+    snap = twin.start_snapshot("v.lab")
+    _host(twin, snap, "v.lab:esx-a", "8.0.3", _BELOW_FIX)
+    _host(twin, snap, "v.lab:esx-b", "8.0.3", _BELOW_FIX)
+    vs = CheckRunner(twin).run_baseline(snap, baseline)
+
+    hits = [v for v in vs if v["rule_id"] == _ESXI_ADVISORY]
+    assert len(hits) == 2
+    assert len({v["evidence"]["kev_refreshed_at"] for v in hits}) == 1
