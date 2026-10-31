@@ -23,6 +23,8 @@ metadata: {"openclaw":{"requires":{"anyBins":["vmware-harden","uvx"]},"optional"
 
 # VMware Harden (Compliance & Baseline)
 
+> Self-test: [guide](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md).
+
 > **Disclaimer**: This is a community-maintained open-source project and is **not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware" and "vSphere" are trademarks of Broadcom. Source code is publicly auditable at [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) under the MIT license.
 
 AI-native VMware compliance scanner — built-in CIS / vSphere SCG / 等保 2.0 三级 / PCI-DSS / BSI IT-Grundschutz / EU NIS2 baselines, a VMSA known-vulnerability check, drift detection, LLM-driven remediation advice, and a web dashboard.

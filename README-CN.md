@@ -2,6 +2,8 @@
 
 # vmware-harden
 
+要用自己的模型和 Agent 平台进行只读自测，请看 marketplace 根目录的[共享模型适配自测任务](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md)。
+
 > **声明**：本项目为社区维护的开源项目，**与 VMware, Inc. 或 Broadcom Inc. 无任何隶属、
 > 背书或赞助关系。** "VMware"、"vSphere"、"ESXi"、"NSX" 为 Broadcom 商标。源码以 MIT 许可证
 > 公开可审计，见 [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden)。
