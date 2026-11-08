@@ -4,7 +4,7 @@ version = "1.19.0"
 description = "AI-native VMware compliance and baseline enforcement"
 readme = "README.md"
 license = "MIT"
-authors = [{ name = "Wei Zhou", email = "wei-wz.zhou@broadcom.com" }]
+authors = [{ name = "Wei Zhou", email = "zhouwei008@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "typer>=0.12,<1.0",

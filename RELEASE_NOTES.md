@@ -1,5 +1,7 @@
 ## v1.19.0 — product-scoped CVEs and VMRC configuration evidence
 
+* Update public author/project contact metadata to `zhouwei008@gmail.com`.
+
 * SCG `scg-vm-5` now checks explicit per-VM copy/paste disable settings collected in the batched security pass. Both true establishes the configuration requirement, either explicit false is a finding, and missing/invalid/duplicate settings remain unknown. Raw extraConfig and unrelated secrets are not stored. This is not a runtime clipboard test; the pending-rule inventory decreases from 16 to 15 unique rules.
 * Mixed-product advisories can scope CVEs and fixed-build mappings independently. Node evidence attributes only applicable, affected CVEs and their KEV status; individual verdicts/CVSS and the maximum affected CVSS remain visible. Unmapped CVEs stay unknown, and legacy catalog entries retain their behavior.
 * VMSA-2026-0006 now covers its three ESXi CVEs as well as the two vCenter CVEs, using Broadcom's response matrix and build KBs. The first vCenter 9.1 authentication-bypass fix is distinguished from the later directory-traversal fix. Catalog validation rejects ambiguous or invalid scope mappings.
