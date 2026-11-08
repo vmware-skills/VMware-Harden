@@ -114,6 +114,16 @@ pip wheel . -w dist        # → dist/*.whl   (or: uv build, for just this packa
 pip install --no-index --find-links dist vmware-harden
 ```
 
+### Explicit VMRC clipboard settings
+
+The VM security pass reads the per-VM `isolation.tools.copy.disable` and
+`isolation.tools.paste.disable` options. `isolation_copy_disabled` is true only when both
+are explicitly true, false when either is explicitly false, and otherwise absent
+(undetermined). Duplicate settings remain unknown. SCG rule `scg-vm-5`, inherited by the
+v9 subset, checks this explicit configuration requirement; it does not test actual
+clipboard transfer, host defaults or guest/Tools behavior. Unrelated `extraConfig`
+values are not stored or returned.
+
 ## Read-Only by Design
 
 vmware-harden is read-only against vSphere and NSX — all 8 MCP tools carry the `[READ]`
