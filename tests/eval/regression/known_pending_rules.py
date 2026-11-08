@@ -18,16 +18,16 @@ Shrinking this list is the measure of progress for collector batches B1-B5 in
 ``design/LLD-harden-baseline-collector-contract.md``. Delete entries as their
 attributes become ACTIVE; never add one to make a build green.
 
-Current: 16 rules across 6 baselines (70 at v1.9.0; 61 after the
+Current: 15 rules across 6 baselines (70 at v1.9.0; 61 after the
 service/time/firewall collector; 28 after batches B1-B3/B5 + the VM facts,
 2026-10-18; 16 after five facts were re-specified as things vSphere answers,
-2026-10-20).
+2026-10-20; 15 after explicit VMRC clipboard configuration collection, 2026-11-08).
    1  bsi-itgs-basisabsicherung-vmware
    3  cis-vmware-esxi-8.0-subset
    4  dengbao-2.0-level3-vmware
    4  eu-nis2-vmware
    1  pci-dss-4.0-vmware
-   3  vsphere-scg-v8-subset
+   2  vsphere-scg-v8-subset
 """
 
 #: ``(baseline_id, rule_id)`` pairs, with the pending attributes that block each.
@@ -53,7 +53,6 @@ KNOWN_PENDING_RULES: frozenset[tuple[str, str]] = frozenset(
         ("pci-dss-4.0-vmware", "pci-r8-1"),  # root_ssh_key_auth_enabled
         # --- vsphere-scg-v8-subset ---
         ("vsphere-scg-v8-subset", "scg-vm-4"),  # tags
-        ("vsphere-scg-v8-subset", "scg-vm-5"),  # isolation_copy_disabled
         ("vsphere-scg-v8-subset", "scg-enc-1"),  # vsan_enabled, vsan_encryption_enabled
     }
 )

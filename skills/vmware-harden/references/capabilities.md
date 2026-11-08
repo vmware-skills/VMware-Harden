@@ -546,3 +546,12 @@ routing_note, importer_status}` — static, local, no I/O.
 ### Typical response size
 
 ≈ 400 tokens.
+
+## VMRC clipboard evidence
+
+`vm.isolation_copy_disabled` represents both per-VM copy/paste disable settings being
+explicitly true. Either explicit false fails that configuration requirement; absent,
+unreadable, malformed or duplicate settings cannot establish compliance. A disconnected
+VM contributes no measured security facts. The collector retains only the derived
+boolean, never raw extraConfig or unrelated guestinfo values. This is not a runtime
+clipboard test. SCG `scg-vm-5` and its inherited v9 rule report missing facts as node gaps.

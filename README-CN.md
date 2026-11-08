@@ -85,6 +85,14 @@ Not judged on these nodes (data missing):
 两份清单对应的处理动作不同：前者等采集器补齐，后者查那台节点的连通性与扫描账号权限。
 
 
+### VMRC 复制粘贴的显式配置
+
+VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.disable`。
+两个开关均显式为 true 时，`isolation_copy_disabled` 才为 true；任一显式为 false 时为 false；
+其他情况保持缺失（无法判定），重复设置也不取最后值猜测。SCG 规则 `scg-vm-5` 及 v9 继承规则
+检查这项显式配置，不验证实际复制粘贴行为、主机默认值或 guest/Tools 状态。
+不会存储或返回无关的 `extraConfig` 值。
+
 ## 只读设计
 
 vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
