@@ -166,14 +166,22 @@ vulnerable": advisories published later are not in the catalog. Builds are compa
 only within one `major.minor` line (a 7.0 U3 build can be numerically larger than an
 8.0 GA build).
 
-**How the catalog is built.** Broadcom's advisory pages are behind a bot challenge and
-cannot be read by a script, and Broadcom publishes no CSAF feed. Each entry is assembled
-from the NVD CVE API (CVEs, CVSS, vulnerable versions), the CISA KEV feed (exploited in
-the wild), and Broadcom's build-number KB articles (fixed builds), with each fixed release
-confirmed against an independent source quoting the advisory. Every fix is checked
-mechanically against a snapshot of the build KB in `builds.yaml`. The first catalog
-(2026-10-19) carries three KEV-listed advisories: VMSA-2025-0004 (ESXi), VMSA-2024-0019
-and VMSA-2026-0006 (vCenter; its ESX half is not catalogued yet and reports unknown).
+**How the catalog is built.** Entries record their advisory, CVE and build-number sources.
+The initial catalog used NVD, CISA KEV and independent sources quoting Broadcom when its
+advisory pages could not be read. VMSA-2026-0006 has now been checked directly against
+Broadcom's response matrix and build KBs and covers both vCenter and ESXi. Each fixed
+build is checked against `builds.yaml`; a fix can predate the consolidated advisory.
+
+Mixed-product advisories evaluate each applicable CVE separately. Node evidence lists
+affected CVEs in `cves`, individual verdicts/CVSS in `cve_results`, and `max_affected_cvss`;
+fixed or other-product CVEs do not contribute to that node's KEV flag. Each rule retains
+the advisory's severity. Verdicts describe build exposure; guest configuration and
+exploitability require separate evidence. Missing mappings remain unknown.
+
+The advisory coverage boundary remains **2026-10-19**. Shipped KEV flags were checked
+against CISA snapshot **2026.11.06** on 2026-11-08; their provenance is separate from a
+user's optional online refresh. Updating an entry does not imply that every newer
+advisory has been added.
 
 **Optional refresh.** `vmware-harden advisories update` downloads the CISA KEV feed (and, with
 `--nvd`, NVD scores) into `~/.vmware-harden/advisories-cache.json`, which the catalog loader

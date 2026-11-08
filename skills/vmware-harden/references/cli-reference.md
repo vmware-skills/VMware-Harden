@@ -140,6 +140,11 @@ vmware-harden baseline import ./my-corp.yaml --name corp-prod
 
 ## advisories
 
+For explicitly scoped mixed-product entries, node evidence lists only affected CVEs in `cves` and
+retains every applicable CVE's verdict/CVSS in `cve_results`, plus `max_affected_cvss`. KEV applies to
+affected CVEs of that product. Rule severity remains the advisory's severity. Shipped KEV snapshot
+metadata and a user's optional online-refresh timestamp are reported separately.
+
 Inspect, and optionally refresh, the VMSA catalog the `vmsa-advisories`
 baseline judges against.
 

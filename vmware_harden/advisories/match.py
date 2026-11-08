@@ -36,10 +36,21 @@ class Component:
 
 
 @dataclass(frozen=True)
+class CveVerdict:
+    id: str
+    status: str
+    reason: str
+    fixed_in: str | None
+    cvss: float | None
+    kev: bool
+
+
+@dataclass(frozen=True)
 class Verdict:
     status: str
     reason: str
     fixed_in: str | None = None
+    cves: tuple[CveVerdict, ...] = ()
 
 
 def parse_version(text: object) -> tuple[str, int] | None:
@@ -70,7 +81,7 @@ def _parse_build(value: object) -> int | None:
     return None
 
 
-def evaluate(component: Component, advisory: Advisory, catalog: Catalog) -> Verdict:
+def _evaluate_mapping(component: Component, advisory: Advisory, catalog: Catalog) -> Verdict:
     """Return the verdict for ``component`` against ``advisory``."""
     if component.product not in advisory.products:
         return Verdict("not_applicable", f"{advisory.id} does not cover {component.product}")
@@ -159,3 +170,42 @@ def evaluate(component: Component, advisory: Advisory, catalog: Catalog) -> Verd
         "unknown",
         f"update {update} has no fix of its own listed in {advisory.id}",
     )
+
+
+def evaluate(component: Component, advisory: Advisory, catalog: Catalog) -> Verdict:
+    """Evaluate explicit CVE scopes independently; preserve legacy catalog behavior."""
+    if not any(c.products for c in advisory.cves) and not any(r.cves for r in advisory.affected):
+        return _evaluate_mapping(component, advisory, catalog)
+    applicable = advisory.cves_for_product(component.product)
+    if component.product not in advisory.products or not applicable:
+        return Verdict("not_applicable", f"{advisory.id} does not cover {component.product}")
+    details: list[CveVerdict] = []
+    for cve in applicable:
+        # An unspecified CVE product scope inherits the original advisory's
+        # products, even if filtering removes all mappings for this CVE.
+        scoped_cve = cve.model_copy(update={"products": cve.products or list(advisory.products)})
+        scoped = advisory.model_copy(
+            update={
+                "cves": [scoped_cve],
+                "affected": [r for r in advisory.affected if not r.cves or cve.id in r.cves],
+            }
+        )
+        result = _evaluate_mapping(component, scoped, catalog)
+        details.append(
+            CveVerdict(
+                cve.id,
+                result.status,
+                result.reason,
+                result.fixed_in,
+                cve.cvss,
+                cve.kev,
+            )
+        )
+    statuses = {r.status for r in details}
+    status = next(
+        (s for s in ("affected", "unknown", "fixed", "not_affected") if s in statuses),
+        "not_applicable",
+    )
+    fixes = list(dict.fromkeys(r.fixed_in for r in details if r.status == status and r.fixed_in))
+    reason = "; ".join(f"{r.id}: {r.status} ({r.reason})" for r in details)
+    return Verdict(status, reason, "; ".join(fixes) or None, tuple(details))

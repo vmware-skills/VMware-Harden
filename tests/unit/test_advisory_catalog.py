@@ -53,15 +53,16 @@ def test_every_fix_matches_the_build_snapshot(catalog, builds):
     assert checked, "no fixes were checked — the comparison above ran on nothing"
 
 
-def test_fix_was_released_on_or_after_publication_and_before_as_of(catalog, builds):
+def test_fixed_releases_have_dates_before_the_catalog_boundary(catalog, builds):
     by_label = {r["label"]: r for r in builds["releases"]}
     for adv in catalog.advisories:
         for line in adv.affected:
             for fix in line.fixed:
                 released = by_label[fix.label]["released"]
+                assert isinstance(released, date), (adv.id, fix.label)
                 assert released <= catalog.as_of, (adv.id, fix.label)
-                # A fix cannot predate the advisory that announced it.
-                assert released >= adv.published, (adv.id, fix.label, released)
+                # A consolidated advisory can include fixes released earlier.
+                # VMSA-2026-0006 explicitly includes ESXi U3i/U3j and 9.1 GA.
 
 
 def test_builds_snapshot_has_no_duplicate_labels(builds):

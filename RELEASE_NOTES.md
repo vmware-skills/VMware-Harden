@@ -1,3 +1,9 @@
+## v1.19.0 — product-scoped CVE verdicts and ESXi advisory coverage
+
+* Mixed-product advisories can scope CVEs and fixed-build mappings independently. Node evidence attributes only applicable, affected CVEs and their KEV status; individual verdicts/CVSS and the maximum affected CVSS remain visible. Unmapped CVEs stay unknown, and legacy catalog entries retain their behavior.
+* VMSA-2026-0006 now covers its three ESXi CVEs as well as the two vCenter CVEs, using Broadcom's response matrix and build KBs. The first vCenter 9.1 authentication-bypass fix is distinguished from the later directory-traversal fix. Catalog validation rejects ambiguous or invalid scope mappings.
+* The advisory coverage boundary remains 2026-10-19. Shipped KEV flags were checked against CISA snapshot 2026.11.06; their provenance is separate from a user's online refresh. A fixed release can precede the consolidated advisory publication date.
+
 ## v1.18.0 — Twelve rules that could never be judged now are: five facts re-specified as things vSphere answers (2026-10-20)
 
 Twelve builtin rules read five facts that no collector could write, because vSphere does not hold them in that form.
