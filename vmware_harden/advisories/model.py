@@ -8,7 +8,7 @@ file is checked mechanically by ``tests/unit/test_advisory_catalog.py``.
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Product = Literal["esxi", "vcenter"]
 
@@ -23,6 +23,8 @@ class Cve(BaseModel):
     cvss: float | None = Field(default=None, ge=0.0, le=10.0)
     #: In CISA's Known Exploited Vulnerabilities catalog as of the catalog date.
     kev: bool = False
+    #: Empty preserves legacy advisory-wide applicability.
+    products: list[Product] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod
@@ -57,6 +59,8 @@ class AffectedLine(BaseModel):
     #: Update branches whose status the sources do not settle (e.g. they
     #: disagree on whether a release carries the fix). Always judged unknown.
     unknown_updates: list[int] = Field(default_factory=list)
+    #: Empty applies the mapping to every CVE covering this product.
+    cves: list[str] = Field(default_factory=list)
 
 
 class NotAffectedLine(BaseModel):
@@ -84,12 +88,36 @@ class Advisory(BaseModel):
     #: Judged unknown rather than not_applicable: the advisory does cover them.
     uncatalogued_products: list[Product] = Field(default_factory=list)
 
+    def cves_for_product(self, product: str) -> list[Cve]:
+        return [c for c in self.cves if not c.products or product in c.products]
+
+    @model_validator(mode="after")
+    def _validate_cve_scopes(self) -> "Advisory":
+        ids = {c.id for c in self.cves}
+        if len(ids) != len(self.cves):
+            raise ValueError("duplicate CVE IDs in advisory")
+        mappings: set[tuple[str, str, str]] = set()
+        for row in self.affected:
+            applicable = {c.id for c in self.cves_for_product(row.product)}
+            selected = set(row.cves) if row.cves else applicable
+            if selected - ids:
+                raise ValueError("affected-line mapping references an unknown CVE")
+            if selected - applicable:
+                raise ValueError("affected-line CVE does not cover this product")
+            for cve_id in selected:
+                key = (row.product, row.line, cve_id)
+                if key in mappings:
+                    raise ValueError("overlapping product/line/CVE mappings")
+                mappings.add(key)
+        return self
+
     @property
     def products(self) -> frozenset[str]:
         return (
             frozenset(a.product for a in self.affected)
             | frozenset(n.product for n in self.not_affected)
             | frozenset(self.uncatalogued_products)
+            | frozenset(p for c in self.cves for p in c.products)
         )
 
     @property
@@ -108,6 +136,9 @@ class Catalog(BaseModel):
     #: a line's EOL does not list that line, so its absence means nothing.
     eol: dict[Product, dict[str, date]] = Field(default_factory=dict)
     advisories: list[Advisory]
+    #: Provenance of the shipped KEV flags, distinct from a user's online cache.
+    shipped_kev_checked_at: datetime | None = None
+    shipped_kev_catalog_version: str | None = None
     #: Set only when an online refresh cache was overlaid (see
     #: :mod:`vmware_harden.advisories.refresh`): when it was fetched and which
     #: CISA KEV catalog version it read. None means the shipped catalog alone.

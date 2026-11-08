@@ -182,10 +182,13 @@ rules:
       min_confidence: 0.95
 
   - id: scg-vm-5
-    title: "Ensure copy/paste between guest and remote console is disabled"
+    title: "Explicitly disable VMRC copy and paste in VM configuration"
     severity: medium
     category: vm-hardening
-    rationale: "copy/paste 通道是数据外泄路径，且历史上多次出现 VM escape CVE。"
+    rationale: >
+      Require both per-VM isolation.tools.copy.disable and isolation.tools.paste.disable
+      to be explicitly TRUE. Missing/unreadable settings remain undetermined; this
+      checks configuration, not actual clipboard transfer or inherited host defaults.
     check:
       type: query
       sql: |

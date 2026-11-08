@@ -249,5 +249,7 @@ def test_security_reducers_emit_exactly_what_they_declare():
         "config.migrateEncryption": "required",
         "config.hardware.device": [],
         "config.keyId": ns(keyId="k"),
+        "config.extraConfig": [ns(key="isolation.tools.copy.disable", value="TRUE"),
+                               ns(key="isolation.tools.paste.disable", value="TRUE")],
     })
     assert set(vm) == set(_VM_SECURITY_ATTRS)

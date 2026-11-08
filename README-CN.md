@@ -85,6 +85,14 @@ Not judged on these nodes (data missing):
 两份清单对应的处理动作不同：前者等采集器补齐，后者查那台节点的连通性与扫描账号权限。
 
 
+### VMRC 复制粘贴的显式配置
+
+VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.disable`。
+两个开关均显式为 true 时，`isolation_copy_disabled` 才为 true；任一显式为 false 时为 false；
+其他情况保持缺失（无法判定），重复设置也不取最后值猜测。SCG 规则 `scg-vm-5` 及 v9 继承规则
+检查这项显式配置，不验证实际复制粘贴行为、主机默认值或 guest/Tools 状态。
+不会存储或返回无关的 `extraConfig` 值。
+
 ## 只读设计
 
 vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
@@ -129,11 +137,16 @@ vmware-harden report --format csv > vmsa.csv
 没有报出问题，意思是**截至目录日期没有已知的未修复公告**，不是"没有漏洞"：之后发布的公告不在目录里。build 号只在同一条
 `major.minor` 版本线内比较（7.0 U3 的 build 数值可能大于 8.0 GA）。
 
-**目录怎么来的。** Broadcom 的公告页挡在人机验证后面，脚本读不到，Broadcom 也不提供 CSAF 数据源。每条数据取自 NVD CVE
-接口（CVE、CVSS、受影响版本）、CISA KEV（是否已被在野利用）和 Broadcom 的 build 号知识库文章（修复版本 build），每个修复版本
-都另找一个引用公告原文的独立来源核对；每个修复 build 都由测试对照 `builds.yaml` 里的知识库快照机械校验。首版目录
-（2026-10-19）收录三条已列入 KEV 的公告：VMSA-2025-0004（ESXi）、VMSA-2024-0019 与 VMSA-2026-0006（vCenter；
-后者的 ESX 部分尚未收录，报为未知）。
+**目录怎么来的。** 每条数据记录公告、CVE 和 build 号来源。首版在无法读取 Broadcom 公告时，使用 NVD、CISA KEV
+和引用公告的独立来源。VMSA-2026-0006 现已直接对照 Broadcom 响应矩阵及 build 知识库核查，覆盖 vCenter 和 ESXi。
+每个修复 build 均对照 `builds.yaml` 校验；修复版本可以早于汇总公告的发布日期。
+
+跨产品公告按适用于该产品的 CVE 分别判断。节点证据的 `cves` 仅列仍受影响的 CVE，`cve_results` 保留每条结论/CVSS，
+并提供 `max_affected_cvss`；已修复或属于其他产品的 CVE 不会影响该节点的 KEV 标记。规则仍使用公告本身的严重级别。
+结论描述 build 暴露面；客户机配置和可利用性需要额外证据。缺少映射仍返回未知。
+
+公告覆盖边界仍为 **2026-10-19**。随包 KEV 标记于 2026-11-08 对照 CISA **2026.11.06** 快照核查，
+其来源与用户可选的在线刷新分开记录。更新单条公告不意味着已经收录之后的所有公告。
 
 **可选的在线刷新。** `vmware-harden advisories update` 下载 CISA KEV 清单（加 `--nvd` 时还下载 NVD 评分），写入
 `~/.vmware-harden/advisories-cache.json`，由目录加载器叠加：KEV 标记只增不减，CVSS 只补缺失值，修复版本永远不从这里取。

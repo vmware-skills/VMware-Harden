@@ -12,7 +12,7 @@ tools need no second code path:
 * ``not_applicable``          → outside the rule's scope (another product)
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from vmware_harden.advisories.catalog import load_catalog
 from vmware_harden.advisories.match import Component, Verdict, evaluate
@@ -51,7 +51,7 @@ def _rationale(adv: Advisory, catalog: Catalog) -> str:
 
 
 def _fixes(adv: Advisory) -> str:
-    labels = [f.label for line in adv.affected for f in line.fixed]
+    labels = list(dict.fromkeys(f.label for line in adv.affected for f in line.fixed))
     return "、".join(labels) if labels else "（无公开修复版本）"
 
 
@@ -146,15 +146,32 @@ def evidence(adv_id: str, nv: NodeVerdict, catalog: Catalog | None = None) -> di
     """What a violation row carries for an affected node."""
     cat = catalog or load_catalog()
     adv = _advisory(cat, adv_id)
+    scoped = nv.verdict.cves
+    affected = [c for c in scoped if c.status == "affected"]
     return {
         "status": nv.verdict.status,
         "reason": nv.verdict.reason,
         "fixed_in": nv.verdict.fixed_in,
         "version": nv.version,
         "build": nv.build,
-        "cves": [c.id for c in adv.cves],
-        "kev": adv.kev,
+        "cves": [c.id for c in affected] if scoped else [c.id for c in adv.cves],
+        "kev": any(c.kev for c in affected) if scoped else adv.kev,
+        **(
+            {
+                "cve_results": [asdict(c) for c in scoped],
+                "max_affected_cvss": max(
+                    (c.cvss for c in affected if c.cvss is not None),
+                    default=None,
+                ),
+            }
+            if scoped
+            else {}
+        ),
         "catalog_as_of": cat.as_of.isoformat(),
         "kev_refreshed_at": cat.kev_refreshed_at.isoformat() if cat.kev_refreshed_at else None,
+        "shipped_kev_checked_at": (
+            cat.shipped_kev_checked_at.isoformat() if cat.shipped_kev_checked_at else None
+        ),
+        "shipped_kev_catalog_version": cat.shipped_kev_catalog_version,
         "sources": list(adv.sources),
     }

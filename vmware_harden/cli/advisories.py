@@ -113,6 +113,13 @@ def show_cmd() -> None:
     for a in cat.advisories:
         kev = " KEV" if a.kev else ""
         typer.echo(f"  {a.id}  {a.severity}{kev}  {', '.join(c.id for c in a.cves)}")
+    if cat.shipped_kev_catalog_version:
+        checked = (
+            cat.shipped_kev_checked_at.isoformat() if cat.shipped_kev_checked_at else "unknown"
+        )
+        typer.echo(
+            f"Shipped KEV snapshot: CISA KEV {cat.shipped_kev_catalog_version} (checked {checked})"
+        )
     if cat.kev_refreshed_at is None:
         typer.echo(
             "KEV flags: never refreshed (shipped values). Run `vmware-harden advisories update`."

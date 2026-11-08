@@ -12,7 +12,8 @@ log = logging.getLogger(__name__)
 #: contract test — a rule reading a key outside this set matches zero rows and
 #: reports false compliance (doc-vs-code parity, 形态 #6).
 _VM_SECURITY_ATTRS: frozenset[str] = frozenset(
-    {"secure_boot", "hw_version_int", "migrate_encryption", "encryption_enabled"}
+    {"secure_boot", "hw_version_int", "migrate_encryption", "encryption_enabled",
+     "isolation_copy_disabled"}
 )
 
 #: ``VirtualMachineConfigSpecEncryptedVMotionModes``, the API form.
@@ -37,6 +38,7 @@ PRODUCIBLE_VM_ATTRS: frozenset[str] = frozenset(
 _VM_SECURITY_PATHS: tuple[str, ...] = (
     "config.uuid", "config.bootOptions", "config.version", "runtime.connectionState",
     "config.migrateEncryption", "config.keyId", "config.hardware.device", "datastore",
+    "config.extraConfig",
 )
 
 
@@ -68,7 +70,7 @@ def _vm_security_attrs(props: dict, datastore_types: dict[str, str] | None = Non
     """
     if props.get("runtime.connectionState") != "connected":
         return {}
-    attrs: dict = {}
+    attrs: dict = _clipboard_attrs(props.get("config.extraConfig"))
     secure_boot = getattr(props.get("config.bootOptions"), "efiSecureBootEnabled", None)
     if isinstance(secure_boot, bool):
         attrs["secure_boot"] = secure_boot
@@ -80,6 +82,35 @@ def _vm_security_attrs(props: dict, datastore_types: dict[str, str] | None = Non
     if mode in MIGRATE_ENCRYPTION_MODES:
         attrs["migrate_encryption"] = mode
     return attrs
+
+
+def _clipboard_attrs(options: object) -> dict:
+    """Explicit per-VM copy/paste settings only, never raw extraConfig.
+
+    Missing values do not establish defaults or runtime clipboard behavior.
+    Either explicit false disproves the requirement that both flags are true;
+    duplicates are ambiguous and cannot be judged.
+    """
+    if not isinstance(options, (list, tuple)):
+        return {}
+    keys = ("isolation.tools.copy.disable", "isolation.tools.paste.disable")
+    flags: dict[str, bool | None] = {}
+    for option in options:
+        key = getattr(option, "key", None)
+        if key not in keys:
+            continue
+        if key in flags:
+            return {}
+        raw = getattr(option, "value", None)
+        value = raw if isinstance(raw, bool) else None
+        if isinstance(raw, str) and raw.strip().lower() in ("true", "false"):
+            value = raw.strip().lower() == "true"
+        flags[key] = value
+    if any(v is False for v in flags.values()):
+        return {"isolation_copy_disabled": False}
+    if len(flags) == 2 and all(v is True for v in flags.values()):
+        return {"isolation_copy_disabled": True}
+    return {}
 
 
 def _encryption(props: dict, datastore_types: dict[str, str] | None) -> dict:
