@@ -165,11 +165,7 @@ Copy this configuration into your MCP client's local stdio settings. The client 
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": [
-        "--from",
-        "vmware-harden[collectors]==1.19.0",
-        "vmware-harden-mcp"
-      ],
+      "args": ["--from", "vmware-harden[collectors]==1.19.0", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }

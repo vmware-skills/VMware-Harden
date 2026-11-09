@@ -133,11 +133,7 @@ VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": [
-        "--from",
-        "vmware-harden[collectors]==1.19.0",
-        "vmware-harden-mcp"
-      ],
+      "args": ["--from", "vmware-harden[collectors]==1.19.0", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }
