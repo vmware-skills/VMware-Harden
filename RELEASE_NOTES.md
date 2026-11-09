@@ -1,3 +1,7 @@
+## Unreleased
+
+* Skip the real-SDK clipboard array test when the optional collectors dependency (pyVmomi) is absent; SDK-independent evidence tests still run.
+
 ## v1.19.1 — Security documentation and Gemini extension packaging
 
 Released 2026-11-09.
