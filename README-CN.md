@@ -1,14 +1,27 @@
 <!-- mcp-name: io.github.vmware-skills/vmware-harden -->
 
-# vmware-harden
+# VMware Harden
 
-要用自己的模型和 Agent 平台进行只读自测，请看 marketplace 根目录的[共享模型适配自测任务](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md)。
+[![PyPI](https://img.shields.io/pypi/v/vmware-harden)](https://pypi.org/project/vmware-harden/) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#readme-license)
+
+[English](README.md) | 中文
+
+维护者: Wei Zhou · [zhouwei008@gmail.com](mailto:zhouwei008@gmail.com)
+
+社区维护的开源项目，非 VMware 或 Broadcom 官方产品。
+
+[概述](#readme-overview) · [快速开始](#readme-quick-start) · [MCP 配置](#readme-mcp-configuration) · [能力与工作流](#readme-capabilities-and-workflows) · [安全与审计](#readme-safety-and-audit) · [故障排查](#readme-troubleshooting) · [配套 Skills](#readme-companion-skills) · [参考资料](#readme-reference) · [许可证](#readme-license)
+
+<a id="readme-overview"></a>
+
+## 概述
+
+默认通过本地 Stdio 运行；请在本机配置所需目标和凭据。
 
 > **声明**：本项目为社区维护的开源项目，**与 VMware, Inc. 或 Broadcom Inc. 无任何隶属、
 > 背书或赞助关系。** "VMware"、"vSphere"、"ESXi"、"NSX" 为 Broadcom 商标。源码以 MIT 许可证
 > 公开可审计，见 [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden)。
 
-[English](README.md) | 中文
 
 AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员。
 
@@ -17,14 +30,25 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 
 容器示例先在本地构建带版本标签的镜像，再用 `--pull=never` 运行，避免回退到镜像仓库拉取。本地版本标签不等于不可变的镜像摘要。
 
-## GA 家族成员（自 v1.5.18 起）
+完整的 Agent 指令见 [`skills/vmware-harden/SKILL.md`](skills/vmware-harden/SKILL.md).
 
-生产可用的合规平台：**9 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
-**EU NIS2**、**BSI IT-Grundschutz**）、**99 条规则**、面向 ESXi 与 vCenter build 号的 **VMSA 已知漏洞比对**、多 vCenter Twin、drift 检测、
-**LLM Remediation Advisor**、带 8 个受审计工具的 **MCP server**、Web dashboard，以及
-`vmware-harden doctor` 环境诊断。
+<a id="readme-quick-start"></a>
 
 ## 快速开始
+
+需要 Python `>=3.10` 和 `uv`。
+
+```bash
+uv tool install "vmware-harden[collectors]==1.19.1"
+vmware-harden --help
+```
+
+目标、凭据和本地数据目录设置见 [setup guide](skills/vmware-harden/references/setup-guide.md).
+
+<details>
+<summary>安装与配置详情（含离线安装）</summary>
+
+### 快速开始
 
 ```bash
 # scan 依赖 collectors extra：harden 通过 vmware-aiops / vmware-storage /
@@ -56,7 +80,7 @@ vmware-harden advise --all-critical
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
 
-### 读结果：只看 violations 不构成结论
+#### 读结果：只看 violations 不构成结论
 
 规则只能判定「真的采到了的配置」，而这件事有两种独立的失败方式。**没有任何采集器产出**
 该属性的规则，压根不会执行。而**能执行**的规则，仍可能对某一台主机什么都没判定——
@@ -87,7 +111,7 @@ Not judged on these nodes (data missing):
 两份清单对应的处理动作不同：前者等采集器补齐，后者查那台节点的连通性与扫描账号权限。
 
 
-### VMRC 复制粘贴的显式配置
+#### VMRC 复制粘贴的显式配置
 
 VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.disable`。
 两个开关均显式为 true 时，`isolation_copy_disabled` 才为 true；任一显式为 false 时为 false；
@@ -95,13 +119,58 @@ VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.
 检查这项显式配置，不验证实际复制粘贴行为、主机默认值或 guest/Tools 状态。
 不会存储或返回无关的 `extraConfig` 值。
 
-## 只读设计
 
-vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
-VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/twin.duckdb`，观测结果的缓存，
-不是受管基础设施）。本 skill 从不执行修复，修复一律交由 vmware-pilot。
+</details>
 
-## 内置基线
+<a id="readme-mcp-configuration"></a>
+
+## MCP 配置
+
+将以下配置复制到 MCP 客户端的本地 Stdio 配置中。客户端需要能找到 `uvx`；首次安装所需包时需要访问包源。
+
+```json
+{
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "uvx",
+      "args": ["--from", "vmware-harden[collectors]==1.19.1", "vmware-harden-mcp"],
+      "env": {
+        "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
+      }
+    }
+  }
+}
+```
+
+Harden 的实时采集复用 `~/.vmware-aiops/config.yaml`；保留 `[collectors]` 以安装采集依赖。
+
+以下保留预先安装 CLI 的用法及各工具特有的 MCP 选项。
+
+<details>
+<summary>预先安装的 CLI 与其他 MCP 选项</summary>
+
+### MCP Server
+
+```bash
+vmware-harden mcp  # stdio MCP server（旧入口 vmware-harden-mcp 仍兼容）
+```
+
+MCP 客户端配置模板见 `examples/mcp-configs/*.json`。8 个 MCP 工具全部只读：
+`list_baselines`、`list_violations`、`get_remediation`、`list_drift_events`、
+`get_baseline_rules`、`scan_target`。
+
+> **公司 TLS 代理网络下？** 不要用 `uvx` 启动 MCP server（可能报
+> `invalid peer certificate: UnknownIssuer`）。改用 `uv tool install` 装好后的入口
+> `vmware-harden mcp`（无需联网 resolve），或 `export UV_NATIVE_TLS=true`。
+
+
+</details>
+
+<a id="readme-capabilities-and-workflows"></a>
+
+## 能力与工作流
+
+### 内置基线
 
 | 基线 ID | 规则数 | 适用对象 | 来源 |
 |---------|-------|---------|------|
@@ -118,7 +187,7 @@ VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/
 
 `baseline list` 返回 10 个 ID：上表 7 组含规则的 YAML 基线（共 **99 条规则**）、两个 v9 别名（自身不含规则，解析为其 v8 父基线的规则），以及由公告目录生成、不读文件的 `vmsa-advisories`。
 
-### 已知漏洞（VMSA）
+#### 已知漏洞（VMSA）
 
 `vmsa-advisories` 用每台 ESXi 主机和 vCenter 本身的版本与 build 号，对照随包发布的**离线 VMware 安全公告目录**
 （`vmware_harden/advisories/catalog.yaml`，在目录日期当天对照来源核对过）。每条公告一条规则；规则说明里引用它所对应的
@@ -156,7 +225,7 @@ vmware-harden report --format csv > vmsa.csv
 记录读不到只会报告出来，不阻断 KEV 刷新。正在运行的 MCP server 在下一次调用时就会读到新缓存。报告会写明 KEV 最近一次核对的时间。
 `vmware-harden advisories show` 显示目录日期和最近一次刷新时间。
 
-### 等保 2.0 三级（国内合规）
+#### 等保 2.0 三级（国内合规）
 
 `dengbao-2.0-level3-vmware` 依据 **GB/T 22239-2019《信息安全技术 网络安全等级保护基本要求》第三级**
 编写，把标准条款映射为可在 VMware 环境中自动取证的检查项，20 条规则按标准章节组织：
@@ -182,7 +251,7 @@ vmware-harden scan --target <vc> --baseline dengbao-2.0-level3-vmware
 vmware-harden report --format json > dengbao-violations.json
 ```
 
-### VCF 9.0 / 9.1 兼容性
+#### VCF 9.0 / 9.1 兼容性
 
 现有基线（`cis-vmware-esxi-8.0-subset`、`vsphere-scg-v8-subset`、`dengbao-2.0-level3-vmware`、
 `pci-dss-4.0-vmware`）可以正常扫描 VCF 9.0 / 9.1 集群 —— 多数规则针对的是在 8.x → 9.x 之间保持
@@ -190,13 +259,13 @@ vmware-harden report --format json > dengbao-violations.json
 它们通过 `extends:` **逐条继承**对应的 v8 规则（不臆造 v9 专属编号），可直接用于 9.x 环境；
 待 CIS / Broadcom 发布正式的 vSphere 9 基准后再替换为官方编号规则。
 
-#### Broadcom 官方参考
+##### Broadcom 官方参考
 
 - **Security Configuration Guides**：<https://core.vmware.com/security/> —— vSphere SCG v8 / 未来的 v9
 - **SDKs**：<https://developer.broadcom.com/sdks> —— VCF Python SDK（通过 REST 获取主机配置）
 - **CIS Benchmarks**：<https://www.cisecurity.org/cis-benchmarks/> —— CIS VMware ESXi Benchmark v1.0
 
-## 自定义基线
+### 自定义基线
 
 ```bash
 vmware-harden baseline validate ./my-strict.yaml
@@ -208,66 +277,17 @@ YAML 支持 `extends:` 从内置基线继承。用户目录下的同名基线优
 `~/.vmware-harden/baselines/` 再按站点要求覆写个别规则。schema 详见
 `skills/vmware-harden/references/cli-reference.md`。
 
-## MCP Server
+<a id="readme-safety-and-audit"></a>
 
-```bash
-vmware-harden mcp  # stdio MCP server（旧入口 vmware-harden-mcp 仍兼容）
-```
+## 安全与审计
 
-MCP 客户端配置模板见 `examples/mcp-configs/*.json`。8 个 MCP 工具全部只读：
-`list_baselines`、`list_violations`、`get_remediation`、`list_drift_events`、
-`get_baseline_rules`、`scan_target`。
+### 只读设计
 
-> **公司 TLS 代理网络下？** 不要用 `uvx` 启动 MCP server（可能报
-> `invalid peer certificate: UnknownIssuer`）。改用 `uv tool install` 装好后的入口
-> `vmware-harden mcp`（无需联网 resolve），或 `export UV_NATIVE_TLS=true`。
+vmware-harden 在设计上就是只读的 —— 8 个 MCP 工具全部带 `[READ]` 标记，没有任何一个会修改受管的
+VMware 基础设施。`scan_target` 也只写本地 twin DB（`~/.vmware-harden/twin.duckdb`，观测结果的缓存，
+不是受管基础设施）。本 skill 从不执行修复，修复一律交由 vmware-pilot。
 
-## 架构
-
-- **Estate Digital Twin** —— 单文件 DuckDB，位于 `~/.vmware-harden/twin.duckdb`。所有 node ID 带
-  target 前缀，多 target 并存安全。
-- **Collectors** —— 惰性导入兄弟 `vmware-*` skill（无进程 spawn 开销）。所有采集都是 READ，写操作
-  一律交由 vmware-pilot。
-- **Baseline schema** —— Pydantic v2 严格模式（`extra="forbid"`），支持 `extends:` 继承与用户目录覆盖。
-- **Drift** —— 纯 diff 函数，持久化可选；每次扫描后自动运行。
-- **Advisor** —— LLM 驱动的 Suggestion 生成；Anthropic provider 带 prompt caching，无 API key
-  或测试环境下回落到 mock。
-- **Audit** —— 每个 MCP 工具都由家族 vmware-policy 的 `@vmware_tool` 包裹，写入 `~/.vmware/audit.db`。
-- **Web** —— FastAPI + Jinja2 + Tailwind/HTMX/ECharts（CDN）。
-
-## 实验室回归测试
-
-```bash
-export VMWARE_HARDEN_LAB_TARGET=<your-vc>
-pytest tests/eval/regression -v -m lab
-```
-
-## 家族成员
-
-- **vmware-aiops** —— 主机清单 + 运维（harden 的 HostCollector 依赖它）
-- **vmware-monitor** —— 只读监控对照组
-- **vmware-storage** —— 数据存储清单
-- **vmware-nsx-security** —— DFW 清单
-- **vmware-pilot** —— 执行修复（写操作；不在 harden 职责范围内）
-- **vmware-policy** —— `@vmware_tool` 审计装饰器
-
-## GA 验收标准（v1.5.18）
-
-- 221 项测试通过
-- Bandit：任意严重级别下 0 issue
-- 全部 8 个 MCP 工具均被审计
-- SKILL.md ≤ 3000 词，符合家族规范
-- SECURITY.md 含 6 个要素 + Broadcom 声明
-- 6 组内置基线（99 条规则）
-- `vmware-harden doctor` 环境诊断
-- `vmware-*` 家族 GA 成员（版本对齐至 1.5.28）
-
-## 参考
-
-- 家族规范：monorepo 根目录 `CLAUDE.md`
-
-<!-- usage: remote-and-exposure -->
-## 远程访问（HTTPS）与限制工具
+### 远程访问（HTTPS）与限制工具
 
 默认情况下 `vmware-harden mcp` 通过 stdio 服务一个本地客户端，并提供全部工具。以下两个选项可以改变这一点
 （需 vmware-policy ≥ 1.21.0）。
@@ -321,6 +341,81 @@ claude mcp add --transport http vmware-harden https://mcp.example.com:8443/mcp \
 准备的。最小权限来自 server 使用的账号。
 
 详见 `skills/vmware-harden/references/setup-guide.md`（"Serving MCP over HTTPS"、"Limiting which tools are offered"）。
+
+<a id="readme-troubleshooting"></a>
+
+## 故障排查
+
+安装问题请查看本页安装说明；操作前先用 CLI 的 `--help` 核对参数。反馈问题时仅提供经过脱敏的最小示例。
+
+<a id="readme-companion-skills"></a>
+
+## 配套 Skills
+
+VMware Skills 家族包含 14 个 MCP Server 和共享 Policy 库。按职责选择工具： [vmware-skills](https://github.com/vmware-skills).
+
+### 家族成员
+
+- **vmware-aiops** —— 主机清单 + 运维（harden 的 HostCollector 依赖它）
+- **vmware-monitor** —— 只读监控对照组
+- **vmware-storage** —— 数据存储清单
+- **vmware-nsx-security** —— DFW 清单
+- **vmware-pilot** —— 执行修复（写操作；不在 harden 职责范围内）
+- **vmware-policy** —— `@vmware_tool` 审计装饰器
+
+<a id="readme-reference"></a>
+
+## 参考资料
+
+变更记录： [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
+使用自己的模型和 Agent 宿主进行只读自测： [model-fit self-test](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md).
+
+### GA 家族成员（自 v1.5.18 起）
+
+生产可用的合规平台：**9 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
+**EU NIS2**、**BSI IT-Grundschutz**）、**99 条规则**、面向 ESXi 与 vCenter build 号的 **VMSA 已知漏洞比对**、多 vCenter Twin、drift 检测、
+**LLM Remediation Advisor**、带 8 个受审计工具的 **MCP server**、Web dashboard，以及
+`vmware-harden doctor` 环境诊断。
+
+### 架构
+
+- **Estate Digital Twin** —— 单文件 DuckDB，位于 `~/.vmware-harden/twin.duckdb`。所有 node ID 带
+  target 前缀，多 target 并存安全。
+- **Collectors** —— 惰性导入兄弟 `vmware-*` skill（无进程 spawn 开销）。所有采集都是 READ，写操作
+  一律交由 vmware-pilot。
+- **Baseline schema** —— Pydantic v2 严格模式（`extra="forbid"`），支持 `extends:` 继承与用户目录覆盖。
+- **Drift** —— 纯 diff 函数，持久化可选；每次扫描后自动运行。
+- **Advisor** —— LLM 驱动的 Suggestion 生成；Anthropic provider 带 prompt caching，无 API key
+  或测试环境下回落到 mock。
+- **Audit** —— 每个 MCP 工具都由家族 vmware-policy 的 `@vmware_tool` 包裹，写入 `~/.vmware/audit.db`。
+- **Web** —— FastAPI + Jinja2 + Tailwind/HTMX/ECharts（CDN）。
+
+### 实验室回归测试
+
+```bash
+export VMWARE_HARDEN_LAB_TARGET=<your-vc>
+pytest tests/eval/regression -v -m lab
+```
+
+### GA 验收标准（v1.5.18）
+
+- 221 项测试通过
+- Bandit：任意严重级别下 0 issue
+- 全部 8 个 MCP 工具均被审计
+- SKILL.md ≤ 3000 词，符合家族规范
+- SECURITY.md 含 6 个要素 + Broadcom 声明
+- 6 组内置基线（99 条规则）
+- `vmware-harden doctor` 环境诊断
+- `vmware-*` 家族 GA 成员（版本对齐至 1.5.28）
+
+### 参考
+
+- 家族规范：monorepo 根目录 `CLAUDE.md`
+
+<!-- usage: remote-and-exposure -->
+
+<a id="readme-license"></a>
 
 ## 许可证
 
