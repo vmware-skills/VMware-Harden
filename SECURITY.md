@@ -73,7 +73,7 @@ This skill is **strictly non-destructive**. Every MCP tool and every CLI command
 This project is scanned with [Bandit](https://bandit.readthedocs.io/) before every release, targeting 0 Medium+ issues:
 
 ```bash
-uvx bandit -r vmware_harden/
+uvx bandit==1.9.4 -r vmware_harden/
 ```
 
 ## Supported Versions

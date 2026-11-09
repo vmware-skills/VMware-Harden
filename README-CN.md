@@ -15,6 +15,8 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 - **对 vSphere 只读**：全部 8 个 MCP 工具均带 `[READ]` 标记，没有任何一个会修改受管的 VMware
   基础设施；`scan_target` 只写本地 twin DB（它自己观测结果的缓存）。详见[只读设计](#只读设计)。
 
+容器示例先在本地构建带版本标签的镜像，再用 `--pull=never` 运行，避免回退到镜像仓库拉取。本地版本标签不等于不可变的镜像摘要。
+
 ## GA 家族成员（自 v1.5.18 起）
 
 生产可用的合规平台：**9 个内置基线**（CIS ESXi 8.0/9.0、vSphere SCG v8/v9、**等保 2.0 三级**、PCI-DSS 4.0、
@@ -31,7 +33,7 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 uv tool install "vmware-harden[collectors]"
 
 # 只在已有 twin DB 上出报告，则不需要 collectors：
-#   uv tool install vmware-harden
+#   uv tool install vmware-harden==1.19.0
 
 # 列出内置基线
 vmware-harden baseline list

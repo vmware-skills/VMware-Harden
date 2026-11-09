@@ -14,6 +14,8 @@ AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` 
 
 - **Read-only against vSphere**: all 8 MCP tools carry the `[READ]` marker and none mutate managed VMware infrastructure; `scan_target` writes only to the local twin DB (a cache of its own observations). See [Read-only by design](#read-only-by-design).
 
+Container examples build a local version-tagged image and run it with `--pull=never`, avoiding registry fallback. A local version tag is not an immutable image digest.
+
 ## GA family member (since v1.5.18)
 
 Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, a **VMSA known-vulnerability check** for ESXi and vCenter builds, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
@@ -28,7 +30,7 @@ Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0
 uv tool install "vmware-harden[collectors]"
 
 # Reporting on an existing twin DB needs no collectors:
-#   uv tool install vmware-harden
+#   uv tool install vmware-harden==1.19.0
 
 # List built-in baselines
 vmware-harden baseline list

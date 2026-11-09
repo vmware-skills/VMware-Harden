@@ -66,14 +66,17 @@ git clone --branch v1.19.0 https://github.com/vmware-skills/VMware-Harden.git
 cd VMware-Harden
 
 # Build
-docker build -t vmware-harden-mcp .
+docker build -t vmware-harden-mcp:1.19.0 .
 
 # Run — mount your Twin DuckDB directory into the container
-docker run -i --rm \
+docker run --pull=never -i --rm \
   -v ~/.vmware-harden:/root/.vmware-harden \
   -e VMWARE_HARDEN_DB=/root/.vmware-harden/twin.duckdb \
-  vmware-harden-mcp
+  vmware-harden-mcp:1.19.0
 ```
+
+These commands run the image built locally above; `--pull=never` prevents a missing local image from falling back to a registry. The version tag identifies this build, not an immutable digest.
+
 
 The container's `CMD` is `python -m vmware_harden.mcp_server`, which is wired through `vmware_harden/mcp_server/__main__.py` to the same FastMCP entry point as the installed `vmware-harden-mcp` console script. All 6 read-only tools are available.
 
