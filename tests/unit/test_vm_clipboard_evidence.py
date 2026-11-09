@@ -105,6 +105,7 @@ def test_collector_to_rule_pipeline_distinguishes_clean_violation_and_gap(
 
 
 def test_real_sdk_option_value_array_is_supported():
+    pytest.importorskip("pyVmomi")
     from pyVmomi import vim
 
     options = vim.option.OptionValue.Array([
