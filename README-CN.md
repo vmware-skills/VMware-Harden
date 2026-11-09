@@ -30,10 +30,10 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 # scan 依赖 collectors extra：harden 通过 vmware-aiops / vmware-storage /
 # vmware-nsx-security 读取清单，而 `uv tool install` 为每个工具单独建环境——
 # 单独安装这些兄弟包，harden 是 import 不到的。
-uv tool install "vmware-harden[collectors]"
+uv tool install "vmware-harden[collectors]==1.19.1"
 
 # 只在已有 twin DB 上出报告，则不需要 collectors：
-#   uv tool install vmware-harden==1.19.0
+#   uv tool install vmware-harden==1.19.1
 
 # 列出内置基线
 vmware-harden baseline list
