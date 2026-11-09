@@ -1,4 +1,6 @@
-## Unreleased
+## v1.19.2 — Guard optional SDK evidence test dependency
+
+Released 2026-11-09.
 
 * Skip the real-SDK clipboard array test when the optional collectors dependency (pyVmomi) is absent; SDK-independent evidence tests still run.
 

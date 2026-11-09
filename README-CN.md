@@ -39,7 +39,7 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 需要 Python `>=3.10` 和 `uv`。
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.19.1"
+uv tool install "vmware-harden[collectors]==1.19.2"
 vmware-harden --help
 ```
 
@@ -54,10 +54,10 @@ vmware-harden --help
 # scan 依赖 collectors extra：harden 通过 vmware-aiops / vmware-storage /
 # vmware-nsx-security 读取清单，而 `uv tool install` 为每个工具单独建环境——
 # 单独安装这些兄弟包，harden 是 import 不到的。
-uv tool install "vmware-harden[collectors]==1.19.1"
+uv tool install "vmware-harden[collectors]==1.19.2"
 
 # 只在已有 twin DB 上出报告，则不需要 collectors：
-#   uv tool install vmware-harden==1.19.1
+#   uv tool install vmware-harden==1.19.2
 
 # 列出内置基线
 vmware-harden baseline list
@@ -133,7 +133,7 @@ VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": ["--from", "vmware-harden[collectors]==1.19.1", "vmware-harden-mcp"],
+      "args": ["--from", "vmware-harden[collectors]==1.19.2", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }
