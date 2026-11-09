@@ -27,10 +27,10 @@ Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0
 # through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool
 # install` gives each tool its own environment — installing them separately
 # puts them where harden cannot import them from.
-uv tool install "vmware-harden[collectors]"
+uv tool install "vmware-harden[collectors]==1.19.1"
 
 # Reporting on an existing twin DB needs no collectors:
-#   uv tool install vmware-harden==1.19.0
+#   uv tool install vmware-harden==1.19.1
 
 # List built-in baselines
 vmware-harden baseline list

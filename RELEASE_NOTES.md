@@ -1,3 +1,16 @@
+## v1.19.1 — Security documentation and Gemini extension packaging
+
+Released 2026-11-09.
+
+Clarify actual capability, credential, local-write and transport boundaries where applicable.
+Pin documented setup/fallback tools and make credential examples owner-only before writing,
+without overwriting existing files. Runtime permissions, TLS defaults and approval behavior are unchanged.
+These edits do not establish a new ClawHub scan verdict.
+
+Add the root Gemini CLI extension manifest and discovery metadata, using the existing canonical skill and exact MCP package version. No duplicate skill entrypoint is introduced.
+
+Runtime infrastructure operations, permissions, TLS defaults and confirmation behavior are unchanged. No new vSphere/VCF 9.x or live product compatibility is claimed. ClawHub skill and bundle verdicts are checked separately after publication; documentation corrections are not a clean-scan claim.
+
 ## v1.19.0 — product-scoped CVEs and VMRC configuration evidence
 
 * Update public author/project contact metadata to `zhouwei008@gmail.com`.
@@ -7,12 +20,6 @@
 * VMSA-2026-0006 now covers its three ESXi CVEs as well as the two vCenter CVEs, using Broadcom's response matrix and build KBs. The first vCenter 9.1 authentication-bypass fix is distinguished from the later directory-traversal fix. Catalog validation rejects ambiguous or invalid scope mappings.
 * The advisory coverage boundary remains 2026-10-19. Shipped KEV flags were checked against CISA snapshot 2026.11.06; their provenance is separate from a user's online refresh. A fixed release can precede the consolidated advisory publication date.
 
-## Unreleased — security documentation corrections
-
-Clarify actual capability, credential, local-write and transport boundaries where applicable.
-Pin documented setup/fallback tools and make credential examples owner-only before writing,
-without overwriting existing files. Runtime permissions, TLS defaults and approval behavior are unchanged.
-These edits do not establish a new ClawHub scan verdict.
 
 ## v1.18.0 — Twelve rules that could never be judged now are: five facts re-specified as things vSphere answers (2026-10-20)
 
