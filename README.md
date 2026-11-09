@@ -1,14 +1,25 @@
 <!-- mcp-name: io.github.vmware-skills/vmware-harden -->
 
-# vmware-harden
+# VMware Harden
 
-For a read-only check of this skill with your model and agent host, use the shared [model-fit self-test](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md) in the marketplace root.
+[![PyPI](https://img.shields.io/pypi/v/vmware-harden)](https://pypi.org/project/vmware-harden/) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#readme-license)
 
-<!-- mcp-name: io.github.vmware-skills/vmware-harden -->
+English | [中文](README-CN.md)
+
+Maintainer: Wei Zhou · [zhouwei008@gmail.com](mailto:zhouwei008@gmail.com)
+
+Community-maintained open-source project; not an official VMware or Broadcom product.
+
+[Overview](#readme-overview) · [Quick Start](#readme-quick-start) · [MCP Configuration](#readme-mcp-configuration) · [Capabilities and Workflows](#readme-capabilities-and-workflows) · [Safety and Audit](#readme-safety-and-audit) · [Troubleshooting](#readme-troubleshooting) · [Companion Skills](#readme-companion-skills) · [Reference](#readme-reference) · [License](#readme-license)
+
+<a id="readme-overview"></a>
+
+## Overview
+
+Runs locally over stdio by default; configure required targets and credentials on your own machine.
 
 > **Disclaimer**: Community-maintained open-source project. **Not affiliated with, endorsed by, or sponsored by VMware, Inc. or Broadcom Inc.** "VMware", "vSphere", "ESXi", and "NSX" are trademarks of Broadcom. Source code is publicly auditable at [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skills/VMware-Harden) under the MIT license.
 
-English | [中文](README-CN.md)
 
 AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` skill family.
 
@@ -16,11 +27,25 @@ AI-native VMware compliance and baseline enforcement. Sibling to the `vmware-*` 
 
 Container examples build a local version-tagged image and run it with `--pull=never`, avoiding registry fallback. A local version tag is not an immutable image digest.
 
-## GA family member (since v1.5.18)
+Full agent instructions: [`skills/vmware-harden/SKILL.md`](skills/vmware-harden/SKILL.md).
 
-Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, a **VMSA known-vulnerability check** for ESXi and vCenter builds, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
+<a id="readme-quick-start"></a>
 
-## Quickstart
+## Quick Start
+
+Requires Python `>=3.10` and `uv`.
+
+```bash
+uv tool install "vmware-harden[collectors]==1.19.0"
+vmware-harden --help
+```
+
+Target, credential and local data setup: [setup guide](skills/vmware-harden/references/setup-guide.md).
+
+<details>
+<summary>Installation and configuration details (including offline setup)</summary>
+
+### Quickstart
 
 ```bash
 # The collectors extra is what makes `scan` work: harden reads inventory
@@ -53,7 +78,7 @@ vmware-harden advise --all-critical
 vmware-harden web --port 8080  # → http://127.0.0.1:8080
 ```
 
-### Reading a result: violations alone are not a verdict
+#### Reading a result: violations alone are not a verdict
 
 A rule can only judge configuration that was actually gathered, and that fails
 in two independent ways. A rule whose attribute **no collector produces** is not
@@ -88,7 +113,7 @@ The two lists call for different work: the first is waiting on a collector, the
 second on that node's reachability and the scanning account's privileges.
 
 
-### Offline / Air-Gapped Install (from source)
+#### Offline / Air-Gapped Install (from source)
 
 This project uses the modern PEP 517 build system (hatchling), so there is **no
 `setup.py`** by design — that is expected, not a missing file. If you cloned the
@@ -116,7 +141,7 @@ pip wheel . -w dist        # → dist/*.whl   (or: uv build, for just this packa
 pip install --no-index --find-links dist vmware-harden
 ```
 
-### Explicit VMRC clipboard settings
+#### Explicit VMRC clipboard settings
 
 The VM security pass reads the per-VM `isolation.tools.copy.disable` and
 `isolation.tools.paste.disable` options. `isolation_copy_disabled` is true only when both
@@ -126,15 +151,56 @@ v9 subset, checks this explicit configuration requirement; it does not test actu
 clipboard transfer, host defaults or guest/Tools behavior. Unrelated `extraConfig`
 values are not stored or returned.
 
-## Read-Only by Design
 
-vmware-harden is read-only against vSphere and NSX — all 8 MCP tools carry the `[READ]`
-marker, and none mutate managed VMware infrastructure. `scan_target` writes only to the
-local twin DB (`~/.vmware-harden/twin.duckdb`), a cache of its own observations rather than
-managed infrastructure. Remediation is never applied by this skill; it is deferred to
-vmware-pilot, which provides approval gating and audit trails for write operations.
+</details>
 
-## Built-in baselines
+<a id="readme-mcp-configuration"></a>
+
+## MCP Configuration
+
+Copy this configuration into your MCP client's local stdio settings. The client must be able to find `uvx`; the initial package installation requires access to a package index.
+
+```json
+{
+  "mcpServers": {
+    "vmware-harden": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "vmware-harden[collectors]==1.19.0",
+        "vmware-harden-mcp"
+      ],
+      "env": {
+        "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
+      }
+    }
+  }
+}
+```
+
+Live Harden collection reuses `~/.vmware-aiops/config.yaml`; keep `[collectors]` to install the collection dependencies.
+
+The following sections retain preinstalled CLI alternatives and product-specific MCP options.
+
+<details>
+<summary>Preinstalled CLI and additional MCP options</summary>
+
+### MCP server
+
+```bash
+vmware-harden mcp  # stdio MCP server (legacy alias: vmware-harden-mcp)
+```
+
+Configure your MCP client with one of `examples/mcp-configs/*.json`. 8 read-only tools: `list_baselines`, `get_baseline_rules`, `list_stig_controls`, `describe_stig_content_sync`, `list_violations`, `get_remediation`, `list_drift_events`, `scan_target`.
+
+
+</details>
+
+<a id="readme-capabilities-and-workflows"></a>
+
+## Capabilities and Workflows
+
+### Built-in baselines
 
 | Baseline | Rules | Applies to | Source |
 |----------|-------|-----------|--------|
@@ -153,7 +219,7 @@ vmware-pilot, which provides approval gating and audit trails for write operatio
 two v9 aliases, which carry no rules of their own and resolve to their v8 parent's, and
 `vmsa-advisories`, which is generated from the advisory catalog rather than read from a file.
 
-### Known vulnerabilities (VMSA)
+#### Known vulnerabilities (VMSA)
 
 `vmsa-advisories` judges each ESXi host's and the vCenter's own version and build
 against an **offline catalog of VMware security advisories** shipped in the package
@@ -204,19 +270,19 @@ reported and does not block the KEV refresh. A running MCP server picks up a new
 call. Reports show when KEV was last checked. `vmware-harden advisories show` prints the catalog
 date and the last refresh.
 
-### VCF 9.0 / 9.1 Compatibility
+#### VCF 9.0 / 9.1 Compatibility
 
 The existing baselines (`cis-vmware-esxi-8.0-subset`, `vsphere-scg-v8`, `dengbao-2.0-level3-vmware`, `pci-dss-4.0-vmware`) scan VCF 9.0 / 9.1 clusters successfully — most rules target host advanced settings stable across 8.x → 9.x. `cis-vmware-esxi-9.0-subset` and `vsphere-scg-v9-subset` ship today as `extends:` aliases of their v8 parents — same rules, a v9-named ID to scan and report under. Rules specific to 9.x will be added to them as Broadcom publishes the v9 guides.
 
 `vsphere-stig-v9-subset` is a rule-bearing STIG-aligned baseline: 12 host advanced-setting controls (account lockout, password policy, DCUI access, shell/DCUI timeouts, MOB, guest BPDU, remote syslog) mapped to the official open-source vSphere STIG content (MITRE InSpec / Cinc Auditor). **Status: experimental.** Its checks read ESXi host advanced settings the host collector fetches via a `config.option` PropertyCollector pass. That pass **was verified end-to-end on 2026-08-13** against a live standalone **ESXi 8.0.3** (build 24280767): all 12 attributes came back populated, with values in the shapes the rules expect (`account_lock_failures=5`, `dcui_access='root'`, `password_quality_control='retry=3 min=disabled,disabled,disabled,7,7'`, `mob_enabled=False`, `syslog_remote_host=''`), and the scan raised 3 genuine violations. Still unverified, and why the status stays experimental: **ESXi 9.x**, which is what this baseline actually targets, and any vCenter-managed multi-host inventory. Treat results on 9.x as **non-authoritative**. The v1.9.0 undetermined mechanism does not cover a failed fetch on its own: it refuses a rule when *no collector declares* the attribute, a static check against the vocabulary, and these STIG attributes *are* declared, so their rules do run. If the real PropertyCollector pass comes back empty on live hardware, the attribute is simply absent and the rule again matches zero rows. **v1.10.0 catches that case** — such a host is recorded as a per-node gap (`coverage.undetermined_node_checks`) rather than a pass, so an unverified collector shows up as unjudged hosts instead of a clean report. What remains unverified is whether the pass returns the *right* values, which no coverage mechanism can tell you. The baseline's `status` field is surfaced by `list_baselines` and `describe_stig_content_sync` so a scan self-declares this caveat. It is a **content sync**, not an API wrapper — VCF Operations 9.1 Automated Configuration Compliance (ACC) / Security Posture Management (SPM) is UI- and schedule-driven and exposes **no public compliance REST API**. For continuous, fleet-wide enforcement and automated remediation, use **VCF Operations SPM/ACC (UI)**; vmware-harden is the API-scriptable, DuckDB-persisted, cross-target point-in-time scanner. See [references/stig-content-sync.md](skills/vmware-harden/references/stig-content-sync.md) and inspect the catalog with `vmware-harden stig controls`.
 
-#### Official Broadcom References
+##### Official Broadcom References
 
 - **Security Configuration Guides**: <https://core.vmware.com/security/> — vSphere SCG v8 / future v9
 - **SDKs**: <https://developer.broadcom.com/sdks> — VCF Python SDK (for fetching host config via REST)
 - **CIS Benchmarks**: <https://www.cisecurity.org/cis-benchmarks/> — CIS VMware ESXi Benchmark v1.0 (8.0 / future 9.0)
 
-## Custom baselines
+### Custom baselines
 
 ```bash
 vmware-harden baseline validate ./my-strict.yaml
@@ -226,57 +292,19 @@ vmware-harden scan --target <vc> --baseline my-strict-cis
 
 YAML supports `extends:` for inheriting from a built-in baseline. See `skills/vmware-harden/references/cli-reference.md`.
 
-## MCP server
+<a id="readme-safety-and-audit"></a>
 
-```bash
-vmware-harden mcp  # stdio MCP server (legacy alias: vmware-harden-mcp)
-```
+## Safety and Audit
 
-Configure your MCP client with one of `examples/mcp-configs/*.json`. 8 read-only tools: `list_baselines`, `get_baseline_rules`, `list_stig_controls`, `describe_stig_content_sync`, `list_violations`, `get_remediation`, `list_drift_events`, `scan_target`.
+### Read-Only by Design
 
-## Architecture
+vmware-harden is read-only against vSphere and NSX — all 8 MCP tools carry the `[READ]`
+marker, and none mutate managed VMware infrastructure. `scan_target` writes only to the
+local twin DB (`~/.vmware-harden/twin.duckdb`), a cache of its own observations rather than
+managed infrastructure. Remediation is never applied by this skill; it is deferred to
+vmware-pilot, which provides approval gating and audit trails for write operations.
 
-- **Estate Digital Twin** — DuckDB single file at `~/.vmware-harden/twin.duckdb`. Multi-target safe via target prefix on all node IDs.
-- **Collectors** — lazy-import sibling vmware-* skills (no spawn overhead). All scans are READ; writes deferred to vmware-pilot.
-- **Baseline schema** — Pydantic v2, strict (`extra="forbid"`), `extends:` inheritance, user-dir override.
-- **Drift** — pure diff function with optional persistence; auto-runs after every scan.
-- **Advisor** — LLM-driven Suggestion generation; Anthropic provider with prompt caching; mock fallback for tests / no-API-key environments.
-- **Audit** — every MCP tool wrapped with `@vmware_tool` from family vmware-policy.
-- **Web** — FastAPI + Jinja2 + Tailwind/HTMX/ECharts CDN.
-
-## Lab regression
-
-```bash
-export VMWARE_HARDEN_LAB_TARGET=<your-vc>
-pytest tests/eval/regression -v -m lab
-```
-
-## Family
-
-- **vmware-aiops** — host inventory + ops (used by harden's HostCollector)
-- **vmware-monitor** — read-only counterpart
-- **vmware-storage** — datastore inventory
-- **vmware-nsx-security** — DFW inventory
-- **vmware-pilot** — execute remediations (writes; out of scope for harden)
-- **vmware-policy** — `@vmware_tool` audit decorator
-
-## Acceptance criteria (v1.5.18 GA)
-
-- 221 tests passing
-- Bandit: 0 issues at any severity
-- All 8 MCP tools audited
-- SKILL.md ≤ 3000 words, family-convention compliant
-- SECURITY.md with 6 elements + Broadcom disclaimer
-- 9 built-in baselines (99 rules across 7 rule-bearing sets + 2 v9 aliases)
-- `vmware-harden doctor` for environment diagnostics
-- GA member of vmware-* family (version-aligned at 1.5.28)
-
-## References
-
-- Family CLAUDE.md: `CLAUDE.md` at the monorepo root
-
-<!-- usage: remote-and-exposure -->
-## Remote access (HTTPS) and limiting tools
+### Remote access (HTTPS) and limiting tools
 
 By default `vmware-harden mcp` speaks stdio to one local client and offers every tool. Two options change that
 (vmware-policy ≥ 1.21.0).
@@ -331,6 +359,75 @@ claude mcp add --transport http vmware-harden https://mcp.example.com:8443/mcp \
 exists for the write-capable skills. Least privilege comes from the account the server uses.
 
 Details: `skills/vmware-harden/references/setup-guide.md` ("Serving MCP over HTTPS", "Limiting which tools are offered").
+
+<a id="readme-troubleshooting"></a>
+
+## Troubleshooting
+
+For installation issues, see the installation instructions on this page. Check CLI arguments with `--help` before operating. Include only a minimal, redacted example when reporting a problem.
+
+<a id="readme-companion-skills"></a>
+
+## Companion Skills
+
+The VMware Skills family contains 14 MCP servers and the shared Policy library. Choose tools by responsibility: [vmware-skills](https://github.com/vmware-skills).
+
+### Family
+
+- **vmware-aiops** — host inventory + ops (used by harden's HostCollector)
+- **vmware-monitor** — read-only counterpart
+- **vmware-storage** — datastore inventory
+- **vmware-nsx-security** — DFW inventory
+- **vmware-pilot** — execute remediations (writes; out of scope for harden)
+- **vmware-policy** — `@vmware_tool` audit decorator
+
+<a id="readme-reference"></a>
+
+## Reference
+
+Release history: [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
+Read-only self-test with your own model and agent host: [model-fit self-test](https://github.com/vmware-skills/marketplace/blob/main/MODEL_FIT_SELF_TEST.md).
+
+### GA family member (since v1.5.18)
+
+Production-ready compliance platform with **9 built-in baselines** (CIS ESXi 8.0 + 9.0, vSphere SCG v8 + v9, **vSphere 9 STIG-aligned**, **等保 2.0 三级**, PCI-DSS 4.0, **EU NIS2**, **BSI IT-Grundschutz**) carrying **99 rules**, a **VMSA known-vulnerability check** for ESXi and vCenter builds, multi-vCenter Twin, drift detection, **LLM Remediation Advisor**, **MCP server** with 8 audited tools, web dashboard, and `vmware-harden doctor` environment diagnostics.
+
+### Architecture
+
+- **Estate Digital Twin** — DuckDB single file at `~/.vmware-harden/twin.duckdb`. Multi-target safe via target prefix on all node IDs.
+- **Collectors** — lazy-import sibling vmware-* skills (no spawn overhead). All scans are READ; writes deferred to vmware-pilot.
+- **Baseline schema** — Pydantic v2, strict (`extra="forbid"`), `extends:` inheritance, user-dir override.
+- **Drift** — pure diff function with optional persistence; auto-runs after every scan.
+- **Advisor** — LLM-driven Suggestion generation; Anthropic provider with prompt caching; mock fallback for tests / no-API-key environments.
+- **Audit** — every MCP tool wrapped with `@vmware_tool` from family vmware-policy.
+- **Web** — FastAPI + Jinja2 + Tailwind/HTMX/ECharts CDN.
+
+### Lab regression
+
+```bash
+export VMWARE_HARDEN_LAB_TARGET=<your-vc>
+pytest tests/eval/regression -v -m lab
+```
+
+### Acceptance criteria (v1.5.18 GA)
+
+- 221 tests passing
+- Bandit: 0 issues at any severity
+- All 8 MCP tools audited
+- SKILL.md ≤ 3000 words, family-convention compliant
+- SECURITY.md with 6 elements + Broadcom disclaimer
+- 9 built-in baselines (99 rules across 7 rule-bearing sets + 2 v9 aliases)
+- `vmware-harden doctor` for environment diagnostics
+- GA member of vmware-* family (version-aligned at 1.5.28)
+
+### References
+
+- Family CLAUDE.md: `CLAUDE.md` at the monorepo root
+
+<!-- usage: remote-and-exposure -->
+
+<a id="readme-license"></a>
 
 ## License
 
