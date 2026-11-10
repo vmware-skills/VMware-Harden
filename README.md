@@ -36,7 +36,7 @@ Full agent instructions: [`skills/vmware-harden/SKILL.md`](skills/vmware-harden/
 Requires Python `>=3.10` and `uv`.
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.19.2"
+uv tool install "vmware-harden[collectors]==1.20.0"
 vmware-harden --help
 ```
 
@@ -52,10 +52,10 @@ Target, credential and local data setup: [setup guide](skills/vmware-harden/refe
 # through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool
 # install` gives each tool its own environment — installing them separately
 # puts them where harden cannot import them from.
-uv tool install "vmware-harden[collectors]==1.19.2"
+uv tool install "vmware-harden[collectors]==1.20.0"
 
 # Reporting on an existing twin DB needs no collectors:
-#   uv tool install vmware-harden==1.19.2
+#   uv tool install vmware-harden==1.20.0
 
 # List built-in baselines
 vmware-harden baseline list
@@ -165,7 +165,7 @@ Copy this configuration into your MCP client's local stdio settings. The client 
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": ["--from", "vmware-harden[collectors]==1.19.2", "vmware-harden-mcp"],
+      "args": ["--from", "vmware-harden[collectors]==1.20.0", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }
@@ -428,3 +428,21 @@ pytest tests/eval/regression -v -m lab
 ## License
 
 MIT
+
+### DFW parent-policy evidence and validation scope
+
+DFW rules now retain the actual parent policy `display_name` as `section_name`.
+A missing parent name stays unknown; a rule's own name is not a substitute.
+This makes one more built-in rule structurally evaluable, reducing the frozen
+pending-rule set from 15 to 14. Per-node missing evidence is still undetermined.
+Aggregate and absence checks read only the requested snapshot. Missing parent
+names remain coverage gaps instead of absence findings; a measured empty DFW
+inventory can still establish absence. NSX positive live validation is pending.
+
+`posture_drift` remains an intentionally reserved, unit-tested baseline-evolution
+helper; it is not a CLI/MCP feature. `diff_snapshots` is the supported pairwise
+library comparison, including persistence and scan-scope tests; the CLI uses
+the current drift path. Their existence does not establish dead-code defects
+or justify deleting library entry points. 9.x-specific controls are not added
+without an authoritative control definition and evidence source; inherited
+baselines do not prove 9.x appliance validation.

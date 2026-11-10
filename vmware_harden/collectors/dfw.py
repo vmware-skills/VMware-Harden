@@ -43,6 +43,7 @@ PRODUCIBLE_DFW_RULE_ATTRS: frozenset[str] = frozenset(
         "sequence_number",
         "path",
         "name",
+        "section_name",
     }
 )
 
@@ -68,13 +69,20 @@ def _fetch_dfw(target: str) -> dict:
         rules: list[dict] = []
         for policy in policies:
             pid = policy["id"]
-            rules.extend(
-                _drain(
-                    lambda offset, pid=pid: list_dfw_rules(
-                        client, pid, limit=_PAGE, offset=offset
-                    )
+            section_rules = _drain(
+                lambda offset, pid=pid: list_dfw_rules(
+                    client, pid, limit=_PAGE, offset=offset
                 )
             )
+            section_name = policy.get("display_name")
+            for rule in section_rules:
+                # Parent evidence only. Missing names stay unknown; a rule's
+                # own name or a guessed default must not satisfy the baseline.
+                shaped = dict(rule)
+                shaped.pop("section_name", None)
+                if isinstance(section_name, str) and section_name.strip():
+                    shaped["section_name"] = section_name
+                rules.append(shaped)
     finally:
         mgr.disconnect_all()
     return {

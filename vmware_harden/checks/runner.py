@@ -17,7 +17,7 @@ from vmware_harden.checks.nodescope import (
     scope_for_rule,
     unmeasured_node_ids,
 )
-from vmware_harden.checks.query import execute_query_check
+from vmware_harden.checks._snapshot_queries import snapshot_queries
 from vmware_harden.store.twin import Twin
 
 
@@ -40,11 +40,13 @@ class CheckRunner:
         would match zero rows, and zero rows here reads as "no violations" —
         compliance asserted for a firewall nobody could reach.
         """
+        with snapshot_queries(self.twin, snapshot_id) as query:
+            return self._run_baseline(snapshot_id, baseline, uncollected, query=query)
+
+    def _run_baseline(self, snapshot_id, baseline, uncollected, *, query):
         violations: list[dict] = []
-        # Rule SQL runs verbatim against the cumulative `nodes` table, which
-        # holds every target ever scanned plus decommissioned nodes. Scope
-        # matches to nodes actually observed in THIS snapshot (node_state
-        # rows), so violations are never attributed across targets/scans.
+        # SQL sees snapshot-scoped nodes before evaluation, including aggregates.
+        # Retain identifier filtering as a guard for explicit historical queries.
         snapshot_node_ids: set[str] = {
             r[0]
             for r in self.twin.conn.execute(
@@ -119,7 +121,7 @@ class CheckRunner:
                         ]
                     )
                     continue
-                rows = execute_query_check(self.twin, rule.check)
+                rows = query(rule.check)
                 rule_violating_nodes: set[str] = set()
                 for row in rows:
                     node_id = row.get("id") or row.get("node_id")

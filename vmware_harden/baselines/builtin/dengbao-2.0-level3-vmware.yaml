@@ -480,6 +480,12 @@ rules:
               OR json_extract_string(attrs, '$.section_name') LIKE '%生产%'
             )
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM nodes
+          WHERE type = 'dfw_rule'
+            AND (json_extract_string(attrs, '$.section_name') IS NULL
+                 OR json_extract_string(attrs, '$.section_name') = 'N/A')
+        )
     remediation:
       summary: "在 NSX DFW 中按业务/环境创建命名 Section"
       manual_steps: "NSX → Security → Distributed Firewall → Add Section (Production/DMZ/Dev)"

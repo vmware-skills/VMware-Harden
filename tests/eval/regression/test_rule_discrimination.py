@@ -158,11 +158,20 @@ def _populate(twin: Twin, rule) -> tuple[int, int]:
     # Batch: a few thousand single-row inserts dominated the runtime. States go
     # through the Twin's own writer rather than hand-written SQL — node_state
     # stores a hash and canonicalised JSON, not the raw attrs column.
-    twin.conn.executemany(
-        "INSERT INTO nodes (id, type, target, name, attrs) VALUES (?, ?, 'v.lab', ?, ?)",
-        node_rows,
-    )
-    twin.write_node_states(snapshot, state_rows)
+    # executemany still needs an explicit transaction, just like production
+    # collectors: otherwise each bound row can incur its own durable commit.
+    # Inputs, generated estates and verdict assertions remain unchanged.
+    twin.conn.execute("BEGIN TRANSACTION")
+    try:
+        twin.conn.executemany(
+            "INSERT INTO nodes (id, type, target, name, attrs) VALUES (?, ?, 'v.lab', ?, ?)",
+            node_rows,
+        )
+        twin.write_node_states(snapshot, state_rows)
+        twin.conn.execute("COMMIT")
+    except BaseException:
+        twin.conn.execute("ROLLBACK")
+        raise
     matched = len(execute_query_check(twin, rule.check))
     return matched, inserted
 
@@ -204,8 +213,9 @@ def test_the_probe_covers_every_runnable_rule(probe_results):
     # (audit record storage, mgmt isolation, VM encrypted vMotion and VM
     # encryption, root restricted): 12 more rules (2026-10-20).
     # 83 -> 84 with explicit per-VM copy/paste configuration (2026-11-08).
-    assert len(probe_results) == 84, (
-        f"expected 84 evaluable builtin rules, probed {len(probe_results)} — "
+    # 84 -> 85 with actual parent DFW policy-name evidence (2026-11-10).
+    assert len(probe_results) == 85, (
+        f"expected 85 evaluable builtin rules, probed {len(probe_results)} — "
         "update this count deliberately when a collector batch lands"
     )
 

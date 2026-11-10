@@ -39,7 +39,7 @@ AI 原生的 VMware 合规与基线核查工具，`vmware-*` skill 家族成员�
 需要 Python `>=3.10` 和 `uv`。
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.19.2"
+uv tool install "vmware-harden[collectors]==1.20.0"
 vmware-harden --help
 ```
 
@@ -54,10 +54,10 @@ vmware-harden --help
 # scan 依赖 collectors extra：harden 通过 vmware-aiops / vmware-storage /
 # vmware-nsx-security 读取清单，而 `uv tool install` 为每个工具单独建环境——
 # 单独安装这些兄弟包，harden 是 import 不到的。
-uv tool install "vmware-harden[collectors]==1.19.2"
+uv tool install "vmware-harden[collectors]==1.20.0"
 
 # 只在已有 twin DB 上出报告，则不需要 collectors：
-#   uv tool install vmware-harden==1.19.2
+#   uv tool install vmware-harden==1.20.0
 
 # 列出内置基线
 vmware-harden baseline list
@@ -133,7 +133,7 @@ VM 安全采集读取 `isolation.tools.copy.disable` 与 `isolation.tools.paste.
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": ["--from", "vmware-harden[collectors]==1.19.2", "vmware-harden-mcp"],
+      "args": ["--from", "vmware-harden[collectors]==1.20.0", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }
@@ -420,3 +420,17 @@ pytest tests/eval/regression -v -m lab
 ## 许可证
 
 MIT
+
+### DFW 父策略证据与验证范围
+
+DFW 规则现在将真实父策略的 `display_name` 保存为 `section_name`。父名称缺失时
+保持未知，不能用规则自己的名字代替。一个内置规则因此具备结构上的可判定
+条件，冻结的待采集规则由 15 条降为 14 条；逐节点缺失证据仍为未判定。NSX
+正向真机验证仍待补。聚合与缺失检查仅使用当前快照；父名称未知保留为覆盖缺口，
+不会报成策略缺失，已成功采集的空 DFW 清单仍可判定缺失。
+
+`posture_drift` 是有单元测试的预留基线演进辅助函数，尚无 CLI/MCP 入口；
+`diff_snapshots` 保留为成对快照比较的库接口，已有持久化与扫描范围测试，CLI
+使用当前漂移路径。不能仅因没有 CLI 入口就认定为死代码并删除库接口。
+没有权威控制定义及证据来源时，不补写 9.x 专属控制；继承基线也不能证明
+9.x 真机验证通过。
