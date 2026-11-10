@@ -4,6 +4,14 @@ Released 2026-11-09.
 
 * Skip the real-SDK clipboard array test when the optional collectors dependency (pyVmomi) is absent; SDK-independent evidence tests still run.
 
+## v1.20.0 (2026-11-10) — Collect DFW parent policy evidence
+
+Scope aggregate/absence queries to the requested snapshot using an isolated temporary relation; missing parent evidence cannot produce a policy-absence finding. Populate rule section_name from its actual parent policy display_name; missing names remain unknown. One additional built-in rule becomes structurally evaluable (85 evaluable, 14 pending rules). Preserve library posture and pairwise snapshot helpers; do not imply new CLI/MCP features or 9.x validation.
+
+Validation: existing suites, complete CLI/MCP surface comparison, structural guard checks and security scanning; exact results are retained in the private release record. Live 9.1/Supervisor, PAIS, NSX and Horizon validation is not established by synthetic tests.
+
+中文：本轮修复和重构范围见上述说明；保留既有 Policy、审计及确认门。合成测试不代表 9.1/Supervisor、PAIS、NSX 或 Horizon 正向真机验证。
+
 ## v1.19.1 — Security documentation and Gemini extension packaging
 
 Released 2026-11-09.

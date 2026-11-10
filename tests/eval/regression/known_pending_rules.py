@@ -18,13 +18,13 @@ Shrinking this list is the measure of progress for collector batches B1-B5 in
 ``design/LLD-harden-baseline-collector-contract.md``. Delete entries as their
 attributes become ACTIVE; never add one to make a build green.
 
-Current: 15 rules across 6 baselines (70 at v1.9.0; 61 after the
+Current: 14 rules across 6 baselines (70 at v1.9.0; 61 after the
 service/time/firewall collector; 28 after batches B1-B3/B5 + the VM facts,
 2026-10-18; 16 after five facts were re-specified as things vSphere answers,
-2026-10-20; 15 after explicit VMRC clipboard configuration collection, 2026-11-08).
+2026-10-20; 15 after explicit VMRC clipboard configuration collection, 2026-11-08; 14 after parent DFW policy-name collection, 2026-11-10).
    1  bsi-itgs-basisabsicherung-vmware
    3  cis-vmware-esxi-8.0-subset
-   4  dengbao-2.0-level3-vmware
+   3  dengbao-2.0-level3-vmware
    4  eu-nis2-vmware
    1  pci-dss-4.0-vmware
    2  vsphere-scg-v8-subset
@@ -43,7 +43,6 @@ KNOWN_PENDING_RULES: frozenset[tuple[str, str]] = frozenset(
         ("dengbao-2.0-level3-vmware", "db-l3-host-1"),  # root_ssh_key_auth
         ("dengbao-2.0-level3-vmware", "db-l3-vm-3"),  # tags
         ("dengbao-2.0-level3-vmware", "db-l3-data-1"),  # encryption_enabled
-        ("dengbao-2.0-level3-vmware", "db-l3-policy-1"),  # section_name
         # --- eu-nis2-vmware ---
         ("eu-nis2-vmware", "nis2-rm-1"),  # patch_status
         ("eu-nis2-vmware", "nis2-rm-3"),  # named_admin_accounts, shared_root_in_use

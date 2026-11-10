@@ -11,7 +11,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "vmware-harden[collectors]==1.19.2",
+        "vmware-harden[collectors]==1.20.0",
         "vmware-harden-mcp"
       ]
     }

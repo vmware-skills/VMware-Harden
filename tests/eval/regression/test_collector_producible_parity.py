@@ -53,7 +53,7 @@ _CASES = [
     ),
     pytest.param(
         PRODUCIBLE_DFW_RULE_ATTRS, "VMware-NSX-Security",
-        "vmware_nsx_security/ops/dfw_policy.py", "list_dfw_rules", {"name"},
+        "vmware_nsx_security/ops/dfw_policy.py", "list_dfw_rules", {"name", "section_name"},
         id="dfw_rule",
     ),
     pytest.param(

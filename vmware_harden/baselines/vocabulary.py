@@ -380,8 +380,8 @@ _ENTRIES: tuple[Attribute, ...] = (
     _a("dfw_rule", _RULE, "sources", "源组列表（复数）", "NSX rules → source_groups"),
     _a("dfw_rule", _RULE, "destinations", "目的组列表（复数）",
        "NSX rules → destination_groups"),
-    _p("dfw_rule", "section_name", "规则所属策略（section）名",
-       "需在 DFWCollector 落 rule 时带上父 policy 的 display_name"),
+    _a("dfw_rule", _RULE, "section_name", "规则所属策略（section）名",
+       "DFWCollector: parent policy display_name, omitted when unavailable"),
 )
 
 

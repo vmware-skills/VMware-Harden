@@ -555,3 +555,7 @@ unreadable, malformed or duplicate settings cannot establish compliance. A disco
 VM contributes no measured security facts. The collector retains only the derived
 boolean, never raw extraConfig or unrelated guestinfo values. This is not a runtime
 clipboard test. SCG `scg-vm-5` and its inherited v9 rule report missing facts as node gaps.
+
+## Maintenance safety boundary
+
+DFW section_name comes from the actual parent policy display_name. Missing parent names remain undetermined. Library posture/pairwise snapshot helpers do not imply a CLI/MCP feature, and inherited baselines do not establish 9.x live validation.

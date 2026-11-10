@@ -1,6 +1,6 @@
 {
   "name": "vmware-harden",
-  "version": "1.19.2",
+  "version": "1.20.0",
   "description": "AI-native VMware compliance and baseline enforcement",
   "mcpServers": {
     "vmware-harden": {
@@ -8,7 +8,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "vmware-harden[collectors]==1.19.2",
+        "vmware-harden[collectors]==1.20.0",
         "vmware-harden-mcp"
       ]
     }
