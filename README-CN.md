@@ -23,7 +23,7 @@
 安装已发布 CLI，并查看可用命令：
 
 ```sh
-uv tool install 'vmware-harden[collectors]==1.20.0'
+uv tool install "vmware-harden[collectors]==1.20.0"
 vmware-harden --help
 ```
 

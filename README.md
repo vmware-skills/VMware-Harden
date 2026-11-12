@@ -23,7 +23,7 @@ Synthetic-data animation, not a live recording. [Watch the AI-narrated family in
 Install the published CLI and inspect its commands:
 
 ```sh
-uv tool install 'vmware-harden[collectors]==1.20.0'
+uv tool install "vmware-harden[collectors]==1.20.0"
 vmware-harden --help
 ```
 
