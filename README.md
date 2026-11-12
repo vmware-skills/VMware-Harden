@@ -2,6 +2,8 @@
 
 # VMware-Harden
 
+<a id="readme-overview"></a>
+
 Turn VMware compliance checks into findings with visible coverage gaps.
 
 English · [简体中文](README-CN.md)
@@ -12,11 +14,15 @@ Community-maintained · MIT · Not an official VMware/Broadcom product.
 
 Synthetic-data animation, not a live recording. [Watch the AI-narrated family introduction (~2 min)](https://github.com/vmware-skills/marketplace/blob/main/assets/demos/vmware-skills-en.mp4)
 
+<a id="readme-capabilities-and-workflows"></a>
+
 ## Why use it?
 
 - Scan supported baselines and vulnerability/build evidence.
 - Track configuration drift in a local Twin.
 - Separate remediation suggestions from remote execution.
+
+<a id="readme-quick-start"></a>
 
 ## Get started
 
@@ -31,9 +37,13 @@ Requires uv and Python >=3.10. Configure targets and credentials locally before 
 
 For Claude Code and other host installation paths, see the [family portal](https://github.com/vmware-skills/marketplace).
 
+<a id="readme-safety-and-audit"></a>
+
 ## Know the boundaries
 
 Incomplete or unknown checks are not passes. Optional AI remediation advice can send findings to an external provider; review that data flow. Remote remediation is separate.
+
+<a id="readme-mcp-configuration"></a> <a id="readme-troubleshooting"></a> <a id="readme-reference"></a>
 
 ## Go deeper
 
@@ -41,8 +51,13 @@ Incomplete or unknown checks are not passes. Optional AI remediation advice can 
 - [CLI reference](skills/vmware-harden/references/cli-reference.md)
 - [Agent guardrails](skills/vmware-harden/references/agent-guardrails.md)
 - [Detailed usage and architecture](skills/vmware-harden/references/detailed-guide.md)
+- [MCP launch configuration](.mcp.json)
 - [Canonical skill instructions](skills/vmware-harden/SKILL.md)
 
+<a id="readme-companion-skills"></a>
+
 Part of [VMware Skills](https://github.com/vmware-skills/marketplace): 15 skills, 14 MCP servers and one shared Policy library. If it helps your work, star the family portal.
+
+<a id="readme-license"></a>
 
 [Issues and feedback](https://github.com/vmware-skills/VMware-Harden/issues) · [MIT](LICENSE)
