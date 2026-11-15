@@ -1,0 +1,6 @@
+[project]
+name = "vmware-harden-mcpb"
+version = "1.20.0"
+description = "Claude Desktop extension shim that runs the published vmware-harden MCP server"
+requires-python = ">=3.10"
+dependencies = ["vmware-harden[collectors]==1.20.0"]

@@ -35,6 +35,8 @@ vmware-harden --help
 
 需要 uv 与 Python >=3.10。远程查询前，在本地配置目标与凭据。[配置指南](https://github.com/vmware-skills/VMware-Harden/blob/main/skills/vmware-harden/references/setup-guide.md)。
 
+完成本地配置后可一键安装：[Claude Desktop 扩展（.mcpb）](https://github.com/vmware-skills/VMware-Harden/releases/download/v1.20.0/vmware-harden-1.20.0.mcpb) · [在 VS Code 中安装](https://insiders.vscode.dev/redirect/mcp/install?name=vmware-harden&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--from%22%2C%22vmware-harden%5Bcollectors%5D%3D%3D1.20.0%22%2C%22vmware-harden-mcp%22%5D%7D)。两者运行同一个固定的 1.20.0 版本。
+
 Agent 宿主安装见本模块的[配置指南](https://github.com/vmware-skills/VMware-Harden/blob/main/skills/vmware-harden/references/setup-guide.md)，以及 [Cursor、Codex、Gemini CLI、Cline 与本地模型示例](https://github.com/vmware-skills/marketplace/blob/main/docs/agent-hosts-CN.md)。WorkBuddy 用户可在 [SkillHub](https://skillhub.cn) 搜索 `vmware-harden` 安装技能，并按 [WorkBuddy 说明](https://github.com/vmware-skills/marketplace/blob/main/docs/agent-hosts-CN.md#workbuddy) 注册 MCP。
 
 选模型可用[共享模型自测流程](https://github.com/vmware-skills/marketplace/blob/main/model-fit/RUNNER-CN.md)：统一任务、复核质量与安全，再按任务组选择最小已测通过配置；不代表生产质量保证。
