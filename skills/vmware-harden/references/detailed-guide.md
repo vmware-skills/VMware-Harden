@@ -37,7 +37,7 @@ Full agent instructions: [`skills/vmware-harden/SKILL.md`](../../../skills/vmwar
 Requires Python `>=3.10` and `uv`.
 
 ```bash
-uv tool install "vmware-harden[collectors]==1.20.0"
+uv tool install "vmware-harden[collectors]==1.20.1"
 vmware-harden --help
 ```
 
@@ -53,10 +53,10 @@ Target, credential and local data setup: [setup guide](../../../skills/vmware-ha
 # through vmware-aiops / vmware-storage / vmware-nsx-security, and `uv tool
 # install` gives each tool its own environment — installing them separately
 # puts them where harden cannot import them from.
-uv tool install "vmware-harden[collectors]==1.20.0"
+uv tool install "vmware-harden[collectors]==1.20.1"
 
 # Reporting on an existing twin DB needs no collectors:
-#   uv tool install vmware-harden==1.20.0
+#   uv tool install vmware-harden==1.20.1
 
 # List built-in baselines
 vmware-harden baseline list
@@ -166,7 +166,7 @@ Copy this configuration into your MCP client's local stdio settings. The client 
   "mcpServers": {
     "vmware-harden": {
       "command": "uvx",
-      "args": ["--from", "vmware-harden[collectors]==1.20.0", "vmware-harden-mcp"],
+      "args": ["--from", "vmware-harden[collectors]==1.20.1", "vmware-harden-mcp"],
       "env": {
         "VMWARE_AIOPS_CONFIG": "~/.vmware-aiops/config.yaml"
       }
