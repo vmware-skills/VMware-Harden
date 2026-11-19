@@ -233,3 +233,5 @@ MIT — [github.com/vmware-skills/VMware-Harden](https://github.com/vmware-skill
 ## Current evidence boundary
 
 DFW section_name comes from the actual parent policy display_name. Missing parent names remain undetermined. Library posture/pairwise snapshot helpers do not imply a CLI/MCP feature, and inherited baselines do not establish 9.x live validation. See `references/capabilities.md`.
+
+[Contracts](references/mcp-result-contract.md).

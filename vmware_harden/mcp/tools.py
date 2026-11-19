@@ -75,6 +75,8 @@ def list_violations(
     """
     from typing import get_args
 
+    from vmware_policy import next_offset
+
     from vmware_harden.baselines.model import Severity
     from vmware_harden.checks.coverage import coverage_for
     from vmware_harden.store.schema import SEVERITY_RANK_SQL
@@ -106,6 +108,7 @@ def list_violations(
         "limit": limit,
         "offset": offset,
         "has_more": False,
+        "next_offset": None,
         "snapshot": None,
     }
     twin = Twin(_resolve_db())
@@ -157,6 +160,7 @@ def list_violations(
             "limit": limit,
             "offset": offset,
             "has_more": offset + len(out) < total,
+            "next_offset": next_offset(len(out), limit, offset, total),
             "coverage": cov.as_dict(),
             "note": cov.summary_line() or None,
             # Which scan these rows come from, and whether later scans of the same
