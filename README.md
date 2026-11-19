@@ -29,13 +29,13 @@ Synthetic-data GIF; video includes redacted historical screenshots. [Download th
 Install the published CLI and inspect its commands:
 
 ```sh
-uv tool install "vmware-harden[collectors]==1.20.0"
+uv tool install "vmware-harden[collectors]==1.20.1"
 vmware-harden --help
 ```
 
 Requires uv and Python >=3.10. Configure targets and credentials locally before remote queries. [Setup guide](https://github.com/vmware-skills/VMware-Harden/blob/main/skills/vmware-harden/references/setup-guide.md).
 
-One-click installs, after local setup: [Claude Desktop extension (.mcpb)](https://github.com/vmware-skills/VMware-Harden/releases/download/v1.20.0/vmware-harden-1.20.0.mcpb) · [Install in VS Code](https://insiders.vscode.dev/redirect/mcp/install?name=vmware-harden&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--from%22%2C%22vmware-harden%5Bcollectors%5D%3D%3D1.20.0%22%2C%22vmware-harden-mcp%22%5D%7D). Both run the same pinned 1.20.0 server.
+One-click installs, after local setup: [Claude Desktop extension (.mcpb)](https://github.com/vmware-skills/VMware-Harden/releases/download/v1.20.1/vmware-harden-1.20.1.mcpb) · [Install in VS Code](https://insiders.vscode.dev/redirect/mcp/install?name=vmware-harden&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--from%22%2C%22vmware-harden%5Bcollectors%5D%3D%3D1.20.1%22%2C%22vmware-harden-mcp%22%5D%7D). Both run the same pinned 1.20.1 server.
 
 For agent-host installation, use the [setup guide](https://github.com/vmware-skills/VMware-Harden/blob/main/skills/vmware-harden/references/setup-guide.md) and [Cursor, Codex, Gemini CLI, Cline and local-model examples](https://github.com/vmware-skills/marketplace/blob/main/docs/agent-hosts.md).
 
@@ -65,3 +65,7 @@ Part of [VMware Skills](https://github.com/vmware-skills/marketplace): 15 skills
 <a id="readme-license"></a>
 
 [Issues and feedback](https://github.com/vmware-skills/VMware-Harden/issues) · [MIT](https://github.com/vmware-skills/VMware-Harden/blob/main/LICENSE)
+
+## MCP result contract
+
+Offset-capable listings expose `next_offset`; stop when it is null rather than looping on `truncated`. Failed calls provide `structuredContent.vmware_error` through Policy 1.26.0. Existing text, legacy flags, success values and confirmation checks remain unchanged. See the [contract](https://github.com/vmware-skills/VMware-Harden/blob/main/skills/vmware-harden/references/mcp-result-contract.md).

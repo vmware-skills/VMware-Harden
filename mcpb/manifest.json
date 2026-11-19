@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "vmware-harden",
   "display_name": "VMware Harden",
-  "version": "1.20.0",
+  "version": "1.20.1",
   "description": "AI-native VMware compliance and baseline enforcement",
-  "long_description": "Runs the published vmware-harden 1.20.0 MCP server locally. Follow the setup guide for local state and the sibling skills it uses.",
+  "long_description": "Runs the published vmware-harden 1.20.1 MCP server locally. Follow the setup guide for local state and the sibling skills it uses.",
   "author": {
     "name": "Wei Zhou",
     "url": "https://github.com/zw008"

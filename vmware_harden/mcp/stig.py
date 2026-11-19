@@ -5,7 +5,7 @@ decorator tags audit rows with skill="harden". Both tools read local baseline
 YAML only — no database, no network, no compliance API (there is none; see
 vmware_harden.baselines.stig.describe_content_sync).
 """
-from vmware_policy import paginated, vmware_tool
+from vmware_policy import next_offset, paginated, vmware_tool
 
 
 @vmware_tool(risk_level="low")
@@ -31,7 +31,8 @@ def list_stig_controls(limit: int = 50, offset: int = 0) -> dict:
         )
     catalog = stig_catalog()
     page = catalog[offset : offset + limit]
-    env = paginated(page, limit=limit, total=len(catalog))
+    env = paginated(page, limit=limit, total=len(catalog),
+                    next_offset=next_offset(len(page), limit, offset, len(catalog)))
     # paginated() flags truncation as (returned < total), which is offset-unaware:
     # every page past the first is a partial slice, so it would report
     # truncated=true forever — even on the final page where nothing follows.
